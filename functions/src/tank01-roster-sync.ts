@@ -30,6 +30,215 @@ export interface Tank01Team {
 
 export type Tank01SportId = "baseball" | "basketball" | "hockey" | "wnba";
 
+/** Common Tank01 ↔ league abbreviation aliases for venue lookup. */
+const VENUE_ABV_ALIASES: Record<string, string[]> = {
+  GSW: ["GS"],
+  GS: ["GSW"],
+  NYK: ["NY"],
+  NY: ["NYK"],
+  SAS: ["SA"],
+  SA: ["SAS"],
+  NOP: ["NO"],
+  NO: ["NOP"],
+  UTA: ["UTAH"],
+  UTAH: ["UTA"],
+  PHO: ["PHX"],
+  PHX: ["PHO"],
+  WAS: ["WSH"],
+  WSH: ["WAS"],
+  BRO: ["BKN"],
+  BKN: ["BRO"],
+  LA: ["LAK"],
+  LAK: ["LA"],
+  SJ: ["SJS"],
+  SJS: ["SJ"],
+  TB: ["TBL"],
+  TBL: ["TB"],
+  NJ: ["NJD"],
+  NJD: ["NJ"],
+};
+
+function putVenue(map: Map<string, string>, abv: string, name: string): void {
+  const key = abv.trim().toUpperCase();
+  const venue = name.trim();
+  if (!key || !venue) return;
+  map.set(key, venue);
+  for (const alt of VENUE_ABV_ALIASES[key] ?? []) {
+    if (!map.has(alt)) map.set(alt, venue);
+  }
+}
+
+function lookupVenue(
+  map: Map<string, string>,
+  teamAbv: string,
+): string | null {
+  const key = teamAbv.trim().toUpperCase();
+  if (!key) return null;
+  const direct = map.get(key)?.trim();
+  if (direct) return direct;
+  for (const alt of VENUE_ABV_ALIASES[key] ?? []) {
+    const v = map.get(alt)?.trim();
+    if (v) return v;
+  }
+  return null;
+}
+
+async function leagueGetJson(url: string): Promise<any> {
+  const res = await fetch(url, {
+    headers: { "User-Agent": "caption-writer-tank01-venue-sync/1" },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`HTTP ${res.status} for ${url}: ${body.slice(0, 160)}`);
+  }
+  return res.json();
+}
+
+/** MLB Stats API — venue.name on each team. */
+async function fetchMlbVenues(): Promise<Map<string, string>> {
+  const data = await leagueGetJson(
+    "https://statsapi.mlb.com/api/v1/teams?sportId=1",
+  );
+  const out = new Map<string, string>();
+  for (const t of data.teams ?? []) {
+    const abv = String(t?.abbreviation ?? "").trim().toUpperCase();
+    const name = String(t?.venue?.name ?? "").trim();
+    putVenue(out, abv, name);
+  }
+  return out;
+}
+
+/**
+ * NHL api-web club schedule — most common home-game venue.default
+ * for each tri-code (current arena names).
+ */
+async function fetchNhlVenues(
+  teamAbvs: string[],
+  delayMs = 40,
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const codes = new Set<string>();
+  for (const raw of teamAbvs) {
+    const abv = raw.trim().toUpperCase();
+    if (!abv) continue;
+    codes.add(abv);
+    for (const alt of VENUE_ABV_ALIASES[abv] ?? []) codes.add(alt);
+  }
+  // Prefer NHL official codes when both exist (LAK over LA, etc.).
+  const prefer = ["LAK", "SJS", "TBL", "NJD", "UTA"];
+  for (const code of [...codes]) {
+    try {
+      const data = await leagueGetJson(
+        `https://api-web.nhle.com/v1/club-schedule-season/${code}/now`,
+      );
+      const counts = new Map<string, number>();
+      for (const g of data.games ?? []) {
+        const homeAbv = String(g?.homeTeam?.abbrev ?? "")
+          .trim()
+          .toUpperCase();
+        if (homeAbv !== code) continue;
+        const name = String(g?.venue?.default ?? "").trim();
+        if (!name) continue;
+        counts.set(name, (counts.get(name) ?? 0) + 1);
+      }
+      let best: string | null = null;
+      let bestN = 0;
+      for (const [name, n] of counts) {
+        if (n > bestN) {
+          best = name;
+          bestN = n;
+        }
+      }
+      if (best) putVenue(out, code, best);
+    } catch (e) {
+      logger.warn(`NHL venue fetch failed for ${code}`, {
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+    if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
+  }
+  // Ensure preferred codes win alias collisions already handled by putVenue.
+  void prefer;
+  return out;
+}
+
+/**
+ * ESPN team schedule — most common home competition venue.fullName.
+ * More current than core `venue` refs (which can lag renames/moves).
+ */
+async function fetchEspnScheduleVenues(
+  leaguePath: "basketball/nba" | "basketball/wnba",
+  delayMs = 40,
+): Promise<Map<string, string>> {
+  const listing = await leagueGetJson(
+    `https://site.api.espn.com/apis/site/v2/sports/${leaguePath}/teams?limit=50`,
+  );
+  const teamsList = listing?.sports?.[0]?.leagues?.[0]?.teams;
+  const out = new Map<string, string>();
+  if (!Array.isArray(teamsList)) return out;
+
+  for (const row of teamsList) {
+    const team = row?.team;
+    const tid = String(team?.id ?? "").trim();
+    const abv = String(team?.abbreviation ?? "").trim().toUpperCase();
+    if (!tid || !abv) continue;
+    try {
+      const schedule = await leagueGetJson(
+        `https://site.api.espn.com/apis/site/v2/sports/${leaguePath}/teams/${tid}/schedule`,
+      );
+      const counts = new Map<string, number>();
+      for (const event of schedule?.events ?? []) {
+        const comp = event?.competitions?.[0];
+        if (!comp) continue;
+        const name = String(comp?.venue?.fullName ?? "").trim();
+        if (!name) continue;
+        const competitors = Array.isArray(comp.competitors)
+          ? comp.competitors
+          : [];
+        const isHome = competitors.some(
+          (c: any) =>
+            c?.homeAway === "home" && String(c?.team?.id ?? "") === tid,
+        );
+        if (!isHome) continue;
+        counts.set(name, (counts.get(name) ?? 0) + 1);
+      }
+      let best: string | null = null;
+      let bestN = 0;
+      for (const [name, n] of counts) {
+        if (n > bestN) {
+          best = name;
+          bestN = n;
+        }
+      }
+      if (best) putVenue(out, abv, best);
+    } catch (e) {
+      logger.warn(`ESPN venue fetch failed for ${leaguePath}/${abv}`, {
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+    if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
+  }
+  return out;
+}
+
+async function fetchLeagueVenuesForSport(
+  sportId: Tank01SportId,
+  tank01Teams: Tank01Team[],
+): Promise<Map<string, string>> {
+  switch (sportId) {
+    case "baseball":
+      return fetchMlbVenues();
+    case "hockey":
+      return fetchNhlVenues(tank01Teams.map((t) => t.abv));
+    case "basketball":
+      return fetchEspnScheduleVenues("basketball/nba");
+    case "wnba":
+      return fetchEspnScheduleVenues("basketball/wnba");
+    default:
+      return new Map();
+  }
+}
+
 interface LeagueSpec {
   sportId: Tank01SportId;
   host: string;
@@ -288,6 +497,7 @@ async function reconcileTeamPlayers(
   teamAbv: string,
   teamDisplayName: string,
   players: Tank01Player[],
+  venueName?: string | null,
 ): Promise<{
   added: number;
   updated: number;
@@ -428,6 +638,11 @@ async function reconcileTeamPlayers(
   if (curData.source !== "tank01") {
     teamDocPatch.source = "tank01";
   }
+  const venue = (venueName ?? "").trim();
+  if (venue && curData.venueName !== venue) {
+    teamDocPatch.venueName = venue;
+    teamDocPatch.venueUpdatedAt = FieldValue.serverTimestamp();
+  }
 
   if (
     adds.length === 0 &&
@@ -518,12 +733,147 @@ async function reconcileTeamPlayers(
   };
 }
 
+export interface Tank01VenueChange {
+  sportId: string;
+  teamId: string;
+  teamName: string;
+  previousVenue: string;
+  newVenue: string;
+}
+
+export interface Tank01VenueSyncSportTotals {
+  teams: number;
+  updated: number;
+  skipped: number;
+  errors: string[];
+}
+
+export interface Tank01VenueSyncTotals {
+  sports: number;
+  teams: number;
+  updated: number;
+  skipped: number;
+  bySport: Record<string, Tank01VenueSyncSportTotals>;
+  changes: Tank01VenueChange[];
+  errors: string[];
+}
+
+/**
+ * League-API stadium names → `sports_tank01/.../teams/{abv}.venueName`.
+ * Intended for a monthly schedule (arenas rarely change).
+ */
+export async function syncAllTank01Venues(
+  db: Firestore,
+  options?: { delayBetweenTeamsMs?: number },
+): Promise<Tank01VenueSyncTotals> {
+  const delayMs = options?.delayBetweenTeamsMs ?? 40;
+  const totals: Tank01VenueSyncTotals = {
+    sports: 0,
+    teams: 0,
+    updated: 0,
+    skipped: 0,
+    bySport: {},
+    changes: [],
+    errors: [],
+  };
+
+  for (const league of LEAGUES) {
+    const sportTotals: Tank01VenueSyncSportTotals = {
+      teams: 0,
+      updated: 0,
+      skipped: 0,
+      errors: [],
+    };
+    const teamsCol = db
+      .collection(TANK01_ROOT)
+      .doc(league.sportId)
+      .collection("teams");
+    const snap = await teamsCol.get();
+    const existing = snap.docs.map((doc) => ({
+      abv: doc.id,
+      name: String(doc.data()?.displayName ?? doc.id),
+      currentVenue: String(doc.data()?.venueName ?? "").trim(),
+    }));
+
+    let venues = new Map<string, string>();
+    try {
+      logger.info(`Tank01 venue sync: fetching ${league.label} stadiums`);
+      const seedTeams: Tank01Team[] = existing.map((t) => ({
+        abv: t.abv,
+        name: t.name,
+      }));
+      venues = await fetchLeagueVenuesForSport(league.sportId, seedTeams);
+      logger.info(`Tank01 venue sync: ${league.label} stadiums`, {
+        count: venues.size,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      sportTotals.errors.push(`Venue fetch failed: ${msg}`);
+      totals.errors.push(`${league.sportId}/venues: ${msg}`);
+      totals.bySport[league.sportId] = sportTotals;
+      continue;
+    }
+
+    for (const team of existing) {
+      sportTotals.teams += 1;
+      const venue = lookupVenue(venues, team.abv);
+      if (!venue) {
+        sportTotals.skipped += 1;
+        continue;
+      }
+      if (team.currentVenue === venue) {
+        sportTotals.skipped += 1;
+        continue;
+      }
+      try {
+        await teamsCol.doc(team.abv).set(
+          {
+            venueName: venue,
+            venueUpdatedAt: FieldValue.serverTimestamp(),
+            source: "tank01",
+          },
+          { merge: true },
+        );
+        sportTotals.updated += 1;
+        totals.changes.push({
+          sportId: league.sportId,
+          teamId: team.abv,
+          teamName: team.name,
+          previousVenue: team.currentVenue,
+          newVenue: venue,
+        });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        sportTotals.errors.push(`${team.name} (${team.abv}): ${msg}`);
+        totals.errors.push(`${league.sportId}/${team.abv}: ${msg}`);
+      }
+      if (delayMs > 0) {
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
+
+    totals.sports += 1;
+    totals.teams += sportTotals.teams;
+    totals.updated += sportTotals.updated;
+    totals.skipped += sportTotals.skipped;
+    totals.bySport[league.sportId] = sportTotals;
+    logger.info(`Tank01 venue sync: ${league.label} done`, sportTotals);
+  }
+
+  return totals;
+}
+
 export async function syncAllTank01Rosters(
   db: Firestore,
   apiKey: string,
-  options?: { delayBetweenTeamsMs?: number },
+  options?: {
+    delayBetweenTeamsMs?: number;
+    /** When true, also refresh stadium names (prefer monthly venue sync). */
+    enrichVenues?: boolean;
+  },
 ): Promise<Tank01SyncTotals> {
   const delayMs = options?.delayBetweenTeamsMs ?? 150;
+  const enrichVenues = options?.enrichVenues === true;
   const totals: Tank01SyncTotals = {
     sports: 0,
     teams: 0,
@@ -563,15 +913,32 @@ export async function syncAllTank01Rosters(
       continue;
     }
 
+    let venues = new Map<string, string>();
+    if (enrichVenues) {
+      try {
+        logger.info(`Tank01 sync: fetching ${league.label} stadiums`);
+        venues = await fetchLeagueVenuesForSport(league.sportId, teams);
+        logger.info(`Tank01 sync: ${league.label} stadiums`, {
+          count: venues.size,
+        });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        sportTotals.errors.push(`Venue fetch failed: ${msg}`);
+        totals.errors.push(`${league.sportId}/venues: ${msg}`);
+      }
+    }
+
     for (const team of teams) {
       try {
         const players = await fetchRoster(league, apiKey, team.abv);
+        const venue = enrichVenues ? lookupVenue(venues, team.abv) : null;
         const result = await reconcileTeamPlayers(
           db,
           league.sportId,
           team.abv,
           team.name,
           players,
+          venue,
         );
         sportTotals.teams += 1;
         sportTotals.playersWritten += players.length;

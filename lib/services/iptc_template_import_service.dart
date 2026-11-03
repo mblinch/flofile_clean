@@ -408,6 +408,12 @@ class IptcTemplateImportService {
     if (supplemental.length > 1) out['Supp Cat 2'] = supplemental[1];
     if (supplemental.length > 2) out['Supp Cat 3'] = supplemental[2];
 
+    // Panel UI key is Location; Exiftool maps SubLocation → Stadium historically.
+    final stadium = out['Stadium']?.trim() ?? '';
+    if (stadium.isNotEmpty) {
+      out.putIfAbsent('Location', () => stadium);
+    }
+
     out.removeWhere((_, v) => v.trim().isEmpty);
     return out;
   }

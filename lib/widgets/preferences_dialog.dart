@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dropdown_flutter/custom_dropdown.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/admin_service.dart';
 import '../services/auth_service.dart';
@@ -17,6 +18,7 @@ import 'camera_serial_dialog.dart';
 import 'app_styled_dialogs.dart';
 import 'caption_layout_builder_dialog.dart';
 import 'ftp_settings_panel.dart';
+import 'file_rename_dialog.dart';
 import 'personal_verb_editor.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
@@ -180,7 +182,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     const sidebarWidth = 168.0;
     const contentPadding = 16.0;
     final size = MediaQuery.sizeOf(context);
-    final width = math.min(1200.0, size.width * 0.94);
+    final width = math.min(1400.0, size.width * 0.94);
     final height = math.min(720.0, size.height * 0.90);
 
     return AppDialogFfStyle(
@@ -448,6 +450,37 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                 !ftpMode,
                 _preferencesService.saveFtpModeEnabled,
               ),
+            ),
+            _PrefsModeBuffButton(
+              icon: PhosphorIconsRegular.textbox,
+              label: 'File renaming',
+              tooltip:
+                  'Rename files on FTP upload using the profile pattern ({date}, {n}, …).',
+              enabled: _currentPreferences?['fileRenamingEnabled'] != false,
+              onToggle: () => _setApplicationPref(
+                'fileRenamingEnabled',
+                !(_currentPreferences?['fileRenamingEnabled'] != false),
+                _preferencesService.saveFileRenamingEnabled,
+              ),
+              editLabel: 'Edit rename pattern',
+              onEdit: () async {
+                FileRenamePreviewData? preview;
+                try {
+                  final prefs = await SharedPreferences.getInstance();
+                  final folder = prefs.getString('last_images_folder')?.trim();
+                  if (folder != null && folder.isNotEmpty) {
+                    preview =
+                        await FileRenameDialog.previewDataFromFolder(folder);
+                  }
+                } catch (_) {}
+                if (!mounted) return;
+                await FileRenameDialog.show(
+                  context,
+                  preview: preview,
+                );
+                if (!mounted) return;
+                await _loadCurrentPreferences();
+              },
             ),
             _PrefsModeBuffButton(
               icon: PhosphorIconsRegular.stack,
@@ -956,9 +989,22 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        FtpSettingsPanel(
-          key: _ftpPanelKey,
-          embedded: true,
+        SizedBox(
+          height: 520,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: FfTokens.sessionPanel,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: FfTokens.sessionLn),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: FtpSettingsPanel(
+                key: _ftpPanelKey,
+                embedded: true,
+              ),
+            ),
+          ),
         ),
         const SizedBox(height: 12),
         Text(

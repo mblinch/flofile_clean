@@ -123,12 +123,29 @@ class AppDefaultsCatalog {
     return _templateFromRaw(raw);
   }
 
-  /// Structure published for this wire and sport, if one has been set.
+  /// One master Structure per wire. Prefers [captionTemplateWireDefaults], then
+  /// any legacy per-sport entry (baseball first). Sport-specific wording is not
+  /// stored here — game IDs / notes are start-screen variations.
+  CaptionTemplate? captionWireMaster(WireStyle wire) {
+    final wireDef = captionWireDefault(wire);
+    if (wireDef != null) return wireDef;
+    final bySport = captionTemplateByWireAndSport[wire.name];
+    if (bySport == null || bySport.isEmpty) return null;
+    for (final sport in AppDefaultsFirestoreService.catalogSports) {
+      final raw = bySport[sport];
+      if (raw != null && raw.isNotEmpty) return _templateFromRaw(raw);
+    }
+    return _templateFromRaw(bySport.values.first);
+  }
+
+  /// Sport-specific Structure when published for that sport; else wire master.
   CaptionTemplate? captionForWireAndSport(WireStyle wire, String sport) {
-    final raw = captionTemplateByWireAndSport[wire.name]
-        ?[sport.toLowerCase().trim()];
-    if (raw == null || raw.isEmpty) return null;
-    return _templateFromRaw(raw);
+    final sportKey = sport.toLowerCase().trim();
+    if (sportKey.isNotEmpty) {
+      final raw = captionTemplateByWireAndSport[wire.name]?[sportKey];
+      if (raw != null && raw.isNotEmpty) return _templateFromRaw(raw);
+    }
+    return captionWireMaster(wire);
   }
 
   static CaptionTemplate? _templateFromRaw(Map<String, dynamic> raw) {
@@ -354,19 +371,21 @@ class AppDefaultsFirestoreService {
     return CaptionTemplate.applyGameIdentifierText(template, text);
   }
 
-  /// Caption wire defaults from cache, falling back to factory presets.
+  /// Caption Structures from cache for [sport] (per-sport override, else wire
+  /// master). [gameIdentifierText] is attached for the start screen to apply.
   static Map<WireStyle, CaptionTemplate> mergedCaptionWireDefaults({
     String sport = 'baseball',
   }) {
     final catalog = _memoryCache;
+    final sportKey = sport.toLowerCase().trim();
     final out = <WireStyle, CaptionTemplate>{};
     for (final wire in captionWireStyles) {
-      final base = catalog?.captionForWireAndSport(wire, sport) ??
-          catalog?.captionWireDefault(wire) ??
-          factoryCaptionForWire(wire);
-      final gid = catalog?.gameIdentifierText(wire, sport) ??
-          defaultGameIdentifierText(sport);
-      out[wire] = CaptionTemplate.applyGameIdentifierText(base, gid);
+      final base = (catalog?.captionForWireAndSport(wire, sportKey) ??
+              factoryCaptionForWire(wire))
+          .stripGameIdentifierForWireMaster();
+      final gid = catalog?.gameIdentifierText(wire, sportKey) ??
+          defaultGameIdentifierText(sportKey);
+      out[wire] = base.copyWith(gameIdentifierText: gid);
     }
     return out;
   }
@@ -412,17 +431,25 @@ class AppDefaultsFirestoreService {
     return out;
   }
 
-  /// Admin: publish all caption wire structure defaults.
+  /// Admin: publish all caption wire Structure masters (one per wire).
   static Future<void> publishCaptionWireDefaults(
     Map<String, Map<String, dynamic>> defaults, {
     Map<String, Map<String, String>>? gameIdentifierByWireAndSport,
   }) async {
     await _assertCanPublish();
+    // Mirror each master into every sport slot for older readers.
+    final byWireAndSport = <String, Map<String, Map<String, dynamic>>>{};
+    defaults.forEach((wireName, masterJson) {
+      byWireAndSport[wireName] = {
+        for (final sport in catalogSports) sport: masterJson,
+      };
+    });
     final payload = <String, dynamic>{
       'schemaVersion': currentSchemaVersion,
       'updatedAt': FieldValue.serverTimestamp(),
       'updatedBy': FirebaseAuth.instance.currentUser?.uid,
       'captionTemplateWireDefaults': defaults,
+      'captionTemplateByWireAndSport': byWireAndSport,
     };
     if (gameIdentifierByWireAndSport != null) {
       payload['gameIdentifierByWireAndSport'] =
@@ -432,35 +459,65 @@ class AppDefaultsFirestoreService {
     await fetchAndCacheAppDefaults(forceNetwork: true);
   }
 
-  /// Admin: save one sport's caption structure. Other sports on the same wire
-  /// keep the structures already published for them.
+  /// Publish caption Structure for [wire].
+  ///
+  /// When [structureSport] is set, only that sport's Structure slot is updated
+  /// (so "Save as default" on basketball does not overwrite hockey).
+  /// When null, writes the wire master and mirrors it to every sport slot.
+  ///
+  /// Optional [gameIdentifierForSport] is always stored per [gameIdentifierSport].
   static Future<void> publishCaptionWireDefault(
     WireStyle wire,
     CaptionTemplate template, {
     String? gameIdentifierForSport,
     String? gameIdentifierSport,
+    String? structureSport,
   }) async {
     await _assertCanPublish();
-    final sportKey = gameIdentifierSport?.toLowerCase().trim();
-    if (sportKey == null || sportKey.isEmpty) {
-      throw StateError('A sport is required to publish a caption structure.');
-    }
+    final masterJson = CaptionTemplate.wireMasterJsonFromTemplate(
+      template.copyWith(wireStyle: wire),
+    );
     final snap = await _doc.get();
     final data = snap.data() ?? <String, dynamic>{};
+
     final structures = _parseCaptionByWireAndSport(
       data['captionTemplateByWireAndSport'],
     );
-    final bySport = Map<String, Map<String, dynamic>>.from(
-      structures[wire.name] ?? const {},
-    );
-    bySport[sportKey] = CaptionTemplate.wireMasterJsonFromTemplate(
-      template.copyWith(wireStyle: wire),
-    );
-    structures[wire.name] = bySport;
+    final structureSportKey = structureSport?.toLowerCase().trim();
+    final sportScoped = structureSportKey != null && structureSportKey.isNotEmpty;
+
+    final Map<String, dynamic> wireDefaults;
+    if (sportScoped) {
+      // Keep existing wire master as fallback for sports without their own slot.
+      wireDefaults = (data['captionTemplateWireDefaults'] is Map)
+          ? Map<String, dynamic>.from(
+              data['captionTemplateWireDefaults'] as Map,
+            )
+          : <String, dynamic>{};
+      final bySport = Map<String, Map<String, dynamic>>.from(
+        structures[wire.name] ?? const {},
+      );
+      bySport[structureSportKey] = masterJson;
+      structures[wire.name] = bySport;
+    } else {
+      wireDefaults = <String, dynamic>{
+        ...((data['captionTemplateWireDefaults'] is Map)
+            ? Map<String, dynamic>.from(
+                data['captionTemplateWireDefaults'] as Map,
+              )
+            : const <String, dynamic>{}),
+        wire.name: masterJson,
+      };
+      // Mirror into every sport slot for clients / admin "all sports" publish.
+      structures[wire.name] = {
+        for (final sport in catalogSports) sport: masterJson,
+      };
+    }
 
     final gameIds = _parseGameIdentifierMap(data['gameIdentifierByWireAndSport']);
+    final sportKey = gameIdentifierSport?.toLowerCase().trim();
     final gid = (gameIdentifierForSport ?? template.gameIdentifierText).trim();
-    if (gid.isNotEmpty) {
+    if (sportKey != null && sportKey.isNotEmpty && gid.isNotEmpty) {
       final ids = Map<String, String>.from(gameIds[wire.name] ?? const {});
       ids[sportKey] = gid;
       gameIds[wire.name] = ids;
@@ -471,6 +528,7 @@ class AppDefaultsFirestoreService {
         'schemaVersion': currentSchemaVersion,
         'updatedAt': FieldValue.serverTimestamp(),
         'updatedBy': FirebaseAuth.instance.currentUser?.uid,
+        'captionTemplateWireDefaults': wireDefaults,
         'captionTemplateByWireAndSport': structures,
         'gameIdentifierByWireAndSport': _gameIdentifierMapToFirestore(gameIds),
       },

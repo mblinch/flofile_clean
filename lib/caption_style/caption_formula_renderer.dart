@@ -9,6 +9,8 @@ import 'date_formula.dart';
 import 'game_info.dart';
 import 'position_labels.dart';
 import 'region_abbrev.dart';
+import 'sport_verb_categories.dart';
+import 'verb_caption_wording.dart';
 
 /// Drives the sample credit line dropdown (preview branding).
 enum CreditSampleAgency { gettyImages, imagn, ap }
@@ -63,44 +65,73 @@ class CaptionFormulaRenderer {
     final order = template.segmentOrder;
     final missing = <String>[];
 
-    if (order.contains(CaptionSegment.location)) {
+    final hasGeo = order.contains(CaptionSegment.location) ||
+        order.contains(CaptionSegment.city) ||
+        order.contains(CaptionSegment.state) ||
+        order.contains(CaptionSegment.country) ||
+        order.contains(CaptionSegment.countryCode);
+    if (hasGeo) {
       final locOpts = locationLineOptionsForOccurrence(template, 0);
+      // Getty only: US↔intl auto-hide. Imagn keeps province and country together.
       final gettyWire = template.wireStyle == WireStyle.getty ||
           template.wireStyle == WireStyle.gettyInternational;
-      final line = formatLocationLine(
-        game,
-        locOpts,
-        apStyleCaption: template.wireStyle == WireStyle.ap ||
-            template.wireStyle == WireStyle.cp,
-        forceAutoAdaptUsIntl: gettyWire,
-      ).trim();
-      if (line.isEmpty || line == '—') {
-        if (game.city.trim().isEmpty) {
-          missing.add('City');
+      final us = isUnitedStatesGame(game);
+      final autoAdapt = locOpts.autoAdaptUsIntl || gettyWire;
+
+      bool needsCity() =>
+          order.contains(CaptionSegment.city) ||
+          order.contains(CaptionSegment.location);
+      bool needsState() {
+        if (order.contains(CaptionSegment.location)) return true;
+        if (!order.contains(CaptionSegment.state)) return false;
+        if (autoAdapt && !us) return false;
+        return true;
+      }
+
+      bool needsCountry() {
+        if (order.contains(CaptionSegment.location)) return true;
+        if (!order.contains(CaptionSegment.country)) return false;
+        if (autoAdapt && us) return false;
+        return true;
+      }
+
+      if (needsCity() && game.city.trim().isEmpty) {
+        missing.add('City');
+      }
+      final hasCountry = game.resolvedCountryName.isNotEmpty ||
+          game.resolvedCountryCode.isNotEmpty;
+      if (needsState()) {
+        if (game.resolvedRegionName.isEmpty &&
+            game.resolvedRegionShort.isEmpty) {
+          missing.add('Province/State');
         }
-        final us = isUnitedStatesGame(game);
-        final hasCountry = game.resolvedCountryName.isNotEmpty ||
-            game.resolvedCountryCode.isNotEmpty;
-        if (us || !hasCountry) {
-          if (game.resolvedRegionName.isEmpty &&
-              game.resolvedRegionShort.isEmpty) {
-            missing.add('Province/State');
-          }
-        }
-        if (!us && !hasCountry) {
-          missing.add('Country');
-        }
+      }
+      if (needsCountry() && !hasCountry) {
+        missing.add('Country');
+      }
+      if (order.contains(CaptionSegment.countryCode) &&
+          game.resolvedCountryCode.isEmpty) {
+        missing.add('Country code');
       }
     }
 
-    if (order.contains(CaptionSegment.venue) && game.venue.trim().isEmpty) {
-      missing.add('Stadium');
+    if (order.contains(CaptionSegment.venue) &&
+        storedVenue(game).isEmpty) {
+      missing.add('Location');
     }
 
     if (includeCreator &&
-        order.contains(CaptionSegment.credit) &&
+        (order.contains(CaptionSegment.credit) ||
+            order.contains(CaptionSegment.creator)) &&
         game.photographerName.trim().isEmpty) {
       missing.add('Creator');
+    }
+
+    if (order.contains(CaptionSegment.agency) &&
+        game.agencyName.trim().isEmpty &&
+        _iptcLookup(game.iptcMetadata, const ['IPTC:Credit', 'Credit'])
+            .isEmpty) {
+      missing.add('Credit');
     }
 
     return missing;
@@ -330,6 +361,7 @@ class CaptionFormulaRenderer {
     GameInfo g,
     LocationLineOptions options, {
     bool apStyleCaption = false,
+    bool cpStyleCaption = false,
     bool forceAutoAdaptUsIntl = false,
     int locationOccurrenceIndex = 0,
   }) {
@@ -345,6 +377,7 @@ class CaptionFormulaRenderer {
           autoSpacing: false,
         ),
         apStyleCaption: apStyleCaption,
+        cpStyleCaption: cpStyleCaption,
       );
       return rendered;
     }
@@ -354,21 +387,43 @@ class CaptionFormulaRenderer {
     final countryCode = g.resolvedCountryCode.trim().toLowerCase();
     final isCanada = countryName == 'canada' || countryCode == 'can';
     final chips = _activeLocationChips(options.chips);
+    // Hold literals until the next non-empty geo so suppressed / empty State
+    // does not leave a dangling ", " (AP standalone cities, empty province).
+    String? pendingLiteral;
     for (final c in chips) {
       switch (c.kind) {
         case LocationChipKind.city:
         case LocationChipKind.region:
         case LocationChipKind.country:
+        case LocationChipKind.countryCode:
           String raw;
           var isIsoCode = false;
           if (c.kind == LocationChipKind.city) {
             raw = g.city.trim();
           } else if (c.kind == LocationChipKind.region) {
-            if (apStyleCaption && isCanada) break;
-            if (c.regionVariant == LocationRegionVariant.apStyle) {
-              final full = g.resolvedRegionName.trim();
-              raw = abbreviateUsStateApStyle(full);
-              if (raw.isEmpty) raw = full;
+            if (cpStyleCaption) {
+              // CP: Canadian provinces (standalone cities omit); US uses AP.
+              raw = isCanada
+                  ? formatCpStyleProvince(
+                      city: g.city,
+                      region: g.resolvedRegionName,
+                      regionCode: g.resolvedRegionShort,
+                    )
+                  : formatApStyleState(
+                      city: g.city,
+                      region: g.resolvedRegionName,
+                      regionCode: g.resolvedRegionShort,
+                    );
+            } else if (apStyleCaption && isCanada) {
+              raw = '';
+            } else if (apStyleCaption &&
+                c.regionVariant == LocationRegionVariant.apStyle) {
+              // AP — standalone cities + AP abbrevs.
+              raw = formatApStyleState(
+                city: g.city,
+                region: g.resolvedRegionName,
+                regionCode: g.resolvedRegionShort,
+              );
             } else {
               final useShort = c.regionVariant == LocationRegionVariant.shortForm;
               isIsoCode = useShort;
@@ -380,6 +435,9 @@ class CaptionFormulaRenderer {
                 isIsoCode = !useShort && raw == g.resolvedRegionShort.trim();
               }
             }
+          } else if (c.kind == LocationChipKind.countryCode) {
+            raw = g.resolvedCountryCode.trim();
+            isIsoCode = true;
           } else {
             final useIso = c.countryVariant == LocationCountryVariant.isoCode;
             isIsoCode = useIso;
@@ -392,6 +450,10 @@ class CaptionFormulaRenderer {
             }
           }
           if (raw.isEmpty) break;
+          if (pendingLiteral != null) {
+            b.write(pendingLiteral);
+            pendingLiteral = null;
+          }
           b.write(applyLocationChipCaps(
             raw,
             caps: c.caps,
@@ -399,11 +461,13 @@ class CaptionFormulaRenderer {
           ));
           break;
         case LocationChipKind.literal:
-          b.write(c.literal);
+          pendingLiteral = c.literal;
           break;
       }
     }
     var s = b.toString();
+    // AP: drop a dangling comma when State was omitted. CP province short
+    // forms already include a trailing comma ("Que.,") — leave it alone.
     if (apStyleCaption) {
       s = s.replaceFirst(RegExp(r'[,\s]+$'), '');
     }
@@ -447,7 +511,7 @@ class CaptionFormulaRenderer {
     return n;
   }
 
-  /// [occurrenceIndex] counts only [CaptionSegment.location] entries, left-to-right.
+  /// [occurrenceIndex] counts geo-field (or legacy location) entries of a kind.
   static LocationLineOptions locationLineOptionsForOccurrence(
     CaptionTemplate template,
     int occurrenceIndex,
@@ -459,6 +523,190 @@ class CaptionFormulaRenderer {
       return by[occurrenceIndex];
     }
     return template.locationOptions;
+  }
+
+  /// True for city / state / country / country-code structure tokens.
+  static bool isGeoFieldSegment(CaptionSegment s) =>
+      s == CaptionSegment.city ||
+      s == CaptionSegment.state ||
+      s == CaptionSegment.country ||
+      s == CaptionSegment.countryCode;
+
+  /// True for month / day / year / weekday structure tokens.
+  static bool isDatePartSegment(CaptionSegment s) =>
+      CaptionTemplate.isDatePartSegment(s);
+
+  static DateFieldKind? dateFieldKindForSegment(CaptionSegment s) {
+    switch (s) {
+      case CaptionSegment.month:
+        return DateFieldKind.month;
+      case CaptionSegment.day:
+        return DateFieldKind.day;
+      case CaptionSegment.year:
+        return DateFieldKind.year;
+      case CaptionSegment.weekday:
+        return DateFieldKind.weekday;
+      default:
+        return null;
+    }
+  }
+
+  /// Formats a single date part (month / day / year / weekday) from the same
+  /// date source used by [formatTemplateDateLine].
+  static String formatDatePart({
+    required GameInfo game,
+    required CaptionTemplate template,
+    required DateFieldKind kind,
+    required int occurrenceIndex,
+  }) {
+    final token = template.datePartTokenFor(
+      kind: kind,
+      occurrenceIndex: occurrenceIndex,
+    );
+    final date = _resolveFormulaDate(game);
+    if (date == null) return '—';
+    return token.render(date);
+  }
+
+  /// Renders a single geo field using the matching chip in [options].
+  ///
+  /// When [options.autoAdaptUsIntl] or [forceAutoAdaptUsIntl] is set (Getty),
+  /// State is omitted outside the US and Country is omitted inside the US
+  /// (empty string) so surrounding punctuation can collapse via pending-glue
+  /// joins. Imagn keeps both province and country when present.
+  ///
+  /// When auto-adapt is on, outside the US, and the formula has no Country
+  /// segment ([formulaIncludesCountry] is false), the State slot renders
+  /// Country instead so City+State-only Getty structures still show Canada.
+  /// [LocationChipKind.countryCode] is never auto-blanked.
+  static String formatGeoField({
+    required GameInfo game,
+    required LocationLineOptions options,
+    required LocationChipKind kind,
+    bool apStyleCaption = false,
+    bool cpStyleCaption = false,
+    bool forceAutoAdaptUsIntl = false,
+    bool formulaIncludesCountry = true,
+  }) {
+    assert(kind != LocationChipKind.literal);
+    final autoAdapt = options.autoAdaptUsIntl || forceAutoAdaptUsIntl;
+    if (autoAdapt) {
+      final us = isUnitedStatesGame(game);
+      if (kind == LocationChipKind.country && us) return '';
+      if (kind == LocationChipKind.region && !us) {
+        if (!formulaIncludesCountry) {
+          // State-only Getty structure: put Country in the State slot.
+          return formatGeoField(
+            game: game,
+            options: options,
+            kind: LocationChipKind.country,
+            apStyleCaption: apStyleCaption,
+            cpStyleCaption: cpStyleCaption,
+            forceAutoAdaptUsIntl: false,
+            formulaIncludesCountry: true,
+          );
+        }
+        return '';
+      }
+    }
+
+    LocationChip chip = LocationChip(
+      id: 'geo_${kind.name}',
+      kind: kind,
+      caps: options.uppercase,
+    );
+    for (final c in options.chips) {
+      if (c.kind == kind) {
+        chip = c;
+        break;
+      }
+    }
+    // Prefer territory-specific chip metadata when auto-adapt lists exist.
+    if (autoAdapt && kind != LocationChipKind.countryCode) {
+      final branch = options.chipsForTerritory(
+        unitedStates: isUnitedStatesGame(game),
+      );
+      for (final c in branch) {
+        if (c.kind == kind) {
+          chip = c;
+          break;
+        }
+      }
+    }
+    if (!chip.enabled && !autoAdapt) return '';
+
+    final countryName = game.resolvedCountryName.trim().toLowerCase();
+    final countryCode = game.resolvedCountryCode.trim().toLowerCase();
+    final isCanada = countryName == 'canada' || countryCode == 'can';
+
+    String raw;
+    var isIsoCode = false;
+    switch (kind) {
+      case LocationChipKind.city:
+        raw = game.city.trim();
+        break;
+      case LocationChipKind.region:
+        if (cpStyleCaption) {
+          raw = isCanada
+              ? formatCpStyleProvince(
+                  city: game.city,
+                  region: game.resolvedRegionName,
+                  regionCode: game.resolvedRegionShort,
+                )
+              : formatApStyleState(
+                  city: game.city,
+                  region: game.resolvedRegionName,
+                  regionCode: game.resolvedRegionShort,
+                );
+        } else if (apStyleCaption && isCanada) {
+          return '';
+        } else if (apStyleCaption &&
+            chip.regionVariant == LocationRegionVariant.apStyle) {
+          // AP — standalone cities + AP abbrevs.
+          raw = formatApStyleState(
+            city: game.city,
+            region: game.resolvedRegionName,
+            regionCode: game.resolvedRegionShort,
+          );
+        } else {
+          final useShort = chip.regionVariant == LocationRegionVariant.shortForm;
+          isIsoCode = useShort;
+          raw = (useShort ? game.resolvedRegionShort : game.resolvedRegionName)
+              .trim();
+          if (raw.isEmpty) {
+            raw = (useShort
+                    ? game.resolvedRegionName
+                    : game.resolvedRegionShort)
+                .trim();
+            isIsoCode = !useShort && raw == game.resolvedRegionShort.trim();
+          }
+        }
+        break;
+      case LocationChipKind.country:
+        final useIso = chip.countryVariant == LocationCountryVariant.isoCode;
+        isIsoCode = useIso;
+        raw = (useIso ? game.resolvedCountryCode : game.resolvedCountryName)
+            .trim();
+        if (raw.isEmpty) {
+          raw = (useIso ? game.resolvedCountryName : game.resolvedCountryCode)
+              .trim();
+          isIsoCode = !useIso && raw == game.resolvedCountryCode.trim();
+        }
+        break;
+      case LocationChipKind.countryCode:
+        raw = game.resolvedCountryCode.trim();
+        isIsoCode = true;
+        break;
+      case LocationChipKind.literal:
+        return '';
+    }
+    if (raw.isEmpty) return '';
+    var out = applyLocationChipCaps(
+      raw,
+      caps: chip.caps || options.uppercase,
+      isIsoCode: isIsoCode,
+    );
+    return out;
   }
 
   /// [occurrenceIndex] counts only [CaptionSegment.separator] entries, left-to-right.
@@ -499,6 +747,7 @@ class CaptionFormulaRenderer {
     final suffix = (suffixes != null && occ >= 0 && occ < suffixes.length)
         ? suffixes[occ]
         : '';
+    // Do not auto-inject gameIdentifierText — start screen owns that phrase.
     return '$body$suffix';
   }
 
@@ -548,6 +797,54 @@ class CaptionFormulaRenderer {
       case CreditSampleAgency.ap:
         return 'AP';
     }
+  }
+
+  static String _iptcLookup(Map<String, String> iptcMetadata, List<String> keys) {
+    for (final k in keys) {
+      final v = iptcMetadata[k]?.trim();
+      if (v != null && v.isNotEmpty) return v;
+    }
+    return '';
+  }
+
+  /// IPTC Creator / By-line → [GameInfo.photographerName], with sample fallback.
+  static String formatCreatorName({
+    required GameInfo game,
+    required BylineOptions bylineOptions,
+  }) {
+    var name = game.photographerName.trim();
+    if (name.isEmpty) {
+      name = _iptcLookup(game.iptcMetadata, const [
+        'IPTC:By-line',
+        'By-line',
+        'Creator',
+        'XMP-dc:Creator',
+        'XMP:Creator',
+      ]);
+    }
+    if (name.isEmpty) name = 'Photographer';
+    if (bylineOptions.nameCaps) name = name.toUpperCase();
+    return name;
+  }
+
+  /// IPTC Credit → [GameInfo.agencyName], with wire sample fallback.
+  static String formatAgencyCredit({
+    required GameInfo game,
+    required BylineOptions bylineOptions,
+    required CreditSampleAgency sampleAgency,
+  }) {
+    var credit = game.agencyName.trim();
+    if (credit.isEmpty) {
+      credit = _iptcLookup(game.iptcMetadata, const [
+        'IPTC:Credit',
+        'Credit',
+      ]);
+    }
+    if (credit.isEmpty) credit = defaultAgencyLabel(sampleAgency);
+    if (bylineOptions.creditCaps || bylineOptions.organizationCaps) {
+      credit = credit.toUpperCase();
+    }
+    return credit;
   }
 
   /// Narrative line built only from [BylineFieldKind.custom] slots (joined with
@@ -689,15 +986,15 @@ class CaptionFormulaRenderer {
     String phrase;
     switch ((sport ?? 'baseball').toLowerCase().trim()) {
       case 'hockey':
-        phrase = 'in the third period';
+        phrase = 'during the third period';
         break;
       case 'basketball':
       case 'wnba':
       case 'football':
-        phrase = 'in the fourth quarter';
+        phrase = 'during the fourth quarter';
         break;
       case 'soccer':
-        phrase = 'in the second half';
+        phrase = 'during the second half';
         break;
       case 'baseball':
       default:
@@ -708,22 +1005,12 @@ class CaptionFormulaRenderer {
   }
 
   static String defaultPreviewActionForSport(String? sport) {
+    final s = (sport ?? 'baseball').toLowerCase().trim();
+    final key = SportVerbCategories.defaultPreviewVerb[s] ??
+        SportVerbCategories.defaultPreviewVerb['baseball']!;
+    final verb = VerbCaptionWording.defaultWording(key, sport: s).trim();
     final phrase = previewTimePhraseForSport(sport);
-    final s = (sport ?? '').toLowerCase();
-    switch (s) {
-      case 'hockey':
-        return 'scores a goal against the {opp} $phrase';
-      case 'basketball':
-      case 'wnba':
-        return 'dunks against the {opp} $phrase';
-      case 'football':
-        return 'scores against the {opp} $phrase';
-      case 'soccer':
-        return 'scores a goal against the {opp} $phrase';
-      case 'baseball':
-      default:
-        return 'hits a home run against the {opp} $phrase';
-    }
+    return '$verb against the {opp} $phrase';
   }
 
   static String sampleDynamicCaption(
@@ -752,7 +1039,29 @@ class CaptionFormulaRenderer {
   }
 
   static String _singlePlayerLead(
-      CaptionTemplate template, CaptionPreviewPlayer player) {
+    CaptionTemplate template,
+    CaptionPreviewPlayer player, {
+    String? sport,
+  }) {
+    return singlePlayerPreviewParts(
+      template,
+      player,
+      sport: sport,
+      includeTiming: false,
+    ).map((e) => e.$2).join();
+  }
+
+  /// Ordered (flashKey, text) parts for the Player Output sample.
+  ///
+  /// Flash keys match toggle ids: `team`, `num`, `pos`, `poss`, `per`, `dia`.
+  /// Literal spacers use a null key. Joining `$2` matches
+  /// [randomSinglePlayerPreview] / [_singlePlayerLead].
+  static List<(String? key, String text)> singlePlayerPreviewParts(
+    CaptionTemplate template,
+    CaptionPreviewPlayer player, {
+    String? sport,
+    bool includeTiming = true,
+  }) {
     var playerName = player.name;
     var teamName = player.team;
     if (template.removeDiacritics) {
@@ -760,39 +1069,89 @@ class CaptionFormulaRenderer {
       teamName = CaptionTextNormalize.stripDiacritics(teamName);
     }
     final numText = _numberToken(template.numberFormat, player.number);
-    final position = template.effectiveIncludePlayerPosition
-        ? ' ${formatPositionLabelForCaption(
+    final posLabel = template.effectiveIncludePlayerPosition
+        ? formatPositionLabelForCaption(
             player.position,
-            apStyle: template.wireStyle == WireStyle.ap || template.wireStyle == WireStyle.cp,
+            apStyle: template.wireStyle == WireStyle.ap ||
+                template.wireStyle == WireStyle.cp,
             imagnStyle: template.wireStyle == WireStyle.imagn,
             americanEnglish: template.americanEnglish,
-            sport: 'baseball',
-          )}'
+            sport: sport ?? 'baseball',
+          )
         : '';
-    final teamPossessive = _possessiveTeam(teamName);
+    final parts = <(String? key, String text)>[];
     switch (template.captionTeamOrder) {
       case CaptionTeamOrder.teamAfter:
-        return '$playerName $numText of the $teamName$position';
-      case CaptionTeamOrder.teamBefore:
-        if (template.effectiveIncludePlayerPosition) {
-          return '$teamName$position $playerName $numText';
+        parts.add(('dia', playerName));
+        parts.add((null, ' '));
+        parts.add(('num', numText));
+        parts.add(('team', ' of the $teamName'));
+        if (posLabel.isNotEmpty) {
+          parts.add(('pos', ' $posLabel'));
         }
-        return '$teamPossessive $playerName $numText';
+      case CaptionTeamOrder.teamBefore:
+        // Possessive: "Maple Leafs' Auston Matthews (34)"
+        // With position: "Maple Leafs' defenseman Auston Matthews (34)"
+        if (template.useTeamPossessive ?? false) {
+          parts.add(('poss', _possessiveTeam(teamName)));
+        } else {
+          parts.add(('team', teamName));
+        }
+        if (posLabel.isNotEmpty) {
+          parts.add(('pos', ' $posLabel'));
+        }
+        parts.add((null, ' '));
+        parts.add(('dia', playerName));
+        parts.add((null, ' '));
+        parts.add(('num', numText));
     }
+    if (includeTiming && template.includeTimingPhrase) {
+      parts.add((null, ' '));
+      parts.add((
+        'per',
+        previewTimePhraseForSport(sport, caps: template.timingPhraseCaps),
+      ));
+    }
+    return parts;
   }
 
-  /// Seeded player-only preview text (no action clause).
-  static String randomSinglePlayerPreview(
+  /// Seeded player-only preview parts (no action clause).
+  ///
+  /// Timing is omitted here — Player Output is for name / number / team /
+  /// position. Period / quarter still affects the Structure preview caption
+  /// and live captions via [includeTimingPhrase].
+  static List<(String? key, String text)> randomSinglePlayerPreviewParts(
     CaptionTemplate template, {
     int seed = 0,
     List<CaptionPreviewPlayer>? previewPlayers,
+    String? sport,
   }) {
     final rand = Random(seed);
     final players = (previewPlayers != null && previewPlayers.isNotEmpty)
         ? previewPlayers
         : _samplePlayers;
     final player = players[rand.nextInt(players.length)];
-    return _singlePlayerLead(template, player);
+    return singlePlayerPreviewParts(
+      template,
+      player,
+      sport: sport,
+      includeTiming: false,
+    );
+  }
+
+  /// Seeded player-only preview text (no action clause / no timing phrase).
+  static String randomSinglePlayerPreview(
+    CaptionTemplate template, {
+    int seed = 0,
+    List<CaptionPreviewPlayer>? previewPlayers,
+    String? sport,
+  }) {
+    return randomSinglePlayerPreviewParts(
+      template,
+      seed: seed,
+      previewPlayers: previewPlayers,
+      sport: sport,
+    ).map((e) => e.$2).join();
   }
 
   /// Seeded preview caption featuring a single player from the mock game roster.
@@ -813,7 +1172,7 @@ class CaptionFormulaRenderer {
         ? previewActions
         : _previewActionsForSport(sport);
     final player = players[rand.nextInt(players.length)];
-    final lead = _singlePlayerLead(template, player);
+    final lead = _singlePlayerLead(template, player, sport: sport);
     final actionTemplate = actions[rand.nextInt(actions.length)];
     var opp = player.opponent;
     if (template.removeDiacritics) {
@@ -854,6 +1213,14 @@ class CaptionFormulaRenderer {
         'Los Angeles Boulevards', 'CF', 'Heater Ace', 24, 'New York Avenues'),
     CaptionPreviewPlayer(
         'New York Avenues', 'SS', 'Clutch Buckets', 7, 'Los Angeles Boulevards'),
+    CaptionPreviewPlayer(
+        'Los Angeles Boulevards', 'P', 'Jordan Lee', 12, 'New York Avenues'),
+    CaptionPreviewPlayer(
+        'New York Avenues', 'C', 'Riley Quinn', 9, 'Los Angeles Boulevards'),
+    CaptionPreviewPlayer(
+        'Los Angeles Boulevards', '1B', 'Morgan Blake', 33, 'New York Avenues'),
+    CaptionPreviewPlayer(
+        'New York Avenues', 'LF', 'Casey Storm', 18, 'Los Angeles Boulevards'),
   ];
 
   /// Rewrites preview-only inning phrasing (top/bottom half, bare "in the Nth").
@@ -873,24 +1240,75 @@ class CaptionFormulaRenderer {
     return s;
   }
 
-  /// Layout/startup previews when no session verbs are loaded.
-  static List<String> _previewActionsForSport(String? sport) {
-    final phrase = previewTimePhraseForSport(sport);
-    final s = (sport ?? '').toLowerCase();
-    switch (s) {
+  /// Timing phrases shuffled into layout/startup sample captions.
+  static List<String> _previewTimePhrasesForSport(String? sport) {
+    switch ((sport ?? 'baseball').toLowerCase().trim()) {
       case 'hockey':
-        return ['scores a goal against the {opp} $phrase'];
+        return const [
+          'during the first period',
+          'during the second period',
+          'during the third period',
+        ];
       case 'basketball':
       case 'wnba':
-        return ['dunks against the {opp} $phrase'];
       case 'football':
-        return ['scores against the {opp} $phrase'];
+        return const [
+          'during the first quarter',
+          'during the second quarter',
+          'during the third quarter',
+          'during the fourth quarter',
+        ];
       case 'soccer':
-        return ['scores a goal against the {opp} $phrase'];
+        return const [
+          'during the first half',
+          'during the second half',
+        ];
       case 'baseball':
       default:
-        return ['hits a home run against the {opp} $phrase'];
+        return const [
+          'during the first inning',
+          'during the third inning',
+          'during the fifth inning',
+          'during the seventh inning',
+          'during the ninth inning',
+        ];
     }
+  }
+
+  /// Singular verb phrases from the sport's real verb list (never invented).
+  static List<String> _catalogVerbPhrases(String? sport) {
+    final s = (sport ?? 'baseball').toLowerCase().trim();
+    final out = <String>[];
+    final seen = <String>{};
+    for (final entry in SportVerbCategories.forSport(s).entries) {
+      for (final key in entry.value) {
+        final label = key.trim();
+        if (label.isEmpty) continue;
+        final phrase =
+            VerbCaptionWording.defaultWording(label, sport: s).trim();
+        if (phrase.isEmpty) continue;
+        if (!seen.add(phrase.toLowerCase())) continue;
+        out.add(phrase);
+      }
+    }
+    return out;
+  }
+
+  /// Layout/startup previews when no session verbs are loaded — verbs come
+  /// only from [SportVerbCategories], not made-up sample wording.
+  static List<String> _previewActionsForSport(String? sport) {
+    final phrases = _previewTimePhrasesForSport(sport);
+    final verbs = _catalogVerbPhrases(sport);
+    if (verbs.isEmpty) {
+      return [
+        for (final phrase in phrases) 'against the {opp} $phrase',
+      ];
+    }
+    return [
+      for (final verb in verbs)
+        for (final phrase in phrases)
+          '$verb against the {opp} $phrase',
+    ];
   }
 
   /// Uppercases the inning / period / quarter / half clause inside a caption.
@@ -924,7 +1342,7 @@ class CaptionFormulaRenderer {
     return s.replaceAll(RegExp(r'\s{2,}'), ' ').trim();
   }
 
-  /// IPTC / XMP keys that hold the stadium (IPTC Location).
+  /// IPTC / XMP keys for Location (IPTC SubLocation — stadium / place name).
   static const stadiumMetadataKeys = <String>[
     'IPTC:SubLocation',
     'IPTC:Sub-location',
@@ -938,21 +1356,42 @@ class CaptionFormulaRenderer {
     'LocationCreatedSublocation',
   ];
 
-  /// Stadium name from [GameInfo.venue], then photo metadata. Empty when unknown.
+  /// True when [game.iptcMetadata] has an IPTC Location / SubLocation value.
+  static bool hasIptcLocation(GameInfo game) {
+    for (final key in stadiumMetadataKeys) {
+      final value = game.iptcMetadata[key]?.trim() ?? '';
+      if (value.isNotEmpty) return true;
+    }
+    return false;
+  }
+
+  /// Location name from IPTC first, then [GameInfo.venue]. Empty when unknown.
   static String storedVenue(GameInfo game) {
-    final direct = game.venue.trim();
-    if (direct.isNotEmpty) return direct;
     for (final key in stadiumMetadataKeys) {
       final value = game.iptcMetadata[key]?.trim() ?? '';
       if (value.isNotEmpty) return value;
     }
-    return '';
+    return game.venue.trim();
   }
 
-  /// Stadium for previews. Falls back to the word Venue only when nothing is set.
+  /// Copies [location] into the IPTC Location / SubLocation metadata aliases.
+  static Map<String, String> iptcLocationMetadata(
+    String location, [
+    Map<String, String>? base,
+  ]) {
+    final out = Map<String, String>.from(base ?? const {});
+    final v = location.trim();
+    if (v.isEmpty) return out;
+    for (final key in stadiumMetadataKeys) {
+      out[key] = v;
+    }
+    return out;
+  }
+
+  /// Location for captions / previews. Falls back to "Location" when unset.
   static String venueLabel(GameInfo game) {
     final stored = storedVenue(game);
-    return stored.isEmpty ? 'Venue' : stored;
+    return stored.isEmpty ? 'Location' : stored;
   }
 
   static String render({
@@ -1096,10 +1535,37 @@ class CaptionFormulaRenderer {
           return formatLocationLine(
             game,
             locOpts,
-            apStyleCaption: template.wireStyle == WireStyle.ap ||
-                template.wireStyle == WireStyle.cp,
+            apStyleCaption: template.wireStyle == WireStyle.ap,
+            cpStyleCaption: template.wireStyle == WireStyle.cp,
             forceAutoAdaptUsIntl: gettyWire,
             locationOccurrenceIndex: occ,
+          );
+        case CaptionSegment.city:
+        case CaptionSegment.state:
+        case CaptionSegment.country:
+        case CaptionSegment.countryCode:
+          final kind = s == CaptionSegment.city
+              ? LocationChipKind.city
+              : s == CaptionSegment.state
+                  ? LocationChipKind.region
+                  : s == CaptionSegment.countryCode
+                      ? LocationChipKind.countryCode
+                      : LocationChipKind.country;
+          final occ = segmentOccurrenceIndex(
+              template.segmentOrder, segmentIndex, s);
+          final locOpts = locationLineOptionsForOccurrence(template, occ);
+          // Getty only auto-adapts State↔Country; Imagn keeps both when present.
+          final gettyWire = template.wireStyle == WireStyle.getty ||
+              template.wireStyle == WireStyle.gettyInternational;
+          return formatGeoField(
+            game: game,
+            options: locOpts,
+            kind: kind,
+            apStyleCaption: template.wireStyle == WireStyle.ap,
+            cpStyleCaption: template.wireStyle == WireStyle.cp,
+            forceAutoAdaptUsIntl: gettyWire,
+            formulaIncludesCountry:
+                template.segmentOrder.contains(CaptionSegment.country),
           );
         case CaptionSegment.date:
           final occ = segmentOccurrenceIndex(
@@ -1111,6 +1577,19 @@ class CaptionFormulaRenderer {
             uppercaseAll: template.wireStyle == WireStyle.getty ||
                 template.wireStyle == WireStyle.gettyInternational,
             dateFormulaOverride: f,
+          );
+        case CaptionSegment.month:
+        case CaptionSegment.day:
+        case CaptionSegment.year:
+        case CaptionSegment.weekday:
+          final kind = dateFieldKindForSegment(s)!;
+          final occ = segmentOccurrenceIndex(
+              template.segmentOrder, segmentIndex, s);
+          return formatDatePart(
+            game: game,
+            template: template,
+            kind: kind,
+            occurrenceIndex: occ,
           );
         case CaptionSegment.caption:
           return '${template.captionPrefix}$cap${template.captionSuffix}';
@@ -1133,6 +1612,17 @@ class CaptionFormulaRenderer {
           return punctuationSnippetFor(template, segmentIndex);
         case CaptionSegment.venue:
           return '${template.venuePrefix}$venue${template.venueSuffix}';
+        case CaptionSegment.creator:
+          return formatCreatorName(
+            game: game,
+            bylineOptions: template.bylineOptions,
+          );
+        case CaptionSegment.agency:
+          return formatAgencyCredit(
+            game: game,
+            bylineOptions: template.bylineOptions,
+            sampleAgency: sampleAgency,
+          );
         case CaptionSegment.credit:
           final manualCredit = creditOverride?.trim() ?? '';
           if (manualCredit.isNotEmpty) return manualCredit;
@@ -1163,6 +1653,11 @@ class CaptionFormulaRenderer {
     String joined = '';
 
     if (hasGlueSegments) {
+      // Hold Structure glue across empty City/State/Country (and any other
+      // empty content) so "Toronto, , Canada" does not appear. Getty auto-adapt
+      // and Imagn Structure writing both need this.
+      final deferEmptyGeoGlue = _shouldDeferGlueForEmptyGeo(template);
+      String? pendingGlue;
       for (var i = 0; i < n; i++) {
         final s = order[i];
         if (customSegmentPlaceholderIndex == null &&
@@ -1171,8 +1666,34 @@ class CaptionFormulaRenderer {
           continue;
         }
         final part = valueAt(i);
+        final isGlue = s == CaptionSegment.punctuation ||
+            s == CaptionSegment.separator;
+        if (isGlue) {
+          if (part.isEmpty) continue;
+          if (deferEmptyGeoGlue) {
+            // Keep the latest glue before the next content piece so an empty
+            // geo field (auto-adapt) does not stack ", ," separators.
+            pendingGlue = part;
+            continue;
+          }
+          joined = joined.isEmpty
+              ? part
+              : _joinWithoutDuplicateOverlap(joined, part);
+          continue;
+        }
         if (part.isEmpty) continue;
-        joined = joined.isEmpty ? part : _joinWithoutDuplicateOverlap(joined, part);
+        if (deferEmptyGeoGlue) {
+          if (pendingGlue != null && pendingGlue.isNotEmpty) {
+            joined = joined.isEmpty
+                ? pendingGlue
+                : _joinWithoutDuplicateOverlap(joined, pendingGlue);
+            pendingGlue = null;
+          } else {
+            pendingGlue = null;
+          }
+        }
+        joined =
+            joined.isEmpty ? part : _joinWithoutDuplicateOverlap(joined, part);
       }
     } else {
       final gaps = effectiveSegmentGaps(template);
@@ -1211,10 +1732,30 @@ class CaptionFormulaRenderer {
         joined.contains('(Photo by')) {
       joined = _cleanGettyCaptionPunctuation(joined);
     }
-    return joined;
+    // Default captionSuffix / trailing glue literals / layoutSuffix can leave a
+    // dangling space after the last content segment — strip only the end.
+    return joined.trimRight();
+  }
+
+  /// Whether empty content should swallow adjacent Structure glue so
+  /// `{city}, {state}` does not leave a dangling comma when State is empty
+  /// (Getty/Imagn auto-adapt, AP/CP standalone-city omit).
+  static bool _shouldDeferGlueForEmptyGeo(CaptionTemplate template) {
+    if (template.wireStyle == WireStyle.getty ||
+        template.wireStyle == WireStyle.gettyInternational ||
+        template.wireStyle == WireStyle.imagn ||
+        template.wireStyle == WireStyle.ap ||
+        template.wireStyle == WireStyle.cp) {
+      return true;
+    }
+    if (template.locationOptions.autoAdaptUsIntl) return true;
+    final byOcc = template.locationOptionsByOccurrence;
+    return byOcc != null && byOcc.any((o) => o.autoAdaptUsIntl);
   }
 
   /// Getty (and Getty-like custom) captions need the same glue cleanup.
+  /// Kept independent of [_shouldDeferGlueForEmptyGeo] so Imagn gets empty-geo
+  /// hold without Getty-specific `, -` / `, .` rewrites.
   static bool _shouldApplyGettyCaptionCleanup(CaptionTemplate template) {
     if (template.wireStyle == WireStyle.getty ||
         template.wireStyle == WireStyle.gettyInternational) {
@@ -1289,6 +1830,9 @@ class CaptionFormulaRenderer {
     // Two periods (with optional space between) → single ". "
     // Handles: ". .", "..", ". . "
     r = r.replaceAll(RegExp(r'\.\s+\.'), '. ');
+    // Soften stacked commas from an empty Structure slot: "Toronto, , Canada"
+    // → "Toronto, Canada" (space after the kept comma comes from the next token).
+    r = r.replaceAll(RegExp(r',\s+,'), ',');
     // Collapse multiple spaces down to one
     r = r.replaceAll(RegExp(r'  +'), ' ');
     return r;
@@ -1301,6 +1845,21 @@ class CaptionFormulaRenderer {
     CaptionSegment y,
   ) =>
       (a == x && b == y) || (a == y && b == x);
+
+  /// Date (legacy or any date part) adjacent to any geo field.
+  static bool _geoDatePair(CaptionSegment a, CaptionSegment b) {
+    bool isDateish(CaptionSegment s) =>
+        s == CaptionSegment.date || isDatePartSegment(s);
+    return (isGeoFieldSegment(a) && isDateish(b)) ||
+        (isGeoFieldSegment(b) && isDateish(a));
+  }
+
+  static bool _dateCaptionPair(CaptionSegment a, CaptionSegment b) {
+    bool isDateish(CaptionSegment s) =>
+        s == CaptionSegment.date || isDatePartSegment(s);
+    return (isDateish(a) && b == CaptionSegment.caption) ||
+        (isDateish(b) && a == CaptionSegment.caption);
+  }
 
   /// Default joiner between [a] and [b] for this wire (any segment order).
   static String defaultGapBetweenSegments(
@@ -1318,11 +1877,11 @@ class CaptionFormulaRenderer {
       case WireStyle.getty:
       case WireStyle.gettyInternational:
         if (_segmentPairEither(
-            a, b, CaptionSegment.location, CaptionSegment.date)) {
+                a, b, CaptionSegment.location, CaptionSegment.date) ||
+            _geoDatePair(a, b)) {
           return ' - ';
         }
-        if (_segmentPairEither(
-            a, b, CaptionSegment.date, CaptionSegment.caption)) {
+        if (_dateCaptionPair(a, b)) {
           return ': ';
         }
         if (a == CaptionSegment.caption && b == CaptionSegment.customText) {
@@ -1331,30 +1890,39 @@ class CaptionFormulaRenderer {
         if (a == CaptionSegment.customText && b == CaptionSegment.venue) {
           return ' at ';
         }
-        if (a == CaptionSegment.customText && b == CaptionSegment.credit) {
+        if (a == CaptionSegment.customText &&
+            (b == CaptionSegment.credit ||
+                b == CaptionSegment.creator ||
+                b == CaptionSegment.agency)) {
           return '. ';
         }
+        if (a == CaptionSegment.creator && b == CaptionSegment.agency) {
+          return preset.bylineOptions.between;
+        }
+        if (isGeoFieldSegment(a) && isGeoFieldSegment(b)) return ', ';
+        if (isDatePartSegment(a) && isDatePartSegment(b)) return ' ';
         if (b == CaptionSegment.venue) return ' at ';
-        if (b == CaptionSegment.credit) return '. ';
+        if (b == CaptionSegment.credit ||
+            b == CaptionSegment.creator ||
+            b == CaptionSegment.agency) {
+          return '. ';
+        }
         return ' ';
       case WireStyle.imagn:
-        if (b == CaptionSegment.credit) return '. ';
-        if (b == CaptionSegment.venue) return ' at ';
-        if (a == CaptionSegment.caption && b == CaptionSegment.customText) {
-          return '; ';
+        // Structure owns all joiners via punctuation/separator snippets.
+        // Never inject `; `, `, `, ` at `, `. ` here — that stacks with Structure.
+        if (a == CaptionSegment.creator && b == CaptionSegment.agency) {
+          return preset.bylineOptions.between;
         }
-        if (a == CaptionSegment.customText && b == CaptionSegment.credit) {
-          return '. ';
-        }
-        return '; ';
+        return '';
       case WireStyle.ap:
       case WireStyle.cp:
         if (_segmentPairEither(
-            a, b, CaptionSegment.location, CaptionSegment.date)) {
+                a, b, CaptionSegment.location, CaptionSegment.date) ||
+            _geoDatePair(a, b)) {
           return ' (';
         }
-        if (_segmentPairEither(
-            a, b, CaptionSegment.date, CaptionSegment.caption)) {
+        if (_dateCaptionPair(a, b)) {
           return ') — ';
         }
         if (a == CaptionSegment.caption && b == CaptionSegment.customText) {
@@ -1363,11 +1931,23 @@ class CaptionFormulaRenderer {
         if (a == CaptionSegment.customText && b == CaptionSegment.venue) {
           return ' at ';
         }
-        if (a == CaptionSegment.customText && b == CaptionSegment.credit) {
+        if (a == CaptionSegment.customText &&
+            (b == CaptionSegment.credit ||
+                b == CaptionSegment.creator ||
+                b == CaptionSegment.agency)) {
           return '. ';
         }
+        if (a == CaptionSegment.creator && b == CaptionSegment.agency) {
+          return preset.bylineOptions.between;
+        }
+        if (isGeoFieldSegment(a) && isGeoFieldSegment(b)) return ', ';
+        if (isDatePartSegment(a) && isDatePartSegment(b)) return ' ';
         if (b == CaptionSegment.venue) return ' at ';
-        if (b == CaptionSegment.credit) return '. ';
+        if (b == CaptionSegment.credit ||
+            b == CaptionSegment.creator ||
+            b == CaptionSegment.agency) {
+          return '. ';
+        }
         return ' ';
       case WireStyle.custom:
         return preset.separator;

@@ -1031,7 +1031,9 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
                         final crop = widget.editSession.cropping
                             ? PhotoCrop.full
                             : widget.editSession.cropFor(widget.path);
-                        if (grade.isNeutral && crop.isFull) {
+                        final comparing = widget.editSession.comparing;
+                        final debugMask = widget.editSession.debugMask;
+                        if (grade.isNeutral && crop.isFull && !debugMask) {
                           return Image.memory(
                             bytes,
                             fit: BoxFit.contain,
@@ -1044,6 +1046,8 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
                           adjustments: grade,
                           crop: crop,
                           fit: BoxFit.contain,
+                          compareOriginal: comparing,
+                          debugMask: debugMask,
                         );
                       },
                     ),
@@ -1196,7 +1200,8 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
                       builder: (context, _) {
                         final grade =
                             widget.editSession.adjustmentsFor(widget.path);
-                        if (grade.isNeutral) {
+                        final comparing = widget.editSession.comparing;
+                        if (grade.isNeutral || comparing) {
                           return Image.memory(
                             paintBytes,
                             fit: BoxFit.fill,
@@ -1208,6 +1213,7 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
                           bytes: paintBytes,
                           adjustments: grade,
                           fit: BoxFit.fill,
+                          debugMask: widget.editSession.debugMask,
                         );
                       },
                     ),

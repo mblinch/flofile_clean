@@ -3,11 +3,12 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import 'photo_adjust_config.dart';
 import 'photo_adjustments.dart';
 import 'photo_crop.dart';
-import 'photo_tone_base.dart';
+import 'photo_grade_engine.dart';
 
-/// Draws JPEG bytes with the Camera Raw grade shader.
+/// Draws JPEG bytes with the Camera Raw grade shader at preview resolution.
 class GradedMemoryImage extends StatefulWidget {
   const GradedMemoryImage({
     super.key,
@@ -16,6 +17,9 @@ class GradedMemoryImage extends StatefulWidget {
     this.crop = PhotoCrop.full,
     this.fit = BoxFit.contain,
     this.filterQuality = FilterQuality.high,
+    this.compareOriginal = false,
+    this.debugMask = false,
+    this.displayLongEdge,
   });
 
   final Uint8List bytes;
@@ -24,164 +28,86 @@ class GradedMemoryImage extends StatefulWidget {
   final BoxFit fit;
   final FilterQuality filterQuality;
 
+  /// Hold-to-compare: show the ungraded source.
+  final bool compareOriginal;
+
+  /// Debug: visualize the local-tone luminance mask.
+  final bool debugMask;
+
+  /// Cap preview long edge (defaults to [PhotoAdjustConfig.previewLongEdge]).
+  final int? displayLongEdge;
+
   @override
   State<GradedMemoryImage> createState() => _GradedMemoryImageState();
 }
 
+/// Back-compat alias used by older call sites.
 class PhotoGradeShader {
   PhotoGradeShader._();
 
-  static ui.FragmentProgram? program;
-  static ui.Image? placeholder;
-  static Future<void>? _loading;
+  static Future<void> ensure() => PhotoGradeShaders.ensure();
 
-  static Future<void> ensure() {
-    return _loading ??= () async {
-      try {
-        program = await ui.FragmentProgram.fromAsset('shaders/photo_grade.frag');
-        placeholder ??= await _solidPixel();
-      } catch (_) {
-        program = null;
-      }
-    }();
-  }
-
-  static Future<ui.Image> _solidPixel() async {
-    final buffer = await ui.ImmutableBuffer.fromUint8List(
-      Uint8List.fromList(const [0, 0, 0, 255]),
-    );
-    final descriptor = ui.ImageDescriptor.raw(
-      buffer,
-      width: 1,
-      height: 1,
-      pixelFormat: ui.PixelFormat.rgba8888,
-    );
-    final codec = await descriptor.instantiateCodec();
-    final frame = await codec.getNextFrame();
-    codec.dispose();
-    descriptor.dispose();
-    buffer.dispose();
-    return frame.image;
-  }
-}
-
-Future<ui.Image?> toneBaseImage(
-  Uint8List bytes,
-  PhotoAdjustments adjustments,
-) async {
-  // Match the preview bitmap. A tiny base sampled across a large photo
-  // turns highlight recovery into visible blocks.
-  const maxEdge = 2048;
-  ui.Codec? codec = await ui.instantiateImageCodec(bytes);
-  try {
-    final frame = await codec.getNextFrame();
-    var image = frame.image;
-    if (image.width > maxEdge || image.height > maxEdge) {
-      final wide = image.width >= image.height;
-      image.dispose();
-      codec.dispose();
-      codec = await ui.instantiateImageCodec(
-        bytes,
-        targetWidth: wide ? maxEdge : null,
-        targetHeight: wide ? null : maxEdge,
-      );
-      final scaledFrame = await codec.getNextFrame();
-      image = scaledFrame.image;
-    }
-    final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
-    final width = image.width;
-    final height = image.height;
-    image.dispose();
-    if (data == null) return null;
-    final rgba = data.buffer.asUint8List();
-    final rgb = Uint8List(width * height * 3);
-    for (var i = 0; i < width * height; i++) {
-      rgb[i * 3] = rgba[i * 4];
-      rgb[i * 3 + 1] = rgba[i * 4 + 1];
-      rgb[i * 3 + 2] = rgba[i * 4 + 2];
-    }
-    final base = lumaBaseForDisplayRgb(rgb, width, height, adjustments);
-    final encoded = Uint8List(width * height * 4);
-    for (var i = 0; i < width * height; i++) {
-      final value = (encodeBaseLuma(base[i]) * 255).round().clamp(0, 255);
-      encoded[i * 4] = value;
-      encoded[i * 4 + 1] = value;
-      encoded[i * 4 + 2] = value;
-      encoded[i * 4 + 3] = 255;
-    }
-    final buffer = await ui.ImmutableBuffer.fromUint8List(encoded);
-    final descriptor = ui.ImageDescriptor.raw(
-      buffer,
-      width: width,
-      height: height,
-      pixelFormat: ui.PixelFormat.rgba8888,
-    );
-    final outCodec = await descriptor.instantiateCodec();
-    final outFrame = await outCodec.getNextFrame();
-    outCodec.dispose();
-    descriptor.dispose();
-    buffer.dispose();
-    return outFrame.image;
-  } finally {
-    codec?.dispose();
-  }
+  static ui.FragmentProgram? get program => PhotoGradeShaders.grade;
+  static ui.Image? get placeholder => PhotoGradeShaders.placeholder;
 }
 
 class _GradedMemoryImageState extends State<GradedMemoryImage> {
+  final PhotoGradeEngine _engine = PhotoGradeEngine();
   ui.Image? _image;
-  ui.Image? _base;
+  ui.Image? _mask;
   ui.FragmentShader? _shader;
-  int _token = 0;
-  int _baseToken = 0;
-  PhotoAdjustments? _baseKey;
+  int _decodeToken = 0;
+  int _maskToken = 0;
+  PhotoAdjustments? _maskKey;
 
   @override
   void initState() {
     super.initState();
     _decode();
-    _scheduleBase();
-    PhotoGradeShader.ensure().then((_) {
+    PhotoGradeShaders.ensure().then((_) {
       if (!mounted) return;
-      _shader ??= PhotoGradeShader.program?.fragmentShader();
+      _shader ??= PhotoGradeShaders.grade?.fragmentShader();
       setState(() {});
+      _scheduleMask();
     });
   }
 
   @override
   void didUpdateWidget(covariant GradedMemoryImage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.bytes, widget.bytes)) {
-      _baseKey = null;
+    if (!identical(oldWidget.bytes, widget.bytes) ||
+        oldWidget.displayLongEdge != widget.displayLongEdge) {
+      _maskKey = null;
       _decode();
+    } else {
+      _scheduleMask();
     }
-    _scheduleBase();
   }
 
   @override
   void dispose() {
-    _token++;
-    _baseToken++;
+    _decodeToken++;
+    _maskToken++;
     _image?.dispose();
-    _base?.dispose();
+    _mask?.dispose();
     _shader?.dispose();
     super.dispose();
   }
 
-  bool _sameBaseKey(PhotoAdjustments a, PhotoAdjustments b) {
-    return a.exposure == b.exposure &&
-        a.contrast == b.contrast &&
-        a.whites == b.whites &&
-        a.blacks == b.blacks &&
-        a.temperature == b.temperature &&
-        a.tint == b.tint;
+  bool _sameMaskKey(PhotoAdjustments a, PhotoAdjustments b) {
+    // Mask depends on WB / exposure / contrast only.
+    return a.temperature == b.temperature &&
+        a.tint == b.tint &&
+        a.exposure == b.exposure &&
+        a.contrast == b.contrast;
   }
 
-  void _scheduleBase() {
-    if (!widget.adjustments.needsLocalTone) {
-      _baseToken++;
-      final previous = _base;
-      _base = null;
-      _baseKey = null;
+  void _scheduleMask() {
+    if (!widget.adjustments.needsLocalTone && !widget.debugMask) {
+      _maskToken++;
+      final previous = _mask;
+      _mask = null;
+      _maskKey = null;
       if (previous != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           previous.dispose();
@@ -189,51 +115,54 @@ class _GradedMemoryImageState extends State<GradedMemoryImage> {
       }
       return;
     }
-    final key = widget.adjustments;
     final photo = _image;
-    final base = _base;
-    final coarse = photo != null &&
-        base != null &&
-        (base.width * 2 < photo.width || base.height * 2 < photo.height);
-    if (!coarse &&
-        base != null &&
-        _baseKey != null &&
-        _sameBaseKey(_baseKey!, key)) {
+    if (photo == null) return;
+    final key = widget.adjustments;
+    if (_mask != null &&
+        _maskKey != null &&
+        _sameMaskKey(_maskKey!, key)) {
       return;
     }
-    final token = ++_baseToken;
-    final bytes = widget.bytes;
-    final adjustments = widget.adjustments;
-    toneBaseImage(bytes, adjustments).then((image) {
-      if (!mounted || token != _baseToken) {
-        image?.dispose();
+    final token = ++_maskToken;
+    final frame = _engine.beginFrame();
+    () async {
+      var mask = await _engine.buildMask(
+        source: photo,
+        adjustments: key,
+        token: frame,
+      );
+      mask ??= await _engine.buildMaskCpu(
+        source: photo,
+        adjustments: key,
+        token: frame,
+      );
+      if (!mounted || token != _maskToken) {
+        mask?.dispose();
         return;
       }
-      final previous = _base;
+      final previous = _mask;
       setState(() {
-        _base = image;
-        _baseKey = adjustments;
+        _mask = mask;
+        _maskKey = key;
       });
       previous?.dispose();
-    });
+    }();
   }
 
   void _decode() {
-    final token = ++_token;
-    ui.instantiateImageCodec(widget.bytes).then((codec) async {
-      try {
-        final frame = await codec.getNextFrame();
-        codec.dispose();
-        if (!mounted || token != _token) {
-          frame.image.dispose();
-          return;
-        }
-        final previous = _image;
-        setState(() => _image = frame.image);
-        previous?.dispose();
-      } catch (_) {
-        codec.dispose();
+    final token = ++_decodeToken;
+    final longEdge =
+        widget.displayLongEdge ?? PhotoAdjustConfig.previewLongEdge;
+    PhotoGradeEngine.decodeScaled(widget.bytes, longEdge).then((image) {
+      if (!mounted || token != _decodeToken) {
+        image.dispose();
+        return;
       }
+      final previous = _image;
+      setState(() => _image = image);
+      previous?.dispose();
+      _maskKey = null;
+      _scheduleMask();
     });
   }
 
@@ -245,17 +174,21 @@ class _GradedMemoryImageState extends State<GradedMemoryImage> {
       filterQuality: widget.filterQuality,
       gaplessPlayback: true,
     );
+    if (widget.compareOriginal) return plain;
+
     final needsShader =
-        !widget.adjustments.isNeutral || !widget.crop.isFull;
+        !widget.adjustments.isNeutral || !widget.crop.isFull || widget.debugMask;
     if (!needsShader || _image == null || _shader == null) return plain;
+
     return CustomPaint(
       painter: _PhotoGradePainter(
         image: _image!,
-        base: _base,
+        mask: _mask,
         shader: _shader!,
         adjustments: widget.adjustments,
         crop: widget.crop,
         fit: widget.fit,
+        debugMask: widget.debugMask,
       ),
       child: const SizedBox.expand(),
     );
@@ -265,19 +198,21 @@ class _GradedMemoryImageState extends State<GradedMemoryImage> {
 class _PhotoGradePainter extends CustomPainter {
   _PhotoGradePainter({
     required this.image,
-    required this.base,
+    required this.mask,
     required this.shader,
     required this.adjustments,
     required this.crop,
     required this.fit,
+    required this.debugMask,
   });
 
   final ui.Image image;
-  final ui.Image? base;
+  final ui.Image? mask;
   final ui.FragmentShader shader;
   final PhotoAdjustments adjustments;
   final PhotoCrop crop;
   final BoxFit fit;
+  final bool debugMask;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -293,26 +228,16 @@ class _PhotoGradePainter extends CustomPainter {
     );
     if (dest.width <= 0 || dest.height <= 0) return;
 
-    shader
-      ..setFloat(0, dest.left)
-      ..setFloat(1, dest.top)
-      ..setFloat(2, dest.width)
-      ..setFloat(3, dest.height)
-      ..setFloat(4, adjustments.exposure)
-      ..setFloat(5, adjustments.contrast)
-      ..setFloat(6, adjustments.shadows)
-      ..setFloat(7, adjustments.highlights)
-      ..setFloat(8, adjustments.temperature)
-      ..setFloat(9, adjustments.tint)
-      ..setFloat(10, adjustments.whites)
-      ..setFloat(11, adjustments.blacks)
-      ..setFloat(12, base == null ? 0 : 1)
-      ..setFloat(13, crop.left)
-      ..setFloat(14, crop.top)
-      ..setFloat(15, crop.width)
-      ..setFloat(16, crop.height)
-      ..setImageSampler(0, image)
-      ..setImageSampler(1, base ?? PhotoGradeShader.placeholder ?? image);
+    PhotoGradeEngine.bindGradeUniforms(
+      shader,
+      image: image,
+      mask: mask,
+      adjustments: adjustments,
+      crop: crop,
+      dest: dest,
+      debugMask: debugMask,
+      dither: true,
+    );
 
     canvas.save();
     canvas.clipRect(Offset.zero & size);
@@ -324,15 +249,18 @@ class _PhotoGradePainter extends CustomPainter {
   bool shouldRepaint(covariant _PhotoGradePainter oldDelegate) {
     return oldDelegate.image != image ||
         oldDelegate.fit != fit ||
-        oldDelegate.adjustments.exposure != adjustments.exposure ||
-        oldDelegate.adjustments.contrast != adjustments.contrast ||
-        oldDelegate.adjustments.shadows != adjustments.shadows ||
-        oldDelegate.adjustments.highlights != adjustments.highlights ||
+        oldDelegate.debugMask != debugMask ||
+        oldDelegate.mask != mask ||
         oldDelegate.adjustments.temperature != adjustments.temperature ||
         oldDelegate.adjustments.tint != adjustments.tint ||
+        oldDelegate.adjustments.exposure != adjustments.exposure ||
+        oldDelegate.adjustments.contrast != adjustments.contrast ||
+        oldDelegate.adjustments.highlights != adjustments.highlights ||
+        oldDelegate.adjustments.shadows != adjustments.shadows ||
         oldDelegate.adjustments.whites != adjustments.whites ||
         oldDelegate.adjustments.blacks != adjustments.blacks ||
-        oldDelegate.base != base ||
+        oldDelegate.adjustments.vibrance != adjustments.vibrance ||
+        oldDelegate.adjustments.saturation != adjustments.saturation ||
         oldDelegate.crop.left != crop.left ||
         oldDelegate.crop.top != crop.top ||
         oldDelegate.crop.width != crop.width ||

@@ -25,7 +25,9 @@ import '../../../caption_style/verb_sub_options.dart';
 import '../../../caption_style/wire_iptc_specs.dart';
 import '../../../services/api_manager.dart';
 import '../../../services/ftp_complete_sound.dart';
+import '../../../services/ftp_rename_template.dart';
 import '../../../services/ftpclient_service.dart';
+import '../../../services/number_sequence_service.dart';
 import '../../../services/flo_caption_mark.dart';
 import '../../../services/iptc_template_apply_service.dart';
 import '../../../services/iptc_template_import_service.dart';
@@ -905,6 +907,8 @@ class CaptionV2Controller extends ChangeNotifier {
 
   /// When false, FTP buttons/shortcuts/menu items are hidden.
   bool ftpModeEnabled = true;
+  /// When false, FTP uploads keep the original file name.
+  bool fileRenamingEnabled = true;
 
   /// When true, the caption Firebar search row is hidden.
   bool hideFirebar = false;
@@ -2252,9 +2256,8 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   String get captionTrailing {
-    final venueText = venue.trim().isNotEmpty
-        ? venue
-        : (_metaFirst(CaptionFormulaRenderer.stadiumMetadataKeys) ?? '');
+    final venueText = _metaFirst(CaptionFormulaRenderer.stadiumMetadataKeys) ??
+        (venue.trim().isNotEmpty ? venue.trim() : '');
     final venueBit = venueText.isEmpty ? '' : ' at $venueText';
     if (!hasOpponentTeam) {
       return ' $timingCaptionClause$venueBit.'.replaceAll(RegExp(r'\s+'), ' ');
@@ -2264,7 +2267,19 @@ class CaptionV2Controller extends ChangeNotifier {
     return ' against the $opp $timingCaptionClause$venueBit.';
   }
 
+  /// Earliest EXIF/capture day among loaded folder files (layout / roster date).
+  DateTime? earliestFolderCaptureDate() {
+    DateTime? earliest;
+    for (final captured in captureByPath.values) {
+      if (earliest == null || captured.isBefore(earliest)) earliest = captured;
+    }
+    return earliest;
+  }
+
   /// Location / venue / byline resolved the same way as [buildCaptionSentence].
+  ///
+  /// Date preference: focused file capture → IPTC/EXIF on that file → earliest
+  /// folder capture → now.
   GameInfo currentGameInfoForCaption() {
     final path = currentPath;
     final capture = path == null ? null : captureByPath[path];
@@ -2275,6 +2290,7 @@ class CaptionV2Controller extends ChangeNotifier {
               'ModifyDate',
             ]) ??
             '') ??
+        earliestFolderCaptureDate() ??
         DateTime.now();
 
     final gameCity = city.trim().isNotEmpty
@@ -2306,9 +2322,10 @@ class CaptionV2Controller extends ChangeNotifier {
               'CountryCode',
             ]) ??
             '');
-    final gameVenue = venue.trim().isNotEmpty
-        ? venue
-        : (_metaFirst(CaptionFormulaRenderer.stadiumMetadataKeys) ?? '');
+    // IPTC Location / SubLocation wins over the session venue field (often
+    // filled from the league API stadium name).
+    final gameVenue = _metaFirst(CaptionFormulaRenderer.stadiumMetadataKeys) ??
+        (venue.trim().isNotEmpty ? venue.trim() : '');
 
     return GameInfo(
       gameDate: gameDate,
@@ -2323,12 +2340,25 @@ class CaptionV2Controller extends ChangeNotifier {
     );
   }
 
+  /// Getty USA vs International structure for the current game territory.
+  CaptionTemplate captionTemplateForGame(GameInfo game) {
+    final catalog = _captionStyleCatalog;
+    if (catalog == null) return captionTemplate;
+    return catalog.resolveGettyForGame(
+      active: captionTemplate,
+      game: game,
+      activeToken: _activeCaptionStyleToken,
+    );
+  }
+
   /// IPTC fields the active caption style needs that are still empty.
-  List<String> get missingCaptionIptcLabels =>
-      CaptionFormulaRenderer.missingCaptionIptcLabels(
-        template: captionTemplate,
-        game: currentGameInfoForCaption(),
-      );
+  List<String> get missingCaptionIptcLabels {
+    final game = currentGameInfoForCaption();
+    return CaptionFormulaRenderer.missingCaptionIptcLabels(
+      template: captionTemplateForGame(game),
+      game: game,
+    );
+  }
 
   /// Player + action body that feeds [CaptionFormulaRenderer] (no location/credit).
   ///
@@ -2369,9 +2399,10 @@ class CaptionV2Controller extends ChangeNotifier {
     }
 
     final game = currentGameInfoForCaption();
+    final territoryTemplate = captionTemplateForGame(game);
 
     CreditSampleAgency agency;
-    switch (captionTemplate.wireStyle) {
+    switch (territoryTemplate.wireStyle) {
       case WireStyle.imagn:
         agency = CreditSampleAgency.imagn;
         break;
@@ -2406,8 +2437,8 @@ class CaptionV2Controller extends ChangeNotifier {
 
     final foldedGid = _foldedGameIdentifierText;
     final templateForRender = foldedGid == null
-        ? captionTemplate
-        : captionTemplate.copyWith(gameIdentifierText: foldedGid);
+        ? territoryTemplate
+        : territoryTemplate.copyWith(gameIdentifierText: foldedGid);
 
     var caption = CaptionFormulaRenderer.render(
       template: templateForRender,
@@ -2418,11 +2449,11 @@ class CaptionV2Controller extends ChangeNotifier {
       applyGettyNoteVariant: true,
       gettyNbaeNote: GettyNoteVariant.applies(
         enabled: gettyNoteIsNbae,
-        wire: captionTemplate.wireStyle,
+        wire: territoryTemplate.wireStyle,
         sport: sport,
       ),
     );
-    if (captionTemplate.removeDiacritics) {
+    if (territoryTemplate.removeDiacritics) {
       caption = CaptionTextNormalize.stripDiacritics(caption);
     }
     return caption;
@@ -2923,6 +2954,13 @@ class CaptionV2Controller extends ChangeNotifier {
     await _prefs?.saveFtpModeEnabled(enabled);
   }
 
+  Future<void> setFileRenamingEnabled(bool enabled) async {
+    if (enabled == fileRenamingEnabled) return;
+    fileRenamingEnabled = enabled;
+    notifyListeners();
+    await _prefs?.saveFileRenamingEnabled(enabled);
+  }
+
   /// Prefer [setFirebarEnabled] from UI — [hidden] is the stored preference.
   Future<void> setHideFirebar(bool hidden) async {
     if (hidden == hideFirebar) return;
@@ -2955,6 +2993,7 @@ class CaptionV2Controller extends ChangeNotifier {
     final prefs = _prefs ?? await PreferencesService.getInstance();
     _prefs = prefs;
     ftpModeEnabled = await prefs.getFtpModeEnabled();
+    fileRenamingEnabled = await prefs.getFileRenamingEnabled();
     hideFirebar = await prefs.getHideFirebar();
     autoAdvanceTabs = await prefs.getAutoAdvanceTabs();
     serialBylinesEnabled = await prefs.getSerialNumberBylines();
@@ -2989,6 +3028,7 @@ class CaptionV2Controller extends ChangeNotifier {
     sessionGeneration++;
     ftpSessionId = '${DateTime.now().microsecondsSinceEpoch}';
     ftpSessionStartedAt = DateTime.now();
+    unawaited(NumberSequenceService.instance.resetForNewSession());
     _jerseyOcrPrescanStop = false;
     _serialBylinesHandled.clear();
     _serialBylinesPromptDismissed.clear();
@@ -3324,6 +3364,7 @@ class CaptionV2Controller extends ChangeNotifier {
     ftpSessionId = null;
     ftpSessionStartedAt = null;
     _stopFolderWatch();
+    unawaited(NumberSequenceService.instance.resetForNewSession());
     _scanSerialsOnArrival = false;
     _deferSerialBylinesUi = false;
     _releaseSerialBylinesGate();
@@ -4164,15 +4205,20 @@ class CaptionV2Controller extends ChangeNotifier {
     if (_prefs == null || !imagePaths.contains(imagePath)) return;
     try {
       final mode = await _prefs!.getIptcApplyMode();
-      if (mode != IptcApplyMode.onImport) return;
+      if (!mode.appliesOnLoad) return;
       final preset = await _loadSelectedIptcPreset();
       if (preset.isEmpty) return;
       final index = imagePaths.indexOf(imagePath);
+      final cleared = await _loadIptcClearedFields();
+      final listMode = await _prefs!.getIptcOnLoadListMode();
       final result = await IptcTemplateApplyService.applyToImage(
         imagePath,
         preset,
         imageIndex: index >= 0 ? index : null,
         replaceExisting: true,
+        preserveOnLoad: true,
+        onLoadListMode: listMode,
+        fieldsToClear: cleared.isNotEmpty ? cleared : null,
       );
       if (result.success && !result.skipped) {
         captionedImages.remove(imagePath);
@@ -4216,7 +4262,7 @@ class CaptionV2Controller extends ChangeNotifier {
     if (imagePaths.isEmpty || _prefs == null) return;
     try {
       final mode = await _prefs!.getIptcApplyMode();
-      if (mode != IptcApplyMode.onImport) return;
+      if (!mode.appliesOnLoad) return;
       final preset = await _loadSelectedIptcPreset();
       if (preset.isEmpty) return;
       final label = 'Writing IPTC template to ${imagePaths.length} images…';
@@ -4226,6 +4272,8 @@ class CaptionV2Controller extends ChangeNotifier {
         statusMessage = label;
       }
       notifyListeners();
+      final cleared = await _loadIptcClearedFields();
+      final listMode = await _prefs!.getIptcOnLoadListMode();
       var i = 0;
       for (final path in imagePaths) {
         final result = await IptcTemplateApplyService.applyToImage(
@@ -4233,6 +4281,9 @@ class CaptionV2Controller extends ChangeNotifier {
           preset,
           imageIndex: i,
           replaceExisting: true,
+          preserveOnLoad: true,
+          onLoadListMode: listMode,
+          fieldsToClear: cleared.isNotEmpty ? cleared : null,
         );
         if (result.success && !result.skipped) {
           captionedImages.remove(path);
@@ -4249,7 +4300,30 @@ class CaptionV2Controller extends ChangeNotifier {
   Future<bool> _applyIptcTemplateOnSaveIfEnabled(String imagePath) async {
     if (_prefs == null) return true;
     try {
-      if (await _prefs!.getIptcApplyMode() != IptcApplyMode.onSave) {
+      if (!(await _prefs!.getIptcApplyMode()).appliesOnSave) {
+        return true;
+      }
+      final preset = await _loadSelectedIptcPreset();
+      final cleared = await _loadIptcClearedFields();
+      if (preset.isEmpty && cleared.isEmpty) return true;
+      final index = imagePaths.indexOf(imagePath);
+      final result = await IptcTemplateApplyService.applyToImage(
+        imagePath,
+        preset,
+        imageIndex: index >= 0 ? index : null,
+        fieldsToClear: cleared.isNotEmpty ? cleared : null,
+      );
+      if (result.success) await _syncFileSig(imagePath);
+      return result.success;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> _applyIptcTemplateOnFtpIfEnabled(String imagePath) async {
+    if (_prefs == null) return true;
+    try {
+      if (!(await _prefs!.getIptcApplyMode()).appliesOnFtp) {
         return true;
       }
       final preset = await _loadSelectedIptcPreset();
@@ -9191,6 +9265,90 @@ class CaptionV2Controller extends ChangeNotifier {
     return true;
   }
 
+  /// Folder for the loaded session images (IPTC dialog populate / write).
+  String? get sessionFolderPath {
+    if (imagePaths.isEmpty) return null;
+    return p.dirname(imagePaths.first);
+  }
+
+  /// Writes the saved IPTC template onto every session image (merge/overwrite
+  /// rules from prefs). Used after the in-session IPTC pad is filled — always
+  /// writes, even if Apply on load was turned off in the pad.
+  Future<void> applyIptcTemplateToSessionImages() async {
+    if (imagePaths.isEmpty || _prefs == null) {
+      await syncSessionCaptionIptcFromPreset();
+      return;
+    }
+    try {
+      final preset = await _loadSelectedIptcPreset();
+      final cleared = await _loadIptcClearedFields();
+      if (preset.isEmpty && cleared.isEmpty) {
+        await syncSessionCaptionIptcFromPreset();
+        await _refreshFrameIptc();
+        notifyListeners();
+        return;
+      }
+      statusMessage =
+          'Writing IPTC template to ${imagePaths.length} images…';
+      notifyListeners();
+      final listMode = await _prefs!.getIptcOnLoadListMode();
+      var i = 0;
+      for (final path in imagePaths) {
+        final result = await IptcTemplateApplyService.applyToImage(
+          path,
+          preset,
+          imageIndex: i,
+          replaceExisting: true,
+          preserveOnLoad: true,
+          onLoadListMode: listMode,
+          fieldsToClear: cleared.isNotEmpty ? cleared : null,
+        );
+        if (result.success && !result.skipped) {
+          captionedImages.remove(path);
+          savedImages.remove(path);
+        }
+        await _syncFileSig(path);
+        i++;
+      }
+      statusMessage = null;
+    } catch (e) {
+      statusMessage = 'IPTC write failed: $e';
+    }
+    await syncSessionCaptionIptcFromPreset();
+    await _refreshFrameIptc();
+    notifyListeners();
+  }
+
+  /// Fills empty session location / credit fields from the saved IPTC preset
+  /// so caption formulas can resolve without waiting on per-file meta.
+  Future<void> syncSessionCaptionIptcFromPreset() async {
+    final preset = await _loadSelectedIptcPreset();
+    if (preset.isEmpty) return;
+    final panel = IptcTemplateApplyService.denormalizeForPanel(preset);
+    final fromPreset = IptcTemplateApplyService.gameInfoFromPanelValues(panel);
+    var changed = false;
+    void take(String Function() get, void Function(String) set, String next) {
+      if (get().trim().isNotEmpty) return;
+      final v = next.trim();
+      if (v.isEmpty) return;
+      set(v);
+      changed = true;
+    }
+
+    take(() => city, (v) => city = v, fromPreset.city);
+    take(() => region, (v) => region = v, fromPreset.region);
+    take(() => country, (v) => country = v, fromPreset.country);
+    take(() => countryCode, (v) => countryCode = v, fromPreset.countryCode);
+    take(() => venue, (v) => venue = v, fromPreset.venue);
+    take(
+      () => photographerName,
+      (v) => photographerName = v,
+      fromPreset.photographerName,
+    );
+    take(() => agencyName, (v) => agencyName = v, fromPreset.agencyName);
+    if (changed) notifyListeners();
+  }
+
   Future<bool> renameImage(String oldPath, String newFileName) async {
     final nextPath = p.join(p.dirname(oldPath), newFileName);
     if (await File(nextPath).exists()) return false;
@@ -10517,12 +10675,94 @@ class CaptionV2Controller extends ChangeNotifier {
     }
   }
 
+  /// Expands FTP rename tokens (`{date}`, `{teams}`, `{n}`, …) for [path].
+  ///
+  /// `{n}` prefers digits already in IPTC Object Name / MEID; otherwise uses a
+  /// session counter so each upload in the batch gets the next number.
+  Future<String> _resolveFtpFileName(String path, String renameAs) async {
+    if (!fileRenamingEnabled) {
+      return ftpTransferFileName(path, '');
+    }
+    final template = FtpRenameTemplate.ensureSequenceToken(renameAs);
+    if (!template.contains('{')) {
+      return ftpTransferFileName(path, template);
+    }
+
+    Map<String, String> iptc = const {};
+    try {
+      iptc = await readIptcPanelValues(path);
+    } catch (_) {}
+
+    final seqSvc = NumberSequenceService.instance;
+    await seqSvc.ensureLoaded();
+    final width = await seqSvc.digits();
+    final fromIptc = FtpRenameTemplate.sequenceFromIptc(iptc);
+    final int sequence;
+    if (fromIptc != null) {
+      sequence = fromIptc;
+      await seqSvc.ensureNextAtLeast(fromIptc + 1);
+    } else {
+      sequence = await seqSvc.consumeValue();
+    }
+
+    final away = awayAbbr.trim();
+    final home = homeAbbr.trim();
+
+    final photo = photographerName.trim().isNotEmpty
+        ? photographerName.trim()
+        : (IptcTemplateApplyService.lookupValue(iptc, 'Creator') ?? '');
+
+    // Permanent rename initials if set; otherwise {initials} uses Creator letters.
+    final prefs = await PreferencesService.getInstance();
+    final initials = await prefs.getRenameInitials();
+    final profiles = await prefs.getFtpProfiles();
+    final profileName = await prefs.getCurrentFtpProfile();
+    final profile = profileName != null ? profiles[profileName] : null;
+    final letterCase = FtpRenameCaseFormats.normalize(
+      profile?['renameLetterCase']?.toString(),
+    );
+
+    return ftpTransferFileName(
+      path,
+      template,
+      context: FtpRenameContext(
+        sourcePath: path,
+        date: captureByPath[path] ?? DateTime.now(),
+        awayTeam: away,
+        homeTeam: home,
+        photographer: photo,
+        initials: initials,
+        sequence: sequence,
+        sequenceWidth: width,
+        iptc: iptc,
+        letterCase: letterCase,
+      ),
+    );
+  }
+
   Future<void> _uploadFtpJob(_FtpSendJob job) async {
     final path = job.path;
     String? error;
     var success = false;
     try {
-      final fileName = ftpTransferFileName(path, job.renameAs);
+      final applied = await _applyIptcTemplateOnFtpIfEnabled(path);
+      if (!applied) {
+        error = 'IPTC template apply failed before FTP';
+        _ftpSessionError = error;
+        await _recordFtpHistory(
+          FtpHistoryEntry(
+            at: DateTime.now(),
+            fileName: p.basename(path),
+            path: path,
+            profile: job.profileName,
+            success: false,
+            error: error,
+            sessionId: ftpSessionId,
+          ),
+        );
+        return;
+      }
+      final fileName = await _resolveFtpFileName(path, job.renameAs);
       final remote = job.remoteDir.endsWith('/')
           ? '${job.remoteDir}$fileName'
           : '${job.remoteDir}/$fileName';

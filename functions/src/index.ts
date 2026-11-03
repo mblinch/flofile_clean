@@ -6,7 +6,10 @@
  *    or the Firebase console. Requires an authenticated caller (admin-only by default).
  * - `tank01RosterSync`: Tank01 → sports_tank01, daily at 11:00 ET; emails
  *    `dev@flofilecaptions.com` (same Resend setup as nightly roster sync).
+ * - `tank01VenueSync`: league-API stadium names → sports_tank01, monthly
+ *    (1st of month, 11:30 ET); emails stadium change details when any update.
  * - `runTank01RosterSyncNow`: admin callable for a manual Tank01 mirror run.
+ * - `runTank01VenueSyncNow`: admin callable for a manual stadium refresh.
  * - `onRosterIssueReportCreated`: emails admins when a user files a
  *    `roster_issue_reports/{id}` doc (duplicate jersey or player data issue).
  *
@@ -41,7 +44,9 @@ import {
 } from "./roster-sync";
 import {
   syncAllTank01Rosters,
+  syncAllTank01Venues,
   Tank01SyncTotals,
+  Tank01VenueSyncTotals,
 } from "./tank01-roster-sync";
 
 initializeApp();
@@ -68,6 +73,7 @@ interface Tank01SyncConfig {
 
 type SyncTrigger = "scheduled" | "manual";
 const MAX_CHANGED_PLAYERS_IN_EMAIL = 120;
+const MAX_VENUE_CHANGES_IN_EMAIL = 200;
 const MAX_MISSING_JERSEY_IN_EMAIL = 80;
 const MAX_DUPLICATE_JERSEY_IN_EMAIL = 80;
 const TANK01_EMAIL_DEFAULT_TO = "dev@flofilecaptions.com";
@@ -125,6 +131,16 @@ interface Tank01RunSummary {
   durationMs: number;
 }
 
+interface Tank01VenueRunSummary {
+  ok: boolean;
+  reason: string;
+  trigger: SyncTrigger;
+  totals: Tank01VenueSyncTotals | null;
+  startedAtIso: string;
+  finishedAtIso: string;
+  durationMs: number;
+}
+
 async function writeRunSummary(summary: SyncRunSummary): Promise<void> {
   const db = getFirestore();
   const runId = summary.startedAtIso.replace(/[:.]/g, "-");
@@ -152,6 +168,26 @@ async function writeTank01RunSummary(summary: Tank01RunSummary): Promise<void> {
 
   await Promise.all([
     db.doc("tank01_sync/status").set(payload, { merge: true }),
+    db.collection("tank01_sync_runs").doc(runId).set({
+      ...payload,
+      createdAt: FieldValue.serverTimestamp(),
+    }),
+  ]);
+}
+
+async function writeTank01VenueRunSummary(
+  summary: Tank01VenueRunSummary,
+): Promise<void> {
+  const db = getFirestore();
+  const runId = `venue-${summary.startedAtIso.replace(/[:.]/g, "-")}`;
+  const payload = {
+    kind: "venue",
+    ...summary,
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+
+  await Promise.all([
+    db.doc("tank01_sync/venue_status").set(payload, { merge: true }),
     db.collection("tank01_sync_runs").doc(runId).set({
       ...payload,
       createdAt: FieldValue.serverTimestamp(),
@@ -705,6 +741,7 @@ export const nightlyRosterSync = onSchedule(
 
 /**
  * Tank01 → sports_tank01, once daily at 11:00 ET.
+ * Rosters only — stadium names refresh on the monthly venue sync.
  */
 export const tank01RosterSync = onSchedule(
   {
@@ -721,6 +758,213 @@ export const tank01RosterSync = onSchedule(
       return;
     }
     logger.info("Tank01 scheduled run complete", { totals: result.totals });
+  },
+);
+
+async function sendTank01VenueSummaryEmail(
+  summary: Tank01VenueRunSummary,
+  cfg: Tank01SyncConfig,
+  rosterCfg: RosterSyncConfig,
+): Promise<void> {
+  const emailEnabled = cfg.emailSummaryEnabled !== false;
+  if (!emailEnabled) return;
+
+  const totals = summary.totals;
+  const changes = totals?.changes ?? [];
+  const changeCount = changes.length;
+  const errorCount = totals?.errors?.length ?? 0;
+  // Only email when something changed or the run had problems.
+  if (
+    summary.ok &&
+    summary.reason === "success" &&
+    changeCount === 0 &&
+    errorCount === 0
+  ) {
+    logger.info("Tank01 venue sync: no stadium changes — skipping email.");
+    return;
+  }
+
+  const to = (cfg.emailSummaryTo ?? TANK01_EMAIL_DEFAULT_TO).trim();
+  const apiKey = (cfg.resendApiKey ?? rosterCfg.resendApiKey ?? "").trim();
+  if (!apiKey) {
+    logger.warn(
+      "resendApiKey missing on tank01_sync/config and roster_sync/config; skipping Tank01 venue email.",
+    );
+    return;
+  }
+  const from = (
+    cfg.emailSummaryFrom ??
+    rosterCfg.emailSummaryFrom ??
+    "Tank01 Stadium Sync <onboarding@resend.dev>"
+  ).trim();
+
+  const subject =
+    summary.ok && summary.reason === "success"
+      ? `[Tank01 Stadiums] ${changeCount} update${changeCount === 1 ? "" : "s"} (${summary.trigger})`
+      : `[Tank01 Stadiums] ${summary.trigger}: ${summary.reason}`;
+
+  const shown = changes.slice(0, MAX_VENUE_CHANGES_IN_EMAIL);
+  const bySport = new Map<string, typeof shown>();
+  for (const c of shown) {
+    const list = bySport.get(c.sportId) ?? [];
+    list.push(c);
+    bySport.set(c.sportId, list);
+  }
+  const changeLines =
+    shown.length === 0
+      ? ["  - none"]
+      : Array.from(bySport.entries())
+          .sort(([a], [b]) => a.localeCompare(b))
+          .flatMap(([sport, rows]) => [
+            `  - ${formatSportName(sport)}:`,
+            ...rows.map((c) => {
+              const fromVenue = (c.previousVenue || "(none)").trim();
+              return `      ${c.teamName} (${c.teamId}): ${fromVenue} → ${c.newVenue}`;
+            }),
+          ]);
+
+  const perSportLines = totals
+    ? Object.entries(totals.bySport)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(
+          ([sport, s]) =>
+            `  - ${formatSportName(sport)}: scanned ${s.teams}, updated ${s.updated}, unchanged ${s.skipped}`,
+        )
+    : [];
+
+  const errorLines =
+    totals?.errors?.length
+      ? totals.errors.slice(0, 40).map((e) => `  - ${e}`)
+      : ["  - none"];
+
+  const resultLine =
+    summary.ok && summary.reason === "success"
+      ? "Result: success"
+      : `Result: ${summary.ok ? "success" : "noop/error"} (${summary.reason})`;
+
+  const bodyLines = [
+    resultLine,
+    `Trigger: ${summary.trigger}`,
+    `Started: ${formatTimestampForEmail(summary.startedAtIso)}`,
+    `Finished: ${formatTimestampForEmail(summary.finishedAtIso)}`,
+    `Duration: ${formatDurationHuman(summary.durationMs)}`,
+    "Overall totals:",
+    ...(totals
+      ? [
+          `  - Sports: ${totals.sports}`,
+          `  - Teams scanned: ${totals.teams}`,
+          `  - Stadiums updated: ${totals.updated}`,
+          `  - Unchanged / missing: ${totals.skipped}`,
+        ]
+      : ["  - n/a"]),
+    "",
+    "By sport:",
+    ...(perSportLines.length > 0 ? perSportLines : ["  - n/a"]),
+    "",
+    `Stadium changes (${changeCount}):`,
+    ...changeLines,
+    ...(changeCount > MAX_VENUE_CHANGES_IN_EMAIL
+      ? [
+          `  - ... truncated ${
+            changeCount - MAX_VENUE_CHANGES_IN_EMAIL
+          } additional stadium changes`,
+        ]
+      : []),
+    "",
+    `Errors (${totals?.errors?.length ?? 0}):`,
+    ...errorLines,
+  ];
+
+  await sendResendEmail({
+    apiKey,
+    from,
+    to,
+    subject,
+    text: bodyLines.join("\n"),
+  });
+}
+
+async function runTank01VenueSync(trigger: SyncTrigger): Promise<{
+  ok: boolean;
+  reason?: string;
+  totals?: Tank01VenueSyncTotals;
+}> {
+  const started = Date.now();
+  const startedAtIso = new Date(started).toISOString();
+  const db = getFirestore();
+  let tank01Cfg: Tank01SyncConfig = {};
+  let rosterCfg: RosterSyncConfig = {};
+  let result: {
+    ok: boolean;
+    reason?: string;
+    totals?: Tank01VenueSyncTotals;
+  } = { ok: false, reason: "unknown" };
+
+  try {
+    const loaded = await loadTank01Config();
+    tank01Cfg = loaded.tank01;
+    rosterCfg = loaded.roster;
+    if (tank01Cfg.enabled === false) {
+      logger.info("tank01_sync/config.enabled is false — skipping venue sync.");
+      result = { ok: false, reason: "disabled" };
+      return result;
+    }
+    logger.info(`Tank01 venue sync starting (${trigger})`);
+    const totals = await syncAllTank01Venues(db);
+    const hardFail = totals.teams === 0 && (totals.errors?.length ?? 0) > 0;
+    result = {
+      ok: !hardFail,
+      reason: hardFail ? "all-sports-failed" : "success",
+      totals,
+    };
+    logger.info(`Tank01 venue sync finished (${trigger})`, {
+      updated: totals.updated,
+      changes: totals.changes.length,
+      errors: totals.errors.length,
+    });
+    return result;
+  } finally {
+    const finished = Date.now();
+    const summary: Tank01VenueRunSummary = {
+      ok: result.ok,
+      reason: result.reason ?? "success",
+      trigger,
+      totals: result.totals ?? null,
+      startedAtIso,
+      finishedAtIso: new Date(finished).toISOString(),
+      durationMs: finished - started,
+    };
+    await writeTank01VenueRunSummary(summary);
+    try {
+      await sendTank01VenueSummaryEmail(summary, tank01Cfg, rosterCfg);
+    } catch (e) {
+      logger.error("Failed to send Tank01 venue summary email", {
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+}
+
+/**
+ * League stadiums → sports_tank01 team docs, once a month (1st @ 11:30 ET).
+ */
+export const tank01VenueSync = onSchedule(
+  {
+    schedule: "30 11 1 * *",
+    timeZone: "America/New_York",
+    memory: "512MiB",
+    timeoutSeconds: 540,
+    retryCount: 1,
+  },
+  async () => {
+    const result = await runTank01VenueSync("scheduled");
+    if (!result.ok) {
+      logger.info(`Tank01 venue scheduled run noop: ${result.reason}`);
+      return;
+    }
+    logger.info("Tank01 venue scheduled run complete", {
+      totals: result.totals,
+    });
   },
 );
 
@@ -775,6 +1019,25 @@ export const runTank01RosterSyncNow = onCall(
       );
     }
     return runTank01Sync("manual");
+  },
+);
+
+export const runTank01VenueSyncNow = onCall(
+  { memory: "512MiB", timeoutSeconds: 540 },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError(
+        "unauthenticated",
+        "Sign in as an admin to run the Tank01 venue sync manually.",
+      );
+    }
+    if (!isAdminCaller(request.auth)) {
+      throw new HttpsError(
+        "permission-denied",
+        "Only admin accounts may run manual Tank01 venue sync.",
+      );
+    }
+    return runTank01VenueSync("manual");
   },
 );
 

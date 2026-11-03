@@ -1,3 +1,4 @@
+import '../caption_style/caption_formula_renderer.dart';
 import '../caption_style/caption_template.dart';
 import '../caption_style/game_info.dart';
 import '../caption_style/wire_iptc_specs.dart';
@@ -39,10 +40,15 @@ class IptcApplyToImageResult {
 }
 
 /// When (if ever) the startup IPTC template is written to image files.
+///
+/// UI: “Apply on load” → [onImport]. When load is off, [onSave] / [onFtp] /
+/// [onSaveAndFtp] can be chosen independently via checkboxes.
 enum IptcApplyMode {
   none,
   onImport,
-  onSave;
+  onSave,
+  onFtp,
+  onSaveAndFtp;
 
   static IptcApplyMode fromStorage(String? value) {
     switch (value) {
@@ -50,6 +56,10 @@ enum IptcApplyMode {
         return IptcApplyMode.onImport;
       case 'on_save':
         return IptcApplyMode.onSave;
+      case 'on_ftp':
+        return IptcApplyMode.onFtp;
+      case 'on_save_and_ftp':
+        return IptcApplyMode.onSaveAndFtp;
       default:
         return IptcApplyMode.none;
     }
@@ -61,10 +71,65 @@ enum IptcApplyMode {
         return 'on_import';
       case IptcApplyMode.onSave:
         return 'on_save';
+      case IptcApplyMode.onFtp:
+        return 'on_ftp';
+      case IptcApplyMode.onSaveAndFtp:
+        return 'on_save_and_ftp';
       case IptcApplyMode.none:
         return 'none';
     }
   }
+
+  bool get appliesOnLoad => this == IptcApplyMode.onImport;
+
+  bool get appliesOnSave =>
+      this == IptcApplyMode.onSave || this == IptcApplyMode.onSaveAndFtp;
+
+  bool get appliesOnFtp =>
+      this == IptcApplyMode.onFtp || this == IptcApplyMode.onSaveAndFtp;
+
+  bool get isEnabled => this != IptcApplyMode.none;
+
+  /// Builds a mode from the apply-on-load / save / FTP checkboxes.
+  static IptcApplyMode fromFlags({
+    required bool onLoad,
+    required bool onSave,
+    required bool onFtp,
+  }) {
+    if (onLoad) return IptcApplyMode.onImport;
+    if (onSave && onFtp) return IptcApplyMode.onSaveAndFtp;
+    if (onSave) return IptcApplyMode.onSave;
+    if (onFtp) return IptcApplyMode.onFtp;
+    return IptcApplyMode.none;
+  }
+}
+
+/// How Personality / Keywords from the template interact with values already on
+/// photos when applying on session load.
+enum IptcOnLoadListMode {
+  merge,
+  overwrite;
+
+  static IptcOnLoadListMode fromStorage(String? value) {
+    switch (value) {
+      case 'overwrite':
+        return IptcOnLoadListMode.overwrite;
+      case 'merge':
+      default:
+        return IptcOnLoadListMode.merge;
+    }
+  }
+
+  String get storageValue {
+    switch (this) {
+      case IptcOnLoadListMode.overwrite:
+        return 'overwrite';
+      case IptcOnLoadListMode.merge:
+        return 'merge';
+    }
+  }
+
+  bool get overwrites => this == IptcOnLoadListMode.overwrite;
 }
 
 /// Applies startup / metadata-preset IPTC values to image files (Photo Mechanic style).
@@ -88,6 +153,20 @@ class IptcTemplateApplyService {
   static const Set<String> inAppGeneratedPresetKeys = {
     'Caption',
     'Personality',
+  };
+
+  /// Always left alone on session load (never cleared or rewritten).
+  static const Set<String> preserveOnLoadCaptionKeys = {
+    'Caption',
+  };
+
+  /// Cleared/replaced never on session load when merging. Caption stays
+  /// untouched; Personality / Keywords are preserved on the file and template
+  /// values are merged in (add only) unless overwrite is chosen.
+  static const Set<String> preserveOnLoadPresetKeys = {
+    'Caption',
+    'Personality',
+    'Keywords',
   };
 
   /// Shown in the startup IPTC panel when caption/personality exist in files.
@@ -271,16 +350,18 @@ class IptcTemplateApplyService {
 
   /// Builds a [GameInfo] from IPTC panel / preset values for caption checks.
   static GameInfo gameInfoFromPanelValues(Map<String, String> values) {
+    final location = lookupValue(values, 'Location') ??
+        lookupValue(values, 'Stadium') ??
+        '';
     return GameInfo(
       city: lookupValue(values, 'City') ?? '',
       region: lookupValue(values, 'Province/State') ?? '',
       country: lookupValue(values, 'Country') ?? '',
       countryCode: lookupValue(values, 'Country Code') ?? '',
-      venue: lookupValue(values, 'Stadium') ??
-          lookupValue(values, 'Location') ??
-          '',
+      venue: location,
       photographerName: lookupValue(values, 'Creator') ?? '',
       agencyName: lookupValue(values, 'Credit') ?? '',
+      iptcMetadata: CaptionFormulaRenderer.iptcLocationMetadata(location),
     );
   }
 
@@ -596,6 +677,49 @@ class IptcTemplateApplyService {
     return _keywordSet(expected) == _keywordSet(existing);
   }
 
+  /// Union of delimited list fields. Keeps [existing] order, then appends new
+  /// items from [incoming] (case-insensitive dedupe).
+  static String mergeDelimitedLists(
+    String existing,
+    String incoming, {
+    required Pattern split,
+    required String join,
+  }) {
+    final parts = <String>[];
+    final seen = <String>{};
+    void addAll(String raw) {
+      var s = raw.trim();
+      if (s.startsWith('[') && s.endsWith(']')) {
+        s = s.substring(1, s.length - 1);
+      }
+      for (final piece in s.split(split)) {
+        final trimmed = piece.trim();
+        if (trimmed.isEmpty) continue;
+        if (seen.add(trimmed.toLowerCase())) parts.add(trimmed);
+      }
+    }
+
+    addAll(existing);
+    addAll(incoming);
+    return parts.join(join);
+  }
+
+  static String mergeKeywords(String existing, String incoming) =>
+      mergeDelimitedLists(existing, incoming, split: ',', join: ', ');
+
+  static String mergePersonality(String existing, String incoming) =>
+      mergeDelimitedLists(
+        existing,
+        incoming,
+        split: RegExp(r'[;|]'),
+        join: ';',
+      );
+
+  static bool _personalityMatch(String expected, String existing) {
+    return _keywordSet(expected.replaceAll(';', ',')) ==
+        _keywordSet(existing.replaceAll(';', ','));
+  }
+
   static bool _fieldNeedsWrite(
       String presetKey, String expected, String existing) {
     final e = expected.trim();
@@ -620,6 +744,7 @@ class IptcTemplateApplyService {
     bool skipInAppGenerated = true,
     int? imageIndex,
     Set<String>? fieldsToClear,
+    bool skipKeywords = false,
   }) {
     final existing =
         IptcTemplateImportService.panelValuesFromExiftool(existingMeta);
@@ -677,7 +802,7 @@ class IptcTemplateApplyService {
       }
     });
 
-    final keywordsRaw = preset['Keywords']?.trim() ?? '';
+    final keywordsRaw = skipKeywords ? '' : (preset['Keywords']?.trim() ?? '');
     final keywords = keywordsRaw.isNotEmpty &&
             !_keywordsMatch(keywordsRaw, existing['Keywords'] ?? '')
         ? keywordsRaw
@@ -792,7 +917,18 @@ class IptcTemplateApplyService {
 
   /// IPTC plus the XMP/EXIF aliases this app writes, so a replace does not
   /// leave an old caption or credit sitting in XMP.
-  static List<String> _replaceClearArgs() {
+  ///
+  /// When [preserveKeys] includes Caption / Personality / Keywords, those tags
+  /// are left on the file (no `-IPTC:all=` wipe).
+  static List<String> _replaceClearArgs({
+    Set<String> preserveKeys = const {},
+  }) {
+    final preserve = {
+      for (final key in preserveKeys) toPresetKey(key),
+    };
+    final preserveCaptionFields = preserve.contains('Caption') ||
+        preserve.contains('Personality') ||
+        preserve.contains('Keywords');
     const keys = [
       'Creator',
       'MEID',
@@ -816,22 +952,25 @@ class IptcTemplateApplyService {
       'Creator\'s Identity',
     ];
     final args = <String>[
-      '-IPTC:all=',
+      if (!preserveCaptionFields) '-IPTC:all=',
       '-SupplementalCategories=',
       '-IPTC:SupplementalCategories=',
       '-XMP:SupplementalCategories=',
       '-XMP-photoshop:SupplementalCategories=',
-      '-IPTC:Keywords=',
-      '-Keywords=',
-      '-Subject=',
-      '-XMP-dc:Subject=',
-      '-XMP:Subject=',
-      '-XMP:Keywords=',
-      '-XMP-photoshop:Keywords=',
+      if (!preserve.contains('Keywords')) ...[
+        '-IPTC:Keywords=',
+        '-Keywords=',
+        '-Subject=',
+        '-XMP-dc:Subject=',
+        '-XMP:Subject=',
+        '-XMP:Keywords=',
+        '-XMP-photoshop:Keywords=',
+      ],
       '-${FloCaptionMark.tag}=',
     ];
     final seen = args.toSet();
     for (final key in keys) {
+      if (preserve.contains(key)) continue;
       for (final arg in clearArgsForPresetKey(key)) {
         // Bare -Copyright is exiftool's copyright switch, not the IPTC tag.
         if (arg == '-Copyright=' || arg == '--Copyright=') continue;
@@ -843,13 +982,16 @@ class IptcTemplateApplyService {
 
   /// Wipes IPTC (and the caption/credit aliases Photo Mechanic reads) so the
   /// following write is the only metadata left on the file.
-  static Future<bool> _clearIptcForReplace(String imagePath) async {
+  static Future<bool> _clearIptcForReplace(
+    String imagePath, {
+    Set<String> preserveKeys = const {},
+  }) async {
     try {
       final config = await FloCaptionMark.configPath();
       final args = <String>[
         '-config',
         config,
-        ..._replaceClearArgs(),
+        ..._replaceClearArgs(preserveKeys: preserveKeys),
         '-overwrite_original',
         imagePath,
       ];
@@ -878,7 +1020,10 @@ class IptcTemplateApplyService {
   /// it will be explicitly cleared.
   ///
   /// When [replaceExisting] is true, IPTC already on the file is cleared first,
-  /// then the full template is written, including Caption and Personality.
+  /// then the full template is written. On session load ([preserveOnLoad]),
+  /// Caption is never written. Personality / Keywords use [onLoadListMode]:
+  /// merge (default) adds template values onto what’s already there; overwrite
+  /// replaces file values with non-empty template values.
   static Future<IptcApplyToImageResult> applyToImage(
     String imagePath,
     Map<String, String> template, {
@@ -887,34 +1032,94 @@ class IptcTemplateApplyService {
     Map<String, dynamic>? existingMetadata,
     Set<String>? fieldsToClear,
     bool replaceExisting = false,
+    bool preserveOnLoad = false,
+    IptcOnLoadListMode onLoadListMode = IptcOnLoadListMode.merge,
   }) async {
-    if (replaceExisting) {
+    if (replaceExisting && !preserveOnLoad) {
       skipInAppGenerated = false;
       fieldsToClear = null;
     }
-    final preset = normalizeForPreset(
-      template,
-      includeInAppGenerated: !skipInAppGenerated,
+    if (preserveOnLoad) {
+      skipInAppGenerated = true;
+      if (fieldsToClear != null && fieldsToClear.isNotEmpty) {
+        fieldsToClear = fieldsToClear
+            .where((key) => !preserveOnLoadPresetKeys.contains(toPresetKey(key)))
+            .toSet();
+      }
+    }
+    final preset = Map<String, String>.from(
+      normalizeForPreset(
+        template,
+        includeInAppGenerated: !skipInAppGenerated,
+      ),
     );
-    final hasClearWork = fieldsToClear != null && fieldsToClear.isNotEmpty;
 
-    if (preset.isEmpty && !hasClearWork) {
+    // Capture Personality / Keywords before stripping preserve keys so load can
+    // merge or overwrite them instead of treating them like other fields.
+    String? loadListKeywords;
+    String? loadListPersonality;
+    if (preserveOnLoad) {
+      final kw = lookupValue(preset, 'Keywords')?.trim() ??
+          lookupValue(template, 'Keywords')?.trim();
+      if (kw != null &&
+          kw.isNotEmpty &&
+          !isInAppGeneratedPlaceholder(kw)) {
+        loadListKeywords = kw;
+      }
+      final personality = lookupValue(preset, 'Personality')?.trim() ??
+          lookupValue(template, 'Personality')?.trim();
+      if (personality != null &&
+          personality.isNotEmpty &&
+          !isInAppGeneratedPlaceholder(personality)) {
+        loadListPersonality = personality;
+      }
+      preset.removeWhere(
+        (key, _) => preserveOnLoadPresetKeys.contains(toPresetKey(key)),
+      );
+    }
+    final hasClearWork = fieldsToClear != null && fieldsToClear.isNotEmpty;
+    final hasLoadListWork = (loadListKeywords != null &&
+            loadListKeywords.isNotEmpty) ||
+        (loadListPersonality != null && loadListPersonality.isNotEmpty);
+    final overwriteLists =
+        preserveOnLoad && onLoadListMode.overwrites && hasLoadListWork;
+
+    if (preset.isEmpty && !hasClearWork && !hasLoadListWork) {
       return const IptcApplyToImageResult(success: true, skipped: true);
     }
 
     if (replaceExisting) {
-      final cleared = await _clearIptcForReplace(imagePath);
+      final preserveKeys = <String>{
+        if (preserveOnLoad) ...preserveOnLoadCaptionKeys,
+        if (preserveOnLoad && !overwriteLists) ...const {
+          'Personality',
+          'Keywords',
+        },
+        // Overwrite only clears list fields the template actually supplies.
+        if (preserveOnLoad && overwriteLists) ...{
+          if (loadListPersonality == null) 'Personality',
+          if (loadListKeywords == null) 'Keywords',
+        },
+      };
+      final cleared = await _clearIptcForReplace(
+        imagePath,
+        preserveKeys: preserveKeys,
+      );
       if (!cleared) {
         return const IptcApplyToImageResult(success: false);
       }
-      existingMetadata = <String, dynamic>{};
+      // Re-read after a preserving clear so Caption / Personality / Keywords
+      // stay visible to the write plan; full wipe starts from empty.
+      existingMetadata = preserveOnLoad
+          ? await IptcTemplateImportService.readMetadata(imagePath)
+          : <String, dynamic>{};
     }
 
     Map<String, dynamic>? meta = existingMetadata;
     meta ??= await IptcTemplateImportService.readMetadata(imagePath);
 
-    final Map<String, String> fieldsToWrite;
-    final String? keywordsToWrite;
+    Map<String, String> fieldsToWrite;
+    String? keywordsToWrite;
     final String? objectNameToWrite;
     Set<String> planFieldsToClear = const {};
 
@@ -925,11 +1130,9 @@ class IptcTemplateApplyService {
         skipInAppGenerated: skipInAppGenerated,
         imageIndex: imageIndex,
         fieldsToClear: fieldsToClear,
+        skipKeywords: preserveOnLoad,
       );
-      if (plan.skipEntirely) {
-        return const IptcApplyToImageResult(success: true, skipped: true);
-      }
-      fieldsToWrite = plan.presetFields;
+      fieldsToWrite = Map<String, String>.from(plan.presetFields);
       keywordsToWrite = plan.keywords;
       objectNameToWrite = plan.objectName;
       planFieldsToClear = plan.fieldsToClear;
@@ -939,8 +1142,10 @@ class IptcTemplateApplyService {
             key == 'Keywords' ||
             key == 'Object Name' ||
             key == 'ObjectName' ||
-            (skipInAppGenerated && inAppGeneratedPresetKeys.contains(key)));
-      final kw = preset['Keywords']?.trim();
+            (skipInAppGenerated && inAppGeneratedPresetKeys.contains(key)) ||
+            (preserveOnLoad &&
+                preserveOnLoadPresetKeys.contains(toPresetKey(key))));
+      final kw = preserveOnLoad ? null : preset['Keywords']?.trim();
       keywordsToWrite = (kw == null || kw.isEmpty) ? null : kw;
       final shouldClearObjectName =
           fieldsToClear?.contains('Object Name') == true ||
@@ -953,6 +1158,48 @@ class IptcTemplateApplyService {
             .where((key) =>
                 key != 'Time and Date' && key != 'Date' && key != 'Time')
             .toSet();
+      }
+    }
+
+    if (preserveOnLoad && hasLoadListWork) {
+      final existing = meta != null
+          ? IptcTemplateImportService.panelValuesFromExiftool(meta)
+          : <String, String>{};
+      if (overwriteLists) {
+        if (loadListKeywords != null && loadListKeywords.isNotEmpty) {
+          if (!_keywordsMatch(loadListKeywords, existing['Keywords'] ?? '')) {
+            keywordsToWrite = loadListKeywords;
+          }
+        }
+        if (loadListPersonality != null && loadListPersonality.isNotEmpty) {
+          if (!_personalityMatch(
+            loadListPersonality,
+            existing['Personality'] ?? '',
+          )) {
+            fieldsToWrite['Personality'] = loadListPersonality;
+          }
+        }
+      } else {
+        if (loadListKeywords != null && loadListKeywords.isNotEmpty) {
+          final merged = mergeKeywords(
+            existing['Keywords'] ?? '',
+            loadListKeywords,
+          );
+          if (merged.isNotEmpty &&
+              !_keywordsMatch(merged, existing['Keywords'] ?? '')) {
+            keywordsToWrite = merged;
+          }
+        }
+        if (loadListPersonality != null && loadListPersonality.isNotEmpty) {
+          final merged = mergePersonality(
+            existing['Personality'] ?? '',
+            loadListPersonality,
+          );
+          if (merged.isNotEmpty &&
+              !_personalityMatch(merged, existing['Personality'] ?? '')) {
+            fieldsToWrite['Personality'] = merged;
+          }
+        }
       }
     }
 

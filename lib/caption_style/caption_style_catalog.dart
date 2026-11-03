@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'caption_formula_renderer.dart';
 import 'caption_template.dart';
+import 'game_info.dart';
 import '../services/app_defaults_firestore_service.dart';
 import '../services/preferences_service.dart';
 
@@ -195,6 +196,38 @@ class CaptionStyleCatalog {
     );
   }
 
+  /// True when the menu pick is the built-in Getty family (not a saved style).
+  static bool isGettyMenuToken(String token) =>
+      token == tokGetty || token == tokGettyIntl || token == tokNbae;
+
+  /// When the user picked Getty, choose USA vs International structure from
+  /// [game] territory. Saved / custom styles are left unchanged.
+  CaptionTemplate resolveGettyForGame({
+    required CaptionTemplate active,
+    required GameInfo game,
+    required String activeToken,
+  }) {
+    if (!isGettyMenuToken(activeToken)) return active;
+    if (active.isUserAuthoredCaptionStyle) return active;
+
+    final us = CaptionFormulaRenderer.isUnitedStatesGame(game);
+    final want = us ? WireStyle.getty : WireStyle.gettyInternational;
+    if (active.wireStyle == want) return active;
+
+    final token = us ? tokGetty : tokGettyIntl;
+    final resolved = resolve(token, refForCustom: active);
+    // Keep the session's game-identifier / free text from the active Getty pick.
+    return resolved.copyWith(
+      gameIdentifierText: active.gameIdentifierText,
+      freeTextSnippets: active.freeTextSnippets != null
+          ? List<String>.from(active.freeTextSnippets!)
+          : null,
+      freeTextSuffixes: active.freeTextSuffixes != null
+          ? List<String>.from(active.freeTextSuffixes!)
+          : null,
+    );
+  }
+
   /// Resolves [token] to a full template (sport game-identifier defaults applied).
   CaptionTemplate resolve(
     String token, {
@@ -233,6 +266,14 @@ class CaptionStyleCatalog {
             dateFormula: ref.dateFormula?.clone(),
             dateFormulasByOccurrence:
                 ref.dateFormulasByOccurrence?.map((e) => e.clone()).toList(),
+            monthTokensByOccurrence:
+                ref.monthTokensByOccurrence?.map((e) => e.copy()).toList(),
+            dayTokensByOccurrence:
+                ref.dayTokensByOccurrence?.map((e) => e.copy()).toList(),
+            yearTokensByOccurrence:
+                ref.yearTokensByOccurrence?.map((e) => e.copy()).toList(),
+            weekdayTokensByOccurrence:
+                ref.weekdayTokensByOccurrence?.map((e) => e.copy()).toList(),
             locationOptions: ref.locationOptions,
             locationOptionsByOccurrence: ref.locationOptionsByOccurrence
                 ?.map((e) => e.clone())
@@ -274,8 +315,10 @@ class CaptionStyleCatalog {
   }
 
   CaptionTemplate _withSport(CaptionTemplate t) {
+    // Wire masters stay bare in Structure; start screen adds Game ID later.
+    // Keep gameIdentifierText on the side for when startup applies it.
     final gid = gameIdByWire[t.wireStyle] ?? defaultGameIdentifierText(sport);
-    return CaptionTemplate.applyGameIdentifierText(t, gid);
+    return t.stripGameIdentifierForWireMaster().copyWith(gameIdentifierText: gid);
   }
 
   CaptionTemplate _wiredBaseline(WireStyle wire) {

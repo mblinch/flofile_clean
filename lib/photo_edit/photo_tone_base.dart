@@ -1,21 +1,25 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
-/// Edge-aware base layer for local shadows and highlights.
+import 'photo_adjust_config.dart';
+
+/// Edge-aware guided filter (He, Sun, Tang) for the local-tone mask.
 ///
-/// Self-guided filter (He, Sun, Tang). Reimplemented here; this is not
-/// darktable or RawTherapee code. A large radius keeps texture in the detail
-/// layer and lets the tone move only the broad regions.
-const toneBaseLogMin = -13.287712379549449; // log2(1e-4)
-const toneBaseLogMax = 2.0; // log2(4)
+/// Self-guided: guide = input. Radius is in pixels of the mask buffer;
+/// callers derive it as `width * guidedRadiusWidthFraction` so preview and
+/// export agree.
+
+const toneBaseLogMin = PhotoAdjustConfig.maskLogMin;
+const toneBaseLogMax = PhotoAdjustConfig.maskLogMax;
 
 int toneBaseRadius(int width, int height) {
-  final shortSide = math.min(width, height);
-  if (shortSide <= 1) return 1;
-  return (shortSide * 0.08).round().clamp(2, 64);
+  if (width <= 1) return 1;
+  return (width * PhotoAdjustConfig.guidedRadiusWidthFraction)
+      .round()
+      .clamp(1, 128);
 }
 
-/// Encodes a linear luma in about 0…4 into 0…1 for an 8-bit mask texture.
+/// Encodes linear luma (~0…4) into 0…1 for an 8-bit debug view.
 double encodeBaseLuma(double y) {
   final logv = math.log(y.clamp(0.0, 4.0) + 1e-4) / math.ln2;
   return ((logv - toneBaseLogMin) / (toneBaseLogMax - toneBaseLogMin))
@@ -28,23 +32,35 @@ double decodeBaseLuma(double encoded) {
   return math.pow(2, logv).toDouble() - 1e-4;
 }
 
-Float32List guidedLumaBase(
-  Float32List luma,
+/// Pack a 0…1 value into R/G of an RGBA8 texel (~16-bit precision).
+void packFloat01(double v, Uint8List rgba, int offset) {
+  final enc = (v.clamp(0.0, 1.0) * 65535.0).round().clamp(0, 65535);
+  rgba[offset] = enc >> 8;
+  rgba[offset + 1] = enc & 0xff;
+  rgba[offset + 2] = 0;
+  rgba[offset + 3] = 255;
+}
+
+double unpackFloat01(int r, int g) => ((r << 8) | g) / 65535.0;
+
+/// Self-guided filter on a scalar field (typically log-luminance).
+Float32List guidedFilterScalar(
+  Float32List input,
   int width,
   int height, {
   int? radius,
-  double eps = 0.02,
+  double eps = PhotoAdjustConfig.guidedEps,
 }) {
   final n = width * height;
-  if (n == 0 || luma.length < n) return Float32List(n);
+  if (n == 0 || input.length < n) return Float32List(n);
   final r = radius ?? toneBaseRadius(width, height);
   final mean = Float32List(n);
   final meanSq = Float32List(n);
   final sq = Float32List(n);
   for (var i = 0; i < n; i++) {
-    sq[i] = luma[i] * luma[i];
+    sq[i] = input[i] * input[i];
   }
-  _boxMean(luma, mean, width, height, r);
+  _boxMean(input, mean, width, height, r);
   _boxMean(sq, meanSq, width, height, r);
 
   final a = Float32List(n);
@@ -60,12 +76,22 @@ Float32List guidedLumaBase(
   _boxMean(a, meanA, width, height, r);
   _boxMean(b, meanB, width, height, r);
 
-  final base = Float32List(n);
+  final out = Float32List(n);
   for (var i = 0; i < n; i++) {
-    base[i] = meanA[i] * luma[i] + meanB[i];
+    out[i] = meanA[i] * input[i] + meanB[i];
   }
-  return base;
+  return out;
 }
+
+/// Alias kept for older call sites.
+Float32List guidedLumaBase(
+  Float32List luma,
+  int width,
+  int height, {
+  int? radius,
+  double eps = PhotoAdjustConfig.guidedEps,
+}) =>
+    guidedFilterScalar(luma, width, height, radius: radius, eps: eps);
 
 double sampleLumaBase(
   Float32List base,
@@ -78,6 +104,7 @@ double sampleLumaBase(
 ) {
   if (baseWidth <= 0 || baseHeight <= 0) return 0;
   if (baseWidth == 1 && baseHeight == 1) return base[0];
+  // Bilinear — never nearest — so upscaling the mask stays soft.
   final fx = ((x + 0.5) * baseWidth / fullWidth) - 0.5;
   final fy = ((y + 0.5) * baseHeight / fullHeight) - 0.5;
   final x0 = fx.floor().clamp(0, baseWidth - 1);

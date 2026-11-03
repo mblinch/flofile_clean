@@ -4,16 +4,40 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import 'ftp_rename_template.dart';
+
 class FtpUploadResult {
   final bool success;
   final String? error;
   final String? details;
 
+  /// Final remote basename used (may include `_1` if the preferred name existed).
+  final String? remoteFileName;
+
   FtpUploadResult({
     required this.success,
     this.error,
     this.details,
+    this.remoteFileName,
   });
+}
+
+/// If [preferred] is taken, returns `name_1.ext`, `name_2.ext`, …
+String uniqueFileName(
+  String preferred,
+  bool Function(String candidate) isTaken,
+) {
+  final base = preferred.trim();
+  if (base.isEmpty) return base;
+  if (!isTaken(base)) return base;
+  final stem = p.basenameWithoutExtension(base);
+  final ext = p.extension(base);
+  var i = 1;
+  while (true) {
+    final candidate = '${stem}_$i$ext';
+    if (!isTaken(candidate)) return candidate;
+    i++;
+  }
 }
 
 typedef FtpProgressCallback = void Function(
@@ -39,11 +63,25 @@ class FtpCancelToken {
 }
 
 /// Remote (and duplicate-copy) file name. An empty rename keeps the original.
-/// A rename without an extension keeps the source extension.
-String ftpTransferFileName(String sourcePath, String renameAs) {
+///
+/// When [context] is provided, `{date}` / `{teams}` / `{n}` / `{original}` /
+/// `{photographer}` / `{iptc:…}` tokens are resolved. Without context, braces
+/// are left as literal text (legacy behaviour for callers that already expand).
+String ftpTransferFileName(
+  String sourcePath,
+  String renameAs, {
+  FtpRenameContext? context,
+}) {
   final original = p.basename(sourcePath);
   var custom = renameAs.trim();
   if (custom.isEmpty) return original;
+  if (context != null || custom.contains('{')) {
+    return FtpRenameTemplate.resolve(
+      template: custom,
+      context: context ??
+          FtpRenameContext(sourcePath: sourcePath),
+    );
+  }
   custom = p.basename(custom.replaceAll('\\', '/'));
   if (custom.isEmpty) return original;
   if (p.extension(custom).isEmpty && p.extension(original).isNotEmpty) {
@@ -53,6 +91,8 @@ String ftpTransferFileName(String sourcePath, String renameAs) {
 }
 
 /// Copies [sourcePath] into [folder] as [fileName].
+///
+/// If [fileName] already exists in [folder], uses `name_1.ext`, `name_2.ext`, …
 /// Returns null when the folder is blank or the copy succeeds, otherwise the error.
 Future<String?> copyFtpDuplicate({
   required String sourcePath,
@@ -66,7 +106,11 @@ Future<String?> copyFtpDuplicate({
     if (!await destDir.exists()) {
       await destDir.create(recursive: true);
     }
-    final dest = p.join(destDir.path, fileName);
+    final unique = uniqueFileName(
+      fileName,
+      (candidate) => File(p.join(destDir.path, candidate)).existsSync(),
+    );
+    final dest = p.join(destDir.path, unique);
     final src = File(sourcePath);
     if (p.normalize(src.absolute.path) == p.normalize(File(dest).absolute.path)) {
       return null;
@@ -308,6 +352,16 @@ class FtpClientService {
         }
       }
 
+      // Avoid overwriting an existing remote file: name.jpg → name_1.jpg.
+      final uniqueName = await _uniqueRemoteFileName(
+        session: session,
+        controlSocket: controlSocket,
+        preferred: fileName,
+      );
+      if (uniqueName != fileName) {
+        print('FTP: Remote name taken — using $uniqueName');
+      }
+
       onProgress?.call('Setting up data connection...', 0.0, null);
 
       controlSocket.write('PASV\r\n');
@@ -343,9 +397,9 @@ class FtpClientService {
       onProgress?.call('Preparing file upload...', 0.0, null);
 
       final fileSize = await localFile.length();
-      print('FTP: Uploading $localFilePath as $fileName ($fileSize bytes)');
+      print('FTP: Uploading $localFilePath as $uniqueName ($fileSize bytes)');
 
-      controlSocket.write('STOR $fileName\r\n');
+      controlSocket.write('STOR $uniqueName\r\n');
       response = await session.nextReply();
       print('FTP: STOR response: $response');
 
@@ -383,7 +437,8 @@ class FtpClientService {
       return FtpUploadResult(
         success: true,
         error: null,
-        details: 'File uploaded successfully: $fileName',
+        details: 'File uploaded successfully: $uniqueName',
+        remoteFileName: uniqueName,
       );
     } catch (e) {
       final errorMsg = e.toString();
@@ -408,6 +463,30 @@ class FtpClientService {
           print('FTP: Error during disconnect: $e');
         }
       }
+    }
+  }
+
+  /// Uses SIZE to see if [preferred] exists; appends `_1`, `_2`, … until free.
+  static Future<String> _uniqueRemoteFileName({
+    required _FtpControlSession session,
+    required Socket controlSocket,
+    required String preferred,
+  }) async {
+    Future<bool> exists(String name) async {
+      controlSocket.write('SIZE $name\r\n');
+      final reply = await session.nextReply();
+      // 213 = size known (file exists). Anything else → treat as missing.
+      return reply.startsWith('213');
+    }
+
+    if (!await exists(preferred)) return preferred;
+    final stem = p.basenameWithoutExtension(preferred);
+    final ext = p.extension(preferred);
+    var i = 1;
+    while (true) {
+      final candidate = '${stem}_$i$ext';
+      if (!await exists(candidate)) return candidate;
+      i++;
     }
   }
 }

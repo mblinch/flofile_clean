@@ -25,7 +25,7 @@ class FfMenuColors {
   final Color divider;
 
   static const session = FfMenuColors(
-    fill: FfTokens.sessionEl,
+    fill: FfTokens.sessionPanel,
     hover: FfTokens.sessionHv,
     selected: FfTokens.sessionHv,
     text: FfTokens.sessionTx,

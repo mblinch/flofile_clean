@@ -50,6 +50,7 @@ class LocationFormulaEditor extends StatefulWidget {
     this.sampleGameInfo,
     this.adaptsUsIntl = false,
     this.includedKinds,
+    this.showApStyleOption = false,
   });
 
   final LocationLineOptions options;
@@ -68,6 +69,10 @@ class LocationFormulaEditor extends StatefulWidget {
   /// American formula stays city + state and the international formula stays
   /// city + country.
   final Set<LocationChipKind>? includedKinds;
+
+  /// AP/CP wires only — show the AP Style region format (standalone cities +
+  /// AP abbrevs). Off for other wires.
+  final bool showApStyleOption;
 
   @override
   State<LocationFormulaEditor> createState() => _LocationFormulaEditorState();
@@ -418,7 +423,8 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
     final sample = CaptionFormulaRenderer.applyLocationChipCaps(
       sampleRaw,
       caps: f.caps,
-      isIsoCode: (f.kind == LocationChipKind.country &&
+      isIsoCode: f.kind == LocationChipKind.countryCode ||
+          (f.kind == LocationChipKind.country &&
               f.countryVariant == LocationCountryVariant.isoCode) ||
           (f.kind == LocationChipKind.region &&
               f.regionVariant == LocationRegionVariant.shortForm),
@@ -477,6 +483,7 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
                 const SizedBox(width: 6),
                 _RegionVariantGearButton(
                   current: f.regionVariant,
+                  showApStyleOption: widget.showApStyleOption,
                   onSelect: (v) => _setRegionVariant(index, v),
                 ),
               ],
@@ -659,12 +666,17 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
             if (full.isNotEmpty) return full;
             return 'ON';
           case LocationRegionVariant.apStyle:
-            if (full.isNotEmpty) {
-              final ap = abbreviateUsStateApStyle(full);
-              return ap.isNotEmpty ? ap : full;
+            final city = (g?.city ?? '').trim();
+            final ap = formatApStyleState(
+              city: city.isNotEmpty ? city : 'Anaheim',
+              region: full,
+              regionCode: short,
+            );
+            if (ap.isNotEmpty) return ap;
+            if (isApStandaloneCity(city.isNotEmpty ? city : 'Philadelphia')) {
+              return '—';
             }
-            if (short.isNotEmpty) return short;
-            return 'Ont.';
+            return 'Calif.';
         }
       case LocationChipKind.country:
         final full = (g?.resolvedCountryName ?? '').trim();
@@ -679,6 +691,9 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
             if (full.isNotEmpty) return full;
             return 'CAN';
         }
+      case LocationChipKind.countryCode:
+        final iso = (g?.resolvedCountryCode ?? '').trim();
+        return iso.isNotEmpty ? iso : 'CAN';
       case LocationChipKind.literal:
         return '';
     }
@@ -904,10 +919,12 @@ class _RegionVariantGearButton extends StatefulWidget {
   const _RegionVariantGearButton({
     required this.current,
     required this.onSelect,
+    this.showApStyleOption = false,
   });
 
   final LocationRegionVariant current;
   final ValueChanged<LocationRegionVariant> onSelect;
+  final bool showApStyleOption;
 
   @override
   State<_RegionVariantGearButton> createState() =>
@@ -957,6 +974,7 @@ class _RegionVariantGearButtonState extends State<_RegionVariantGearButton> {
                 color: Colors.transparent,
                 child: _RegionVariantOptionsCard(
                   current: widget.current,
+                  showApStyleOption: widget.showApStyleOption,
                   onPick: (v) {
                     widget.onSelect(v);
                     _close();
@@ -1019,10 +1037,12 @@ class _RegionVariantOptionsCard extends StatelessWidget {
   const _RegionVariantOptionsCard({
     required this.current,
     required this.onPick,
+    this.showApStyleOption = false,
   });
 
   final LocationRegionVariant current;
   final ValueChanged<LocationRegionVariant> onPick;
+  final bool showApStyleOption;
 
   @override
   Widget build(BuildContext context) {
@@ -1058,7 +1078,8 @@ class _RegionVariantOptionsCard extends StatelessWidget {
           ),
           _row(LocationRegionVariant.fullName, hint: 'Full'),
           _row(LocationRegionVariant.shortForm, hint: 'Abbr'),
-          _row(LocationRegionVariant.apStyle, hint: 'AP'),
+          if (showApStyleOption)
+            _row(LocationRegionVariant.apStyle, hint: 'AP'),
           const SizedBox(height: 4),
         ],
       ),
@@ -1107,6 +1128,8 @@ String _locationFieldLabel(LocationChipKind k) {
       return 'IPTC:ProvinceState';
     case LocationChipKind.country:
       return 'IPTC:Country';
+    case LocationChipKind.countryCode:
+      return 'IPTC:CountryCode';
     case LocationChipKind.literal:
       return 'Literal';
   }

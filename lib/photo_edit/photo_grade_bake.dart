@@ -5,42 +5,13 @@ import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
 import '../utils/exiftool_helper.dart';
+import 'photo_adjust_config.dart';
 import 'photo_adjustments.dart';
+import 'photo_crop.dart';
+import 'photo_grade_engine.dart';
 import 'photo_tone_base.dart';
 
-class PhotoGradeBakeRequest {
-  const PhotoGradeBakeRequest({
-    required this.bytes,
-    required this.exposure,
-    required this.contrast,
-    required this.shadows,
-    required this.highlights,
-    required this.whites,
-    required this.blacks,
-    required this.temperature,
-    required this.tint,
-    required this.cropLeft,
-    required this.cropTop,
-    required this.cropWidth,
-    required this.cropHeight,
-  });
-
-  final Uint8List bytes;
-  final double exposure;
-  final double contrast;
-  final double shadows;
-  final double highlights;
-  final double whites;
-  final double blacks;
-  final double temperature;
-  final double tint;
-  final double cropLeft;
-  final double cropTop;
-  final double cropWidth;
-  final double cropHeight;
-}
-
-/// Decodes [request] bytes, bakes orientation, grades, and returns a JPEG.
+/// CPU bake used by isolates / tests. Prefer [writeGradedJpeg] (GPU) at runtime.
 Uint8List bakeGradedJpeg(PhotoGradeBakeRequest request) {
   final decoded = img.decodeImage(request.bytes);
   if (decoded == null) {
@@ -60,6 +31,8 @@ Uint8List bakeGradedJpeg(PhotoGradeBakeRequest request) {
     blacks: request.blacks,
     temperature: request.temperature,
     tint: request.tint,
+    vibrance: request.vibrance,
+    saturation: request.saturation,
   );
   var oriented = orientedImage;
   final fullFrame = request.cropLeft <= 0.0005 &&
@@ -86,33 +59,36 @@ Uint8List bakeGradedJpeg(PhotoGradeBakeRequest request) {
     );
   }
   if (!grade.isNeutral) {
-    Float32List? base;
-    var baseWidth = 0;
-    var baseHeight = 0;
+    Float32List? mask;
+    var maskWidth = 0;
+    var maskHeight = 0;
     if (grade.needsLocalTone) {
       final small = _toneBaseSource(oriented);
       final rgb = Uint8List(small.width * small.height * 3);
       var index = 0;
       for (final pixel in small) {
-        rgb[index++] = (pixel.rNormalized.toDouble() * 255).round().clamp(0, 255);
-        rgb[index++] = (pixel.gNormalized.toDouble() * 255).round().clamp(0, 255);
-        rgb[index++] = (pixel.bNormalized.toDouble() * 255).round().clamp(0, 255);
+        rgb[index++] =
+            (pixel.rNormalized.toDouble() * 255).round().clamp(0, 255);
+        rgb[index++] =
+            (pixel.gNormalized.toDouble() * 255).round().clamp(0, 255);
+        rgb[index++] =
+            (pixel.bNormalized.toDouble() * 255).round().clamp(0, 255);
       }
-      base = lumaBaseForDisplayRgb(rgb, small.width, small.height, grade);
-      baseWidth = small.width;
-      baseHeight = small.height;
+      mask = lumaMaskForDisplayRgb(rgb, small.width, small.height, grade);
+      maskWidth = small.width;
+      maskHeight = small.height;
     }
     var pixelIndex = 0;
     for (final pixel in oriented) {
       final x = pixelIndex % oriented.width;
       final y = pixelIndex ~/ oriented.width;
       pixelIndex++;
-      final baseLuma = base == null
+      final mask01 = mask == null
           ? null
           : sampleLumaBase(
-              base,
-              baseWidth,
-              baseHeight,
+              mask,
+              maskWidth,
+              maskHeight,
               x,
               y,
               oriented.width,
@@ -123,7 +99,9 @@ Uint8List bakeGradedJpeg(PhotoGradeBakeRequest request) {
         pixel.gNormalized.toDouble(),
         pixel.bNormalized.toDouble(),
         grade,
-        baseLuma: baseLuma,
+        mask01: mask01,
+        ditherX: x,
+        ditherY: y,
       );
       pixel
         ..rNormalized = graded.r
@@ -131,11 +109,51 @@ Uint8List bakeGradedJpeg(PhotoGradeBakeRequest request) {
         ..bNormalized = graded.b;
     }
   }
-  return Uint8List.fromList(img.encodeJpg(oriented, quality: 92));
+  return Uint8List.fromList(
+    img.encodeJpg(oriented, quality: PhotoAdjustConfig.exportJpegQuality),
+  );
 }
 
-/// Writes a graded JPEG over [path], copying caption and camera metadata
-/// back on with exiftool. Pixels are stored upright, so orientation is reset.
+class PhotoGradeBakeRequest {
+  const PhotoGradeBakeRequest({
+    required this.bytes,
+    required this.exposure,
+    required this.contrast,
+    required this.shadows,
+    required this.highlights,
+    required this.whites,
+    required this.blacks,
+    required this.temperature,
+    required this.tint,
+    this.vibrance = 0,
+    this.saturation = 0,
+    required this.cropLeft,
+    required this.cropTop,
+    required this.cropWidth,
+    required this.cropHeight,
+  });
+
+  final Uint8List bytes;
+  final double exposure;
+  final double contrast;
+  final double shadows;
+  final double highlights;
+  final double whites;
+  final double blacks;
+  final double temperature;
+  final double tint;
+  final double vibrance;
+  final double saturation;
+  final double cropLeft;
+  final double cropTop;
+  final double cropWidth;
+  final double cropHeight;
+}
+
+/// Writes a graded JPEG over [path], copying ALL metadata back with exiftool.
+///
+/// Prefers the GPU engine (same shaders as preview). Falls back to the CPU
+/// bake on a background isolate if the GPU path fails.
 Future<void> writeGradedJpeg({
   required String path,
   required PhotoAdjustments adjustments,
@@ -149,24 +167,43 @@ Future<void> writeGradedJpeg({
     throw StateError('Only JPEG photos can be edited.');
   }
   final original = await File(path).readAsBytes();
-  final graded = await compute(
-    bakeGradedJpeg,
-    PhotoGradeBakeRequest(
-      bytes: original,
-      exposure: adjustments.exposure,
-      contrast: adjustments.contrast,
-      shadows: adjustments.shadows,
-      highlights: adjustments.highlights,
-      whites: adjustments.whites,
-      blacks: adjustments.blacks,
-      temperature: adjustments.temperature,
-      tint: adjustments.tint,
-      cropLeft: cropLeft,
-      cropTop: cropTop,
-      cropWidth: cropWidth,
-      cropHeight: cropHeight,
-    ),
+  final crop = PhotoCrop(
+    left: cropLeft,
+    top: cropTop,
+    width: cropWidth,
+    height: cropHeight,
   );
+
+  Uint8List graded;
+  final gpuBytes = await _bakeOnGpu(
+    bytes: original,
+    adjustments: adjustments,
+    crop: crop,
+  );
+  if (gpuBytes != null) {
+    graded = gpuBytes;
+  } else {
+    graded = await compute(
+      bakeGradedJpeg,
+      PhotoGradeBakeRequest(
+        bytes: original,
+        exposure: adjustments.exposure,
+        contrast: adjustments.contrast,
+        shadows: adjustments.shadows,
+        highlights: adjustments.highlights,
+        whites: adjustments.whites,
+        blacks: adjustments.blacks,
+        temperature: adjustments.temperature,
+        tint: adjustments.tint,
+        vibrance: adjustments.vibrance,
+        saturation: adjustments.saturation,
+        cropLeft: cropLeft,
+        cropTop: cropTop,
+        cropWidth: cropWidth,
+        cropHeight: cropHeight,
+      ),
+    );
+  }
 
   final temp = File(
     p.join(
@@ -177,6 +214,8 @@ Future<void> writeGradedJpeg({
   final staged = File('$path.flofile-grade');
   try {
     await temp.writeAsBytes(graded, flush: true);
+    // Copy every tag from the original onto the graded pixels. Orientation is
+    // reset because pixels are stored upright after bakeOrientation / GPU path.
     final copied = await ExiftoolHelper.run([
       '-overwrite_original',
       '-m',
@@ -206,8 +245,67 @@ Future<void> writeGradedJpeg({
   }
 }
 
+Future<Uint8List?> _bakeOnGpu({
+  required Uint8List bytes,
+  required PhotoAdjustments adjustments,
+  required PhotoCrop crop,
+}) async {
+  try {
+    // Bake orientation into pixels first so GPU UVs match upright layout.
+    final oriented = await _orientedJpegBytes(bytes);
+    final engine = PhotoGradeEngine();
+    final rgba = await engine.exportRgba(
+      jpegBytes: oriented,
+      adjustments: adjustments,
+      crop: crop,
+    );
+    if (rgba == null) return null;
+
+    // Infer dimensions from crop of decoded oriented image.
+    final decoded = img.decodeImage(oriented);
+    if (decoded == null) return null;
+    final outW = crop.isFull
+        ? decoded.width
+        : (decoded.width * crop.width).round().clamp(1, decoded.width);
+    final outH = crop.isFull
+        ? decoded.height
+        : (decoded.height * crop.height).round().clamp(1, decoded.height);
+    if (rgba.length < outW * outH * 4) return null;
+
+    final out = img.Image(width: outW, height: outH, numChannels: 3);
+    for (var y = 0; y < outH; y++) {
+      for (var x = 0; x < outW; x++) {
+        final o = (y * outW + x) * 4;
+        out.setPixelRgb(x, y, rgba[o], rgba[o + 1], rgba[o + 2]);
+      }
+    }
+    return Uint8List.fromList(
+      img.encodeJpg(out, quality: PhotoAdjustConfig.exportJpegQuality),
+    );
+  } catch (e, st) {
+    debugPrint('GPU grade bake failed, falling back to CPU: $e\n$st');
+    return null;
+  }
+}
+
+Future<Uint8List> _orientedJpegBytes(Uint8List bytes) async {
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) return bytes;
+  final hasExifOrientation = decoded.exif.imageIfd.hasOrientation &&
+      decoded.exif.imageIfd.orientation != null &&
+      decoded.exif.imageIfd.orientation != 1;
+  if (!hasExifOrientation) return bytes;
+  final oriented = img.bakeOrientation(decoded);
+  return Uint8List.fromList(
+    img.encodeJpg(oriented, quality: PhotoAdjustConfig.exportJpegQuality),
+  );
+}
+
 img.Image _toneBaseSource(img.Image source) {
-  const maxEdge = 1280;
+  final maxEdge = (PhotoAdjustConfig.previewLongEdge *
+          PhotoAdjustConfig.maskResolutionScale)
+      .round()
+      .clamp(256, 2048);
   if (source.width <= maxEdge && source.height <= maxEdge) return source;
   if (source.width >= source.height) {
     return img.copyResize(source, width: maxEdge);

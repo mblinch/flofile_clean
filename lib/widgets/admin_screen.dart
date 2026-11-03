@@ -112,7 +112,7 @@ class _AdminScreenState extends State<AdminScreen> {
   String _issuesSportFilter = 'all';
 
   static const _sports = AppDefaultsFirestoreService.catalogSports;
-  static const _dialogWidth = 1180.0;
+  static const _dialogWidth = 1400.0;
   static const _dialogHeight = 780.0;
   static const _sidebarWidth = 180.0;
   static const _contentPadding = 24.0;
@@ -538,6 +538,48 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
+  Future<void> _syncTank01Stadiums({required bool allSports}) async {
+    if (!tank01SupportsSport(_compareSport) && !allSports) {
+      setState(() => _compareError =
+          'Stadium sync is not available for $_compareSport.');
+      return;
+    }
+    setState(() {
+      _tank01SyncRunning = true;
+      _tank01SyncStatus =
+          'Fetching league stadiums → sports_tank01…';
+      _compareError = null;
+    });
+    try {
+      final results = await Tank01RosterSyncService().syncVenuesOnly(
+        sportId: allSports ? null : _compareSport,
+        onProgress: (msg) {
+          if (!mounted) return;
+          setState(() => _tank01SyncStatus = msg);
+        },
+      );
+      if (!mounted) return;
+      final teams = results.fold<int>(0, (n, r) => n + r.teamsSynced);
+      final errors = results.expand((r) => r.errors).toList();
+      setState(() {
+        _tank01SyncStatus =
+            'Wrote stadiums for $teams teams into sports_tank01'
+            '${errors.isEmpty ? '' : ' (${errors.length} errors)'}';
+        if (errors.isNotEmpty) {
+          _compareError = errors.take(8).join('\n');
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _tank01SyncStatus = null;
+        _compareError = 'Stadium sync failed: $e';
+      });
+    } finally {
+      if (mounted) setState(() => _tank01SyncRunning = false);
+    }
+  }
+
   Map<String, dynamic> _sportBundleFromCatalog(String sport) {
     final fromCatalog = _catalog?.sportVerbSettings(sport);
     if (fromCatalog != null && fromCatalog.isNotEmpty) {
@@ -596,18 +638,18 @@ class _AdminScreenState extends State<AdminScreen> {
     _captionByWireAndSport.clear();
     _gameIdDrafts.clear();
     for (final wire in AppDefaultsFirestoreService.captionWireStyles) {
+      // One master Structure per wire; sport only changes game-identifier text.
+      final master = catalog?.captionWireMaster(wire) ??
+          AppDefaultsFirestoreService.factoryCaptionForWire(wire);
       final bySportTemplate = <String, CaptionTemplate>{};
       final bySportGid = <String, String>{};
       for (final sport in _sports) {
         final gid = catalog?.gameIdentifierText(wire, sport) ??
             defaultGameIdentifierText(sport);
-        final base = catalog?.captionForWireAndSport(wire, sport) ??
-            catalog?.captionWireDefault(wire) ??
-            AppDefaultsFirestoreService.factoryCaptionForWire(wire);
-        bySportTemplate[sport] = _cloneCaption(base).copyWith(
-          wireStyle: wire,
-          gameIdentifierText: gid,
-        );
+        // Bare Structure — no sport phrase baked in (start screen later).
+        bySportTemplate[sport] = _cloneCaption(master)
+            .stripGameIdentifierForWireMaster()
+            .copyWith(wireStyle: wire, gameIdentifierText: gid);
         bySportGid[sport] = gid;
       }
       _captionByWireAndSport[wire] = bySportTemplate;
@@ -715,8 +757,19 @@ class _AdminScreenState extends State<AdminScreen> {
   void _onCaptionDraftChanged(WireStyle wire, CaptionTemplate template) {
     final copy = _cloneCaption(template).copyWith(wireStyle: wire);
     _captionDrafts[wire] = copy;
-    (_captionByWireAndSport[wire] ??= {})[_captionSport] = _cloneCaption(copy);
     _stashGameIdFromTemplate(wire, copy);
+    // Structure is wire-level: mirror the master into every sport slot, keeping
+    // each sport's start-screen game-identifier variation.
+    final master = CaptionTemplate.fromJson(
+      CaptionTemplate.wireMasterJsonFromTemplate(copy),
+    ).copyWith(wireStyle: wire);
+    final bySport = _captionByWireAndSport.putIfAbsent(wire, () => {});
+    for (final sport in _sports) {
+      final gid = _gameIdDrafts[wire]?[sport] ??
+          defaultGameIdentifierText(sport);
+      bySport[sport] =
+          _cloneCaption(master).copyWith(gameIdentifierText: gid);
+    }
     final pending = _captionPendingCount > 0;
     if (!mounted) {
       _captionDirty = pending;
@@ -725,14 +778,11 @@ class _AdminScreenState extends State<AdminScreen> {
     setState(() => _captionDirty = pending);
   }
 
-  Future<void> _onCaptionSportChanged(String sport) async {
+  /// Sport in Structure admin is preview-only (verbs / teams / Game ID sample).
+  /// Do not flush or swap the wire master when it changes.
+  void _onCaptionSportChanged(String sport) {
     if (sport == _captionSport) return;
-    await _flushCaptionBuilderDrafts();
-    if (!mounted) return;
-    setState(() {
-      _captionSport = sport;
-      _showCaptionSport(sport);
-    });
+    setState(() => _captionSport = sport);
   }
 
   void _onCaptionWireChanged(WireStyle wire) {
@@ -744,8 +794,8 @@ class _AdminScreenState extends State<AdminScreen> {
     _loadCaptionDraftsFromCatalog(_catalog);
   }
 
-  Future<void> _setCaptionStructuresAsDefaults() async {
-    await _publishCaptions(saveLocalDefaults: true);
+  Future<bool> _setCaptionStructuresAsDefaults() async {
+    return _publishCaptions(saveLocalDefaults: true);
   }
 
   Map<String, Map<String, String>> _gameIdDraftsForFirestore() {
@@ -973,7 +1023,7 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
-  Future<void> _publishCaptions({
+  Future<bool> _publishCaptions({
     bool allWires = false,
     bool saveLocalDefaults = false,
   }) async {
@@ -984,12 +1034,13 @@ class _AdminScreenState extends State<AdminScreen> {
           ? 'Publish caption defaults?'
           : 'Save this structure as default?',
       message: allWires
-          ? 'Saves every wire caption layout to Firebase app originals.'
-          : 'Saves the caption structure you are editing as the default for '
-              '$sportLabel on $wireLabel.',
+          ? 'Saves one master Structure per wire. Sport phrases '
+              '(game identifier, notes) stay start-screen variations.'
+          : 'Saves the master Structure for $wireLabel (all sports). '
+              'The $sportLabel game identifier is saved as a start-screen variation.',
       confirmLabel: allWires ? 'Publish' : 'Save',
     );
-    if (!ok) return;
+    if (!ok) return false;
     setState(() => _busy = true);
     try {
       await _flushCaptionBuilderDrafts();
@@ -1029,7 +1080,7 @@ class _AdminScreenState extends State<AdminScreen> {
         );
       }
       await _applyPublishedCaptionToWorkingTemplate();
-      if (!mounted) return;
+      if (!mounted) return false;
       _catalog = AppDefaultsFirestoreService.getCachedCatalog();
       if (allWires) {
         _captureCaptionBaseline();
@@ -1041,18 +1092,21 @@ class _AdminScreenState extends State<AdminScreen> {
         SnackBar(
           content: Text(
             allWires
-                ? 'Published all caption structures.'
-                : 'Saved the $wireLabel caption structure for $sportLabel.',
+                ? 'Published master Structures for all wires.'
+                : 'Saved the $wireLabel master Structure'
+                    '${sportLabel.isEmpty ? '' : ' (+ $sportLabel game ID)'}.',
           ),
           backgroundColor: kFloTealLight,
         ),
       );
+      return true;
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content: Text('Publish failed: $e'), backgroundColor: Colors.red),
       );
+      return false;
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -1694,87 +1748,22 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Widget _buildCaptionContent(FfTokens t) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: CaptionLayoutBuilderDialog(
-            key: ValueKey('admin_caption_$_captionBuilderRevision'),
-            embedded: true,
-            adminMode: true,
-            initialWire: _captionWire,
-            initialSport: _captionSport,
-            initialTemplate: _captionDrafts[_captionWire],
-            wireDraftsSeed:
-                Map<WireStyle, CaptionTemplate>.from(_captionDrafts),
-            gameIdDraftsSeed:
-                Map<WireStyle, Map<String, String>>.from(_gameIdDrafts),
-            onDraftChanged: _onCaptionDraftChanged,
-            onWireChanged: _onCaptionWireChanged,
-            onSportChanged: (sport) {
-              unawaited(_onCaptionSportChanged(sport));
-            },
-            onRegisterFlush: (flush) => _flushCaptionBuilder = flush,
-            onRegisterSetAllDefaults: (setAll) => _setAllCaptionDefaults = setAll,
-          ),
-        ),
-        _buildFooter(t),
-      ],
-    );
-  }
-
-  Widget _buildFooter(FfTokens t) {
-    final count = _captionPendingCount;
-    final pending = count > 0 && !_busy;
-    final status = count <= 0
-        ? 'Everything is published'
-        : '$count unpublished change${count == 1 ? '' : 's'}, not live until published';
-    return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: t.surface,
-        border: Border(top: BorderSide(color: t.divider)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              status,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              softWrap: false,
-              style: t.microStyle.copyWith(
-                fontSize: 11,
-                height: 1.25,
-                color: t.text.withValues(alpha: 0.55),
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: pending ? _discardCaptionEdits : null,
-            child: Text(
-              'Discard',
-              softWrap: false,
-              style: t.metaStyle.copyWith(
-                color: pending
-                    ? t.text.withValues(alpha: 0.70)
-                    : t.text.withValues(alpha: 0.28),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          ElevatedGreyButton(
-            label: _busy ? 'Saving…' : 'Save as default',
-            fontSize: 11,
-            isPrimary: true,
-            isAdmin: true,
-            onPressed: _sportHasPending(_captionWire, _captionSport) && !_busy
-                ? _setCaptionStructuresAsDefaults
-                : null,
-          ),
-        ],
-      ),
+    return CaptionLayoutBuilderDialog(
+      key: ValueKey('admin_caption_$_captionBuilderRevision'),
+      embedded: true,
+      adminMode: true,
+      initialWire: _captionWire,
+      initialSport: _captionSport,
+      initialTemplate: _captionDrafts[_captionWire],
+      wireDraftsSeed: Map<WireStyle, CaptionTemplate>.from(_captionDrafts),
+      gameIdDraftsSeed: Map<WireStyle, Map<String, String>>.from(_gameIdDrafts),
+      onDraftChanged: _onCaptionDraftChanged,
+      onWireChanged: _onCaptionWireChanged,
+      onSportChanged: _onCaptionSportChanged,
+      onRegisterFlush: (flush) => _flushCaptionBuilder = flush,
+      onRegisterSetAllDefaults: (setAll) => _setAllCaptionDefaults = setAll,
+      onAdminSaveAsDefault: _setCaptionStructuresAsDefaults,
+      onAdminDiscard: _discardCaptionEdits,
     );
   }
 
@@ -2031,16 +2020,7 @@ class _AdminScreenState extends State<AdminScreen> {
                                           )
                                         : _section ==
                                                 _AdminSection.captionStructures
-                                            ? Padding(
-                                                padding:
-                                                    const EdgeInsets.fromLTRB(
-                                                  _contentPadding,
-                                                  _contentPadding,
-                                                  _contentPadding,
-                                                  0,
-                                                ),
-                                                child: _buildCaptionContent(t),
-                                              )
+                                            ? _buildCaptionContent(t)
                                             : SingleChildScrollView(
                                                 padding: const EdgeInsets.all(
                                                   _contentPadding,
@@ -2319,6 +2299,16 @@ class _AdminScreenState extends State<AdminScreen> {
               onPressed: _tank01SyncRunning || _compareRunning
                   ? null
                   : () => _syncTank01ToFirestore(allSports: true),
+            ),
+            ElevatedGreyButton(
+              label: _tank01SyncRunning
+                  ? 'Syncing…'
+                  : 'Sync stadiums now (also monthly)',
+              fontSize: 11,
+              icon: PhosphorIconsRegular.buildings,
+              onPressed: _tank01SyncRunning || _compareRunning
+                  ? null
+                  : () => _syncTank01Stadiums(allSports: true),
             ),
           ],
         ),

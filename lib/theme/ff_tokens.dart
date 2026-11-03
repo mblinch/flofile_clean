@@ -49,25 +49,29 @@ class FfTokens extends ThemeExtension<FfTokens> {
   static const gold = Color(0xFFE8C547); // admin / status badge
   static const inkOnGold = Color(0xFF1A1606);
 
-  /// New Session screen palette (New Session v2.html `:root`).
-  /// Kept separate from Nocturne so the captioning workspace is unchanged.
-  static const sessionBg = Color(0xFF0C1016);
-  static const sessionPanel = Color(0xFF131820);
-  static const sessionEl = Color(0xFF1A2029);
-  static const sessionHv = Color(0xFF232A35);
-  static const sessionLn = Color(0x14E2E8F0); // rgba(226,232,240,.08)
-  static const sessionLn2 = Color(0x29E2E8F0); // rgba(226,232,240,.16)
-  static const sessionTx = Color(0xFFE6EAF0);
-  static const sessionT2 = Color(0xFFA3ADBB);
-  static const sessionT3 = Color(0xFF6F7B8C);
-  static const sessionAc = Color(0xFF95A2B3);
-  static const sessionOn = Color(0xFF7FB3E8);
+  /// New Session screen — same Nocturne surfaces/accents as the rest of the app.
+  static const sessionBg = nocturneBg;
+  static const sessionPanel = nocturneEl;
+  static const sessionEl = nocturneSunken;
+  static const sessionHv = nocturneHv;
+  static const sessionLn = nocturneLn;
+  static const sessionLn2 = nocturneLn2;
+  static const sessionTx = nocturneTx;
+  static const sessionT2 = nocturneT2;
+  static const sessionT3 = nocturneT3;
+  static const sessionAc = nocturneT2;
+  static const sessionOn = nocturneAc;
   static const sessionOk = Color(0xFF7FD6A0);
   static const sessionOkSoft = Color(0x247FD6A0); // rgba(127,214,160,.14)
   static const sessionOkIcon = Color(0x1F7FD6A0); // rgba(127,214,160,.12)
-  static const sessionHot = Color(0x247FB3E8); // rgba(127,179,232,.14)
-  static const sessionGoHover = Color(0xFFFFFFFF);
-  static const sessionKbd = Color(0x1F0C1016); // rgba(12,16,22,.12)
+  static const sessionHot = Color(0x334A7A96); // nocturneAc @ ~20%
+  static const sessionGoHover = accentHover;
+  static const sessionOnSoft = Color(0x1F4A7A96); // nocturneAc @ ~12%
+  static const sessionOnRing = Color(0x594A7A96); // nocturneAc @ ~35%
+  static const sessionWarn = gold;
+  static const sessionWarnSoft = Color(0x14E8C547); // gold @ ~8%
+  static const sessionWarnRing = Color(0x4DE8C547); // gold @ ~30%
+  static const sessionKbd = Color(0x26101315); // nocturneBg @ ~15%
   static const sessionMenuShadow = Color(0x8C000000); // rgba(0,0,0,.55)
 
   /// Soft heading spotlight (accent @ 0.18).

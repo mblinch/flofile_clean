@@ -15,6 +15,13 @@ class PhotoEditSession extends ChangeNotifier {
   bool editing = false;
   bool cropping = false;
   bool saving = false;
+
+  /// Hold backslash to flash the ungraded original.
+  bool comparing = false;
+
+  /// Debug: paint the local-tone luminance mask instead of the grade.
+  bool debugMask = false;
+
   String? error;
 
   final Map<String, PhotoAdjustments> _drafts = {};
@@ -63,8 +70,35 @@ class PhotoEditSession extends ChangeNotifier {
   void toggleEditing() {
     if (saving || !AdminService.isCurrentUserAdminSync()) return;
     editing = !editing;
-    if (!editing) cropping = false;
+    if (!editing) {
+      cropping = false;
+      comparing = false;
+      debugMask = false;
+    }
     error = null;
+    notifyListeners();
+  }
+
+  /// Leaves edit/crop without requiring admin (used when previewing as user).
+  void exitEditing() {
+    if (!editing && !cropping && !comparing && !debugMask) return;
+    editing = false;
+    cropping = false;
+    comparing = false;
+    debugMask = false;
+    error = null;
+    notifyListeners();
+  }
+
+  void setComparing(bool value) {
+    if (!editing || comparing == value) return;
+    comparing = value;
+    notifyListeners();
+  }
+
+  void toggleDebugMask() {
+    if (!editing || saving) return;
+    debugMask = !debugMask;
     notifyListeners();
   }
 

@@ -185,7 +185,7 @@ class _StartupDialogState extends State<StartupDialog> {
     // Folder may have been chosen while prefs were still loading; ensure IPTC
     // from files is not overwritten by the preset load above.
     if (_selectedImageFiles.isNotEmpty &&
-        _iptcApplyMode == IptcApplyMode.onImport &&
+        _iptcApplyMode.appliesOnLoad &&
         (_iptcTemplateValues.isEmpty || _iptcKeysFoundInFiles.isEmpty)) {
       await _loadIptcFromFolderImages(_selectedImageFiles);
     }
@@ -380,7 +380,7 @@ class _StartupDialogState extends State<StartupDialog> {
       _iptcTemplateRevision++;
     });
     await _preferencesService.saveIptcApplyMode(mode);
-    if (mode == IptcApplyMode.onImport) {
+    if (mode.appliesOnLoad) {
       if (_selectedImageFiles.isNotEmpty || selectedFolderPath != null) {
         await _loadOriginalIptcValuesFromFiles();
       } else {
@@ -860,7 +860,7 @@ class _StartupDialogState extends State<StartupDialog> {
 
   Future<void> _loadIptcFromFolderImages(List<String> imageFiles) async {
     if (imageFiles.isEmpty || !mounted) return;
-    if (_iptcApplyMode != IptcApplyMode.onImport) return;
+    if (!_iptcApplyMode.appliesOnLoad) return;
     setState(() => _loadingIptcFromFiles = true);
     try {
       final folderIptc = await _collectIptcFromFolderSample(imageFiles);
@@ -909,8 +909,8 @@ class _StartupDialogState extends State<StartupDialog> {
       } else if (userChoseToKeep) {
         // User explicitly kept the template — don't let folder IPTC fill blank fields.
         merged = Map<String, String>.from(_iptcTemplateValues);
-      } else if (_iptcApplyMode == IptcApplyMode.onImport) {
-        // On import: show IPTC read from folder images.
+      } else if (_iptcApplyMode.appliesOnLoad) {
+        // On load: show IPTC read from folder images.
         merged = IptcTemplateApplyService.panelValuesFromImportedTemplate(
           folderIptc,
           _iptcWireStyle,
@@ -1333,7 +1333,7 @@ class _StartupDialogState extends State<StartupDialog> {
           setState(() {
             isExtractingDate = false;
           });
-          if (_iptcApplyMode == IptcApplyMode.onImport) {
+          if (_iptcApplyMode.appliesOnLoad) {
             await _loadIptcFromFolderImages(imageFiles);
           }
         } else {
@@ -1887,7 +1887,6 @@ class _StartupDialogState extends State<StartupDialog> {
   }
 
   Widget _buildSportSection() {
-    final isAdmin = AdminService.isCurrentUserAdminSync();
     final sportKey = (widget.sport ?? '').toLowerCase().trim();
     final tank01Supported = tank01SupportsSport(sportKey);
     return _sectionCard(
@@ -1898,41 +1897,53 @@ class _StartupDialogState extends State<StartupDialog> {
           selectedSport: widget.sport,
           onSportSelected: _onSportSelected,
         ),
-        if (isAdmin) ...[
-          const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              AppCompactCheckbox(
-                value: _useOfficialLeagueApis,
-                onChanged: tank01Supported
-                    ? (v) async {
-                        final prefs = await PreferencesService.getInstance();
-                        await prefs.saveUseOfficialLeagueApis(v);
-                        if (!mounted) return;
-                        setState(() => _useOfficialLeagueApis = v);
-                      }
-                    : null,
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  tank01Supported
-                      ? 'Use official league APIs (sports/…) — default is Tank01 Firebase'
-                      : 'Soccer always uses ESPN MLS',
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 10,
-                    fontVariations: const [FontVariation('wght', 600)],
-                    color: tank01Supported
-                        ? Colors.grey.shade800
-                        : Colors.grey.shade500,
-                  ),
+        ValueListenableBuilder<bool>(
+          valueListenable: AdminService.previewAsNonAdmin,
+          builder: (context, _, __) {
+            if (!AdminService.isCurrentUserAdminSync()) {
+              return const SizedBox.shrink();
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 10),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    AppCompactCheckbox(
+                      value: _useOfficialLeagueApis,
+                      onChanged: tank01Supported
+                          ? (v) async {
+                              final prefs =
+                                  await PreferencesService.getInstance();
+                              await prefs.saveUseOfficialLeagueApis(v);
+                              if (!mounted) return;
+                              setState(() => _useOfficialLeagueApis = v);
+                            }
+                          : null,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        tank01Supported
+                            ? 'Use official league APIs (sports/…) — default is Tank01 Firebase'
+                            : 'Soccer always uses ESPN MLS',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 10,
+                          fontVariations: const [FontVariation('wght', 600)],
+                          color: tank01Supported
+                              ? Colors.grey.shade800
+                              : Colors.grey.shade500,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            );
+          },
+        ),
       ],
     );
   }

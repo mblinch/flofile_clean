@@ -16,6 +16,7 @@ import '../../services/verb_admin_choice.dart';
 import '../../services/auth_service.dart';
 import '../../services/mlb_api_service.dart';
 import '../../theme/ff_tokens.dart';
+import '../../widgets/admin_mode_toggle.dart';
 import '../../widgets/admin_screen.dart';
 import '../../widgets/app_styled_dialogs.dart';
 import '../../widgets/caption_layout_builder_dialog.dart';
@@ -33,6 +34,7 @@ import 'data/caption_v2_controller.dart';
 import 'data/team_abbrev.dart';
 import 'layout/duplicate_jersey_dialog.dart';
 import 'layout/caption_v2_search.dart';
+import 'layout/caption_v2_iptc_dialog.dart';
 import 'layout/caption_v2_startup_screen.dart';
 import 'layout/desktop_drum_picker.dart';
 import 'layout/frame_review_route.dart';
@@ -40,6 +42,7 @@ import 'layout/photo_column.dart';
 import 'layout/roster_column.dart';
 import 'layout/roster_import_dialog.dart';
 import 'layout/verbs_column.dart';
+import '../../services/preferences_service.dart';
 import 'widgets/caption_strip.dart';
 import 'widgets/ftp_active_dialog.dart';
 import 'widgets/ftp_history_dialog.dart';
@@ -88,6 +91,10 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   bool _mobileThumbsOpen = false;
   bool _captionExpanded = false;
   int _lastSyncedColumnFocus = -1;
+  /// Auto-open IPTC once per session when caption fields are still missing.
+  bool _captionIptcAutoPromptDone = false;
+  bool _captionIptcDialogOpen = false;
+  int _captionIptcPromptSessionGen = -1;
 
   static const double _desktopBreakpoint = kCaptionV2MobileBreakpoint;
   static double get _gap => 10;
@@ -354,6 +361,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   }
 
   Future<void> _onStartupComplete(CaptionV2StartupResult result) async {
+    _captionIptcAutoPromptDone = false;
+    _captionIptcPromptSessionGen = -1;
     await _controller.applyStartup(
       sport: result.sport,
       homeTeam: result.homeTeam,
@@ -372,6 +381,30 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     );
     if (!mounted) return;
     await _confirmLoadedDuplicateJerseys(result);
+  }
+
+  Future<void> _openCaptionIptcEditor({bool force = false}) async {
+    if (!mounted || _captionIptcDialogOpen) return;
+    final c = _controller;
+    if (!force && c.missingCaptionIptcLabels.isEmpty) return;
+
+    _captionIptcDialogOpen = true;
+    try {
+      final summary = await showCaptionV2IptcDialog(
+        context,
+        folderPath: c.sessionFolderPath,
+        enableWriting: true,
+        populateFromFolder: true,
+      );
+      if (!mounted || summary == null) return;
+
+      final prefs = await PreferencesService.getInstance();
+      await prefs.saveIptcApplyMode(summary.mode);
+      await c.applyIptcTemplateToSessionImages();
+    } finally {
+      _captionIptcDialogOpen = false;
+      if (mounted) setState(() {});
+    }
   }
 
   Future<void> _confirmLoadedDuplicateJerseys(
@@ -1400,8 +1433,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
           _TopChrome(
             controller: sessionActive ? _controller : null,
             onResetSession: sessionActive ? _controller.resetToStartup : null,
-            onToggleMobileLayout:
-                sessionActive ? _toggleMobileLayoutPreview : null,
+            onToggleMobileLayout: _toggleMobileLayoutPreview,
             title: title,
             sessionChrome: sessionChrome,
           ),
@@ -1624,6 +1656,14 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
             body: _onGround(
               t,
               ValueListenableBuilder<bool>(
+                valueListenable: AdminService.previewAsNonAdmin,
+                builder: (context, previewAsUser, _) {
+                  if (previewAsUser && _photoEdit.editing) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      _photoEdit.exitEditing();
+                    });
+                  }
+                  return ValueListenableBuilder<bool>(
                 valueListenable: captionV2ForceMobilePreview,
                 builder: (context, forceMobile, _) {
                   return LayoutBuilder(
@@ -1675,6 +1715,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                         mobile: false,
                       );
                     },
+                  );
+                },
                   );
                 },
               ),
@@ -1749,6 +1791,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                   _MissingCaptionIptcBanner(
                     labels: c.missingCaptionIptcLabels,
                     tokens: t,
+                    onEdit: () => unawaited(_openCaptionIptcEditor(force: true)),
                   ),
                   const SizedBox(height: 6),
                 ],
@@ -2074,7 +2117,15 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   }
 
   Future<void> _openCaptionStyleEditor(CaptionV2Controller c) async {
-    final applied = await CaptionLayoutBuilderDialog.show(context);
+    final applied = await CaptionLayoutBuilderDialog.show(
+      context,
+      initialSport: c.sport,
+      previewHomeTeam: c.homeTeam.trim().isEmpty ? null : c.homeTeam,
+      previewAwayTeam: c.singleTeamMode || c.awayTeam.trim().isEmpty
+          ? null
+          : c.awayTeam,
+      previewGameInfo: c.currentGameInfoForCaption(),
+    );
     if (!mounted) return;
     if (applied != null) {
       c.captionTemplate = applied;
@@ -2089,50 +2140,60 @@ class _MissingCaptionIptcBanner extends StatelessWidget {
   const _MissingCaptionIptcBanner({
     required this.labels,
     required this.tokens,
+    required this.onEdit,
   });
 
   final List<String> labels;
   final FfTokens tokens;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: FfTokens.dangerBg,
+    return Material(
+      color: FfTokens.dangerBg,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onEdit,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: FfTokens.dangerBorder),
-      ),
-      child: Row(
-        children: [
-          const PhosphorIcon(
-            PhosphorIconsRegular.warning,
-            size: 14,
-            color: FfTokens.danger,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: FfTokens.dangerBorder),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Missing IPTC for caption: ${labels.join(', ')}',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontFamily: FfTokens.fontFamily,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
+          child: Row(
+            children: [
+              const PhosphorIcon(
+                PhosphorIconsRegular.warning,
+                size: 14,
                 color: FfTokens.danger,
               ),
-            ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Missing IPTC for caption: ${labels.join(', ')}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: FfTokens.danger,
+                  ),
+                ),
+              ),
+              Text(
+                'Open IPTC',
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: tokens.textTertiary,
+                ),
+              ),
+            ],
           ),
-          Text(
-            'Edit via photo menu',
-            style: TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontSize: 11,
-              color: tokens.textTertiary,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -2358,6 +2419,13 @@ class _TopChrome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: AdminService.previewAsNonAdmin,
+      builder: (context, _, __) => _buildChrome(context),
+    );
+  }
+
+  Widget _buildChrome(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final c = controller;
     final headerTitle = title?.trim();
@@ -2435,7 +2503,8 @@ class _TopChrome extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
               ],
-              if (AdminService.isCurrentUserAdminSync()) ...[
+              if (AdminService.isActuallyAdminSync() &&
+                  AdminService.isCurrentUserAdminSync()) ...[
                 if (defaultTargetPlatform == TargetPlatform.macOS) ...[
                   _AdminExportSizeButton(tokens: t, compact: compact),
                   const SizedBox(width: 8),
@@ -2449,6 +2518,8 @@ class _TopChrome extends StatelessWidget {
                   const SizedBox(width: 8),
                 ],
               ],
+              if (AdminService.isActuallyAdminSync())
+                AdminModeToggle(compact: compact),
               if (AuthService.instance.isSignedIn)
                 _SessionAvatar(
                   tokens: t,
@@ -2497,6 +2568,7 @@ class _TopChrome extends StatelessWidget {
   }
 
   Widget _buildSessionChrome(BuildContext context, String? headerTitle) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     return Container(
       height: 56,
       padding: const EdgeInsets.fromLTRB(20, 0, 14, 0),
@@ -2520,9 +2592,26 @@ class _TopChrome extends StatelessWidget {
               ),
             ),
           ),
+          if (AdminService.isActuallyAdminSync() &&
+              AdminService.isCurrentUserAdminSync()) ...[
+            if (defaultTargetPlatform == TargetPlatform.macOS) ...[
+              _AdminExportSizeButton(tokens: t, compact: true),
+              const SizedBox(width: 8),
+            ],
+            if (onToggleMobileLayout != null) ...[
+              _AdminMobileLayoutButton(
+                tokens: t,
+                compact: true,
+                onToggle: onToggleMobileLayout!,
+              ),
+              const SizedBox(width: 8),
+            ],
+          ],
+          if (AdminService.isActuallyAdminSync())
+            const AdminModeToggle(compact: true),
           if (AuthService.instance.isSignedIn)
             _SessionAvatar(
-              tokens: Theme.of(context).extension<FfTokens>() ?? FfTokens.dark,
+              tokens: t,
               admin: AdminService.isCurrentUserAdminSync(),
               sessionChrome: true,
               onAdminClosed: () async {},

@@ -74,6 +74,8 @@ class IptcTemplateEditor extends StatelessWidget {
     this.showTemplateControls = true,
     this.workspacePalette = false,
     this.leading,
+    this.applyMode,
+    this.onApplyModeChanged,
   });
 
   final WireStyle wire;
@@ -106,6 +108,10 @@ class IptcTemplateEditor extends StatelessWidget {
   /// Optional left column, used for the photo in Edit IPTC.
   final Widget? leading;
 
+  /// When set, shows Apply on load / save / FTP under the header.
+  final IptcApplyMode? applyMode;
+  final ValueChanged<IptcApplyMode>? onApplyModeChanged;
+
   static const _monoKeys = {
     'MEID',
     'Object Name',
@@ -127,148 +133,179 @@ class IptcTemplateEditor extends StatelessWidget {
     return IptcEditorPalette(
       colors: colors,
       child: LayoutBuilder(
-      builder: (context, constraints) {
-        final narrow = constraints.maxWidth < 1100;
-        final short = constraints.maxHeight < 700;
-        final tight = constraints.maxHeight < 560;
-        final fieldH = narrow ? (tight ? 32.0 : 38.0) : (short ? 28.0 : 32.0);
-        final padV = short ? 8.0 : 12.0;
-        final fields = Column(
-          children: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(12, 0, 12, 0),
-              child: _CaptionBox(
-                value: _display('Caption', specs['Caption']),
-                revision: revision,
-                enabled: fieldsEnabled,
-                compact: short,
-                onChanged: (v) => onValueChanged('Caption', v),
+        builder: (context, constraints) {
+          // Match IPTC Editor v2.html breakpoints.
+          final h = constraints.maxHeight.isFinite
+              ? constraints.maxHeight
+              : 800.0;
+          final w = constraints.maxWidth.isFinite
+              ? constraints.maxWidth
+              : 1200.0;
+          final compact = h < 820 || w < 1100;
+          final narrow = w < 1100;
+          final fieldH = narrow ? 36.0 : 32.0;
+          final gap = compact ? 8.0 : 10.0;
+
+          final story = _group(
+            colors: colors,
+            icon: PhosphorIconsRegular.article,
+            title: 'Story',
+            compact: compact,
+            children: [
+              _text(specs, 'Headline', narrow, fieldH),
+              _text(specs, 'Personality', narrow, fieldH),
+              _text(specs, 'Keywords', narrow, fieldH),
+              _text(
+                specs,
+                'Special Instructions',
+                narrow,
+                fieldH,
+                display: 'Instructions',
               ),
-            ),
-            SizedBox(height: tight ? 6 : 10),
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(12, 0, 12, padV),
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(child: _group(
-                            colors: colors,
-                            icon: PhosphorIconsRegular.article,
-                            title: 'Story',
-                            children: [
-                              _text(specs, 'Headline', narrow, fieldH),
-                              _text(specs, 'Personality', narrow, fieldH),
-                              _text(specs, 'Keywords', narrow, fieldH),
-                              _text(specs, 'Special Instructions', narrow, fieldH),
-                            ],
-                          )),
-                          const SizedBox(width: 10),
-                          Expanded(child: _group(
-                            colors: colors,
-                            icon: PhosphorIconsRegular.user,
-                            title: 'Credit',
-                            children: [
-                              _text(specs, 'Creator', narrow, fieldH),
-                              _text(specs, 'Job Title', narrow, fieldH, display: 'Job title'),
-                              _text(
-                                specs,
-                                'Description Writers',
-                                narrow,
-                                fieldH,
-                                display: 'Writers',
-                              ),
-                              _text(specs, 'Credit', narrow, fieldH),
-                              _text(specs, 'Source', narrow, fieldH),
-                              _text(specs, 'Copyright', narrow, fieldH),
-                            ],
-                          )),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Expanded(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(child: _group(
-                            colors: colors,
-                            icon: PhosphorIconsRegular.mapPin,
-                            title: 'Location',
-                            children: [
-                              _text(specs, 'Location', narrow, fieldH, display: 'Venue'),
-                              _text(specs, 'City', narrow, fieldH),
-                              _text(
-                                specs,
-                                'Province/State',
-                                narrow,
-                                fieldH,
-                                display: 'Province',
-                              ),
-                              _country(specs, narrow, fieldH),
-                            ],
-                          )),
-                          const SizedBox(width: 10),
-                          Expanded(child: _group(
-                            colors: colors,
-                            icon: PhosphorIconsRegular.folderSimple,
-                            title: 'Filing',
-                            children: [
-                              _text(specs, 'MEID', narrow, fieldH),
-                              _text(specs, 'Object Name', narrow, fieldH, display: 'Object name'),
-                              _text(specs, 'Category', narrow, fieldH),
-                              _supp(specs, narrow, fieldH, colors),
-                              _urgency(specs, narrow, fieldH),
-                            ],
-                          )),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+            ],
+          );
+          final credit = _group(
+            colors: colors,
+            icon: PhosphorIconsRegular.user,
+            title: 'Credit',
+            compact: compact,
+            children: [
+              _text(specs, 'Creator', narrow, fieldH),
+              _text(specs, 'Job Title', narrow, fieldH, display: 'Job title'),
+              _text(
+                specs,
+                'Description Writers',
+                narrow,
+                fieldH,
+                display: 'Writers',
               ),
-            ),
-          ],
-        );
-        return Column(
-          children: [
-            _Header(
-              title: title,
-              subtitle: subtitle,
-              showTemplateControls: showTemplateControls,
-              templates: templates,
-              selectedTemplateId: selectedTemplateId,
-              onTemplateSelected: onTemplateSelected,
-              onLoad: loadEnabled ? onLoadTemplate : null,
-              onClear: clearEnabled ? onClearTemplate : null,
-              onSave: fieldsEnabled ? onSaveTemplate : null,
-              loadingTemplate: loadingTemplate,
-              onClose: onCancel,
-              compact: short,
-            ),
-            Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+              _text(specs, 'Credit', narrow, fieldH),
+              _text(specs, 'Source', narrow, fieldH),
+              _text(specs, 'Copyright', narrow, fieldH),
+            ],
+          );
+          final location = _group(
+            colors: colors,
+            icon: PhosphorIconsRegular.mapPin,
+            title: 'Location',
+            compact: compact,
+            children: [
+              _text(specs, 'Location', narrow, fieldH, display: 'Venue'),
+              _text(specs, 'City', narrow, fieldH),
+              _text(
+                specs,
+                'Province/State',
+                narrow,
+                fieldH,
+                display: 'State/Province',
+              ),
+              _country(specs, narrow, fieldH),
+            ],
+          );
+          final filing = _group(
+            colors: colors,
+            icon: PhosphorIconsRegular.folderSimple,
+            title: 'Filing',
+            compact: compact,
+            children: [
+              _text(specs, 'MEID', narrow, fieldH),
+              _text(
+                specs,
+                'Object Name',
+                narrow,
+                fieldH,
+                display: 'Object name',
+              ),
+              _text(specs, 'Category', narrow, fieldH),
+              _supp(specs, narrow, fieldH, colors),
+              _urgency(specs, narrow, fieldH),
+            ],
+          );
+
+          // Always 2×2: Story | Credit / Location | Filing.
+          final grid = Column(
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (leading != null) leading!,
-                  Expanded(child: fields),
+                  Expanded(child: story),
+                  SizedBox(width: gap),
+                  Expanded(child: credit),
                 ],
               ),
+              SizedBox(height: gap),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: location),
+                  SizedBox(width: gap),
+                  Expanded(child: filing),
+                ],
+              ),
+            ],
+          );
+
+          final body = ListView(
+            padding: EdgeInsets.fromLTRB(
+              compact ? 12 : 16,
+              compact ? 8 : 14,
+              compact ? 12 : 16,
+              compact ? 8 : 16,
             ),
-            _Footer(
-              emptyRequired: _emptyRequiredCount(specs),
-              compact: short,
-              doneLabel: doneLabel,
-              onCancel: onCancel,
-              onDone: onDone,
-            ),
-          ],
-        );
-      },
-    ),
+            children: [
+              if (applyMode != null) ...[
+                _ApplyWhenBar(
+                  mode: applyMode!,
+                  onChanged: onApplyModeChanged,
+                  compact: compact,
+                ),
+                SizedBox(height: compact ? 6 : 10),
+              ],
+              _CaptionOmittedNote(compact: compact),
+              SizedBox(height: compact ? 6 : 10),
+              grid,
+            ],
+          );
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _Header(
+                title: title,
+                subtitle: subtitle,
+                showTemplateControls: showTemplateControls,
+                templates: templates,
+                selectedTemplateId: selectedTemplateId,
+                onTemplateSelected: onTemplateSelected,
+                onLoad: loadEnabled ? onLoadTemplate : null,
+                onClear: clearEnabled ? onClearTemplate : null,
+                onSave: fieldsEnabled ? onSaveTemplate : null,
+                loadingTemplate: loadingTemplate,
+                onClose: onCancel,
+                compact: compact,
+              ),
+              Expanded(
+                child: leading == null
+                    ? body
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          leading!,
+                          Expanded(child: body),
+                        ],
+                      ),
+              ),
+              _Footer(
+                missingLabels: _emptyRequiredLabels(specs),
+                compact: compact,
+                doneLabel: doneLabel,
+                onCancel: onCancel,
+                onDone: onDone,
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -331,7 +368,7 @@ class IptcTemplateEditor extends StatelessWidget {
   bool _allSuppBlank(Map<String, WireIptcFieldSpec> specs) =>
       _suppLabels.every((label) => _suppBlank(specs, label));
 
-  int _emptyRequiredCount(Map<String, WireIptcFieldSpec> specs) {
+  List<String> _emptyRequiredLabels(Map<String, WireIptcFieldSpec> specs) {
     const keys = [
       'Headline',
       'Personality',
@@ -356,22 +393,22 @@ class IptcTemplateEditor extends StatelessWidget {
       'Supp Cat 3',
       'Urgency',
     ];
-    var n = 0;
+    final out = <String>[];
     var countedSupp = false;
     for (final label in keys) {
       final spec = specs[label];
       if (label == 'Urgency') continue;
       if (_gettyNeedsOneSupp && _suppLabels.contains(label)) {
         if (!countedSupp && _allSuppBlank(specs)) {
-          n++;
+          out.add('Supplemental Category');
           countedSupp = true;
         }
         continue;
       }
       if (!_required(spec)) continue;
-      if (_blank(label, spec)) n++;
+      if (_blank(label, spec)) out.add(label);
     }
-    return n;
+    return out;
   }
 
   Widget _group({
@@ -379,13 +416,19 @@ class IptcTemplateEditor extends StatelessWidget {
     required IconData icon,
     required String title,
     required List<Widget> children,
+    bool compact = false,
   }) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      padding: EdgeInsets.fromLTRB(
+        compact ? 8 : 12,
+        compact ? 8 : 10,
+        compact ? 8 : 12,
+        compact ? 8 : 12,
+      ),
       decoration: BoxDecoration(
         color: colors.group,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         border: colors.workspace
             ? Border.all(color: FfTokens.nocturneLn2)
             : null,
@@ -395,18 +438,18 @@ class IptcTemplateEditor extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
+            padding: EdgeInsets.fromLTRB(2, 0, 2, compact ? 2 : 6),
             child: Row(
               children: [
-                PhosphorIcon(icon, size: 14, color: colors.t3),
-                const SizedBox(width: 6),
+                PhosphorIcon(icon, size: 15, color: colors.t3),
+                const SizedBox(width: 8),
                 Text(
                   title.toUpperCase(),
                   style: TextStyle(
                     fontFamily: FfTokens.fontFamily,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    letterSpacing: 0.8,
+                    letterSpacing: 0.1 * 13,
                     color: colors.t3,
                   ),
                 ),
@@ -639,8 +682,11 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = IptcEditorPalette.of(context);
     final entries = templates;
-    return Padding(
+    return Container(
       padding: EdgeInsets.fromLTRB(20, compact ? 8 : 12, 12, compact ? 8 : 12),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: colors.line)),
+      ),
       child: Row(
         children: [
           Text(
@@ -676,40 +722,145 @@ class _Header extends StatelessWidget {
               onTap: onClose,
             ),
           ] else ...[
-          const SizedBox(width: 12),
-          _TemplateDropdown(
-            entries: entries,
-            selectedTemplateId: selectedTemplateId,
-            onSelected: onTemplateSelected,
-          ),
-          const SizedBox(width: 4),
-          _LinkButton(
-            icon: PhosphorIconsRegular.uploadSimple,
-            label: loadingTemplate ? 'Loading' : 'Load',
-            tooltip: 'Load from XMP, Getty TXT, or JPG',
-            onTap: onLoad,
-          ),
-          Text(
-            'XMP, Getty TXT, or JPG',
-            style: TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontSize: 12,
-              color: colors.t3,
+            const SizedBox(width: 8),
+            _TemplateDropdown(
+              entries: entries,
+              selectedTemplateId: selectedTemplateId,
+              onSelected: onTemplateSelected,
             ),
-          ),
-          const SizedBox(width: 16),
-          _LinkButton(
-            icon: PhosphorIconsRegular.floppyDisk,
-            label: 'Save template',
-            tooltip: 'Save these fields as a template',
-            onTap: onSave,
-          ),
-          _ClearLink(onTap: onClear),
-          const Spacer(),
-          _IconButton(icon: PhosphorIconsRegular.x, tooltip: 'Close', onTap: onClose),
+            const SizedBox(width: 4),
+            _LinkButton(
+              icon: PhosphorIconsRegular.floppyDisk,
+              label: 'Save template',
+              tooltip: 'Save changes to this template',
+              onTap: onSave,
+              compact: compact,
+            ),
+            const Spacer(),
+            _LinkButton(
+              icon: PhosphorIconsRegular.uploadSimple,
+              label: loadingTemplate
+                  ? 'Importing…'
+                  : 'Import from JPG, Getty TXT, or XMP',
+              tooltip: 'Import from JPG, Getty TXT, or XMP',
+              onTap: onLoad,
+            ),
+            _ClearLink(onTap: onClear, compact: compact),
+            Container(
+              width: 1,
+              height: 20,
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              color: colors.line,
+            ),
+            _IconButton(
+              icon: PhosphorIconsRegular.x,
+              tooltip: 'Close',
+              onTap: onClose,
+            ),
           ],
         ],
       ),
+    );
+  }
+}
+
+/// Apply bar: On load on/off only.
+class _ApplyWhenBar extends StatelessWidget {
+  const _ApplyWhenBar({
+    required this.mode,
+    required this.onChanged,
+    required this.compact,
+  });
+
+  final IptcApplyMode mode;
+  final ValueChanged<IptcApplyMode>? onChanged;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = IptcEditorPalette.of(context);
+    final onLoad = mode.appliesOnLoad;
+    return Row(
+      children: [
+        Text(
+          'APPLY',
+          style: TextStyle(
+            fontFamily: FfTokens.fontFamily,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.1 * 13,
+            color: colors.t3,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Material(
+          color: colors.group,
+          borderRadius: BorderRadius.circular(8),
+          child: InkWell(
+            onTap: onChanged == null
+                ? null
+                : () => onChanged!(
+                      onLoad ? IptcApplyMode.none : IptcApplyMode.onImport,
+                    ),
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              height: 32,
+              padding: const EdgeInsets.fromLTRB(8, 0, 10, 0),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 16,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      color:
+                          onLoad ? FfTokens.sessionOn : Colors.transparent,
+                      borderRadius: BorderRadius.circular(4),
+                      border: onLoad
+                          ? null
+                          : Border.all(color: FfTokens.sessionLn2),
+                    ),
+                    child: onLoad
+                        ? const PhosphorIcon(
+                            PhosphorIconsBold.check,
+                            size: 11,
+                            color: Colors.white,
+                          )
+                        : null,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'On load',
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: onLoad ? colors.tx : colors.t2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (!compact) ...[
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              onLoad
+                  ? 'Written to every photo as soon as the folder opens'
+                  : 'Don’t write IPTC when the folder opens',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 12,
+                color: colors.t3,
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -729,18 +880,28 @@ class _TemplateDropdown extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = IptcEditorPalette.of(context);
     final ids = entries.map((e) => e.id).toSet();
-    final selected = ids.contains(selectedTemplateId) ? selectedTemplateId : null;
+    final selected =
+        ids.contains(selectedTemplateId) ? selectedTemplateId : null;
     return Container(
       width: 220,
-      height: 32,
+      height: 34,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         color: colors.field,
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: selected,
+          hint: Text(
+            'Choose',
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: colors.t3,
+            ),
+          ),
           isExpanded: true,
           isDense: true,
           dropdownColor: colors.group,
@@ -787,34 +948,44 @@ class _LinkButton extends StatelessWidget {
     required this.label,
     required this.tooltip,
     required this.onTap,
+    this.compact = false,
   });
 
   final IconData icon;
   final String label;
   final String tooltip;
   final VoidCallback? onTap;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final colors = IptcEditorPalette.of(context);
     return Tooltip(
       message: tooltip,
-      child: TextButton.icon(
+      child: TextButton(
         onPressed: onTap,
         style: TextButton.styleFrom(
           foregroundColor: colors.t2,
           padding: const EdgeInsets.symmetric(horizontal: 10),
-          minimumSize: const Size(0, 32),
+          minimumSize: const Size(0, 34),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
-        icon: PhosphorIcon(icon, size: 15, color: colors.t2),
-        label: Text(
-          label,
-          style: const TextStyle(
-            fontFamily: FfTokens.fontFamily,
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            PhosphorIcon(icon, size: 16, color: colors.t2),
+            if (!compact) ...[
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -822,8 +993,9 @@ class _LinkButton extends StatelessWidget {
 }
 
 class _ClearLink extends StatefulWidget {
-  const _ClearLink({required this.onTap});
+  const _ClearLink({required this.onTap, this.compact = false});
   final VoidCallback? onTap;
+  final bool compact;
 
   @override
   State<_ClearLink> createState() => _ClearLinkState();
@@ -837,27 +1009,43 @@ class _ClearLinkState extends State<_ClearLink> {
     final colors = IptcEditorPalette.of(context);
     final enabled = widget.onTap != null;
     final hot = enabled && _hover;
-    final color = hot ? const Color(0xFFF07A7A) : colors.t2;
+    final color = hot ? const Color(0xFFF07167) : colors.t2;
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
-      child: TextButton.icon(
-        onPressed: widget.onTap,
-        style: TextButton.styleFrom(
-          foregroundColor: color,
-          backgroundColor: hot ? const Color(0x14F07A7A) : Colors.transparent,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          minimumSize: const Size(0, 32),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
-        icon: PhosphorIcon(PhosphorIconsRegular.trash, size: 15, color: color),
-        label: Text(
-          'Clear all',
-          style: TextStyle(
-            fontFamily: FfTokens.fontFamily,
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: color,
+      child: Tooltip(
+        message: 'Clear all',
+        child: TextButton(
+          onPressed: widget.onTap,
+          style: TextButton.styleFrom(
+            foregroundColor: color,
+            backgroundColor:
+                hot ? const Color(0x1AF07167) : Colors.transparent,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            minimumSize: const Size(0, 34),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              PhosphorIcon(
+                PhosphorIconsRegular.trash,
+                size: 16,
+                color: color,
+              ),
+              if (!widget.compact) ...[
+                const SizedBox(width: 6),
+                Text(
+                  'Clear all',
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       ),
@@ -894,126 +1082,52 @@ class _IconButton extends StatelessWidget {
   }
 }
 
-class _CaptionBox extends StatefulWidget {
-  const _CaptionBox({
-    required this.value,
-    required this.revision,
-    required this.enabled,
-    required this.compact,
-    required this.onChanged,
-  });
+class _CaptionOmittedNote extends StatelessWidget {
+  const _CaptionOmittedNote({required this.compact});
 
-  final String value;
-  final int revision;
-  final bool enabled;
   final bool compact;
-  final ValueChanged<String> onChanged;
-
-  @override
-  State<_CaptionBox> createState() => _CaptionBoxState();
-}
-
-class _CaptionBoxState extends State<_CaptionBox> {
-  late final TextEditingController _controller;
-  late final FocusNode _focus;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.value);
-    _focus = FocusNode();
-    _focus.addListener(_onFocus);
-  }
-
-  void _onFocus() {
-    if (_focus.hasFocus &&
-        IptcTemplateApplyService.isInAppGeneratedPlaceholder(_controller.text)) {
-      _controller.clear();
-      widget.onChanged('');
-    }
-    setState(() {});
-  }
-
-  @override
-  void didUpdateWidget(_CaptionBox oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (_focus.hasFocus) return;
-    if (_controller.text != widget.value) _controller.text = widget.value;
-  }
-
-  @override
-  void dispose() {
-    _focus.dispose();
-    _controller.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
     final colors = IptcEditorPalette.of(context);
-    final count = _controller.text.trim() ==
-            IptcTemplateApplyService.inAppGeneratedPlaceholder
-        ? 0
-        : _controller.text.length;
     return Container(
-      padding: EdgeInsets.fromLTRB(14, widget.compact ? 8 : 10, 14, widget.compact ? 8 : 10),
+      padding: EdgeInsets.fromLTRB(
+        14,
+        compact ? 8 : 10,
+        14,
+        compact ? 8 : 10,
+      ),
       decoration: BoxDecoration(
         color: colors.group,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         border: colors.workspace
             ? Border.all(color: FfTokens.nocturneLn2)
             : null,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                'CAPTION',
-                style: TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.8,
-                  color: colors.t3,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                '$count / 2000',
-                style: TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontSize: 11,
-                  color: colors.t3,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-            ],
+          PhosphorIcon(
+            PhosphorIconsRegular.info,
+            size: 16,
+            color: colors.t3,
           ),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _controller,
-            focusNode: _focus,
-            enabled: widget.enabled,
-            maxLines: null,
-            minLines: 2,
-            scrollPhysics: const NeverScrollableScrollPhysics(),
-            style: TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontSize: widget.compact ? 13 : 14,
-              height: widget.compact ? 19 / 13 : 21 / 14,
-              color: colors.tx,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Caption isn’t in this template — existing captions stay on your '
+              'photos and are written later when you caption in the session.\n'
+              '\n'
+              'If photos already have Personality or Keywords, Go time asks '
+              'whether to merge (add onto what’s there) or overwrite with '
+              'these values.',
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 12,
+                height: 1.35,
+                color: colors.t2,
+              ),
             ),
-            decoration: const InputDecoration(
-              isCollapsed: true,
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.zero,
-            ),
-            onChanged: (v) {
-              setState(() {});
-              widget.onChanged(v);
-            },
           ),
         ],
       ),
@@ -1080,10 +1194,11 @@ class _FieldSlot extends StatelessWidget {
     );
 
     if (narrow) {
+      // Fixed height — never use Positioned.fill in a scroll view (unbounded).
       return Padding(
         padding: const EdgeInsets.only(bottom: 4),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: height),
+        child: SizedBox(
+          height: height,
           child: Stack(
             children: [
               Positioned.fill(child: child),
@@ -1100,14 +1215,14 @@ class _FieldSlot extends StatelessWidget {
       );
     }
 
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 2),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: height),
-          child: Row(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: SizedBox(
+        height: height,
+        child: Row(
           children: [
-            SizedBox(width: 96, child: labelWidget),
-            const SizedBox(width: 8),
+            SizedBox(width: 104, child: labelWidget),
+            const SizedBox(width: 10),
             Expanded(child: child),
           ],
         ),
@@ -1321,14 +1436,14 @@ class _UrgencyInputState extends State<_UrgencyInput> {
 
 class _Footer extends StatelessWidget {
   const _Footer({
-    required this.emptyRequired,
+    required this.missingLabels,
     required this.compact,
     required this.doneLabel,
     required this.onCancel,
     required this.onDone,
   });
 
-  final int emptyRequired;
+  final List<String> missingLabels;
   final bool compact;
   final String doneLabel;
   final VoidCallback onCancel;
@@ -1337,10 +1452,10 @@ class _Footer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = IptcEditorPalette.of(context);
-    final ok = emptyRequired == 0;
+    final ok = missingLabels.isEmpty;
     final label = ok
-        ? 'All required fields filled'
-        : '$emptyRequired required field${emptyRequired == 1 ? '' : 's'} empty';
+        ? 'All suggested fields filled'
+        : 'Missing: ${missingLabels.join(', ')}';
     return Container(
       padding: EdgeInsets.fromLTRB(20, compact ? 8 : 10, 12, compact ? 8 : 12),
       decoration: BoxDecoration(
@@ -1362,7 +1477,7 @@ class _Footer extends StatelessWidget {
               style: TextStyle(
                 fontFamily: FfTokens.fontFamily,
                 fontSize: 13,
-                color: colors.t2,
+                color: ok ? colors.t2 : _warn,
               ),
             ),
           ),
@@ -1377,7 +1492,7 @@ class _Footer extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            'Required',
+            'Suggested',
             style: TextStyle(
               fontFamily: FfTokens.fontFamily,
               fontSize: 12,
@@ -1389,7 +1504,7 @@ class _Footer extends StatelessWidget {
             onPressed: onCancel,
             style: TextButton.styleFrom(
               foregroundColor: colors.t2,
-              minimumSize: Size(0, compact ? 32 : 36),
+              minimumSize: const Size(0, 38),
               padding: const EdgeInsets.symmetric(horizontal: 16),
             ),
             child: const Text(
@@ -1412,30 +1527,69 @@ class _Footer extends StatelessWidget {
               ),
             )
           else
-            FilledButton.icon(
-              onPressed: onDone,
-              icon: const PhosphorIcon(
-                PhosphorIconsBold.check,
-                size: 14,
-                color: FfTokens.sessionBg,
-              ),
-              label: Text(doneLabel),
-              style: FilledButton.styleFrom(
-                backgroundColor: FfTokens.sessionTx,
-                foregroundColor: FfTokens.sessionBg,
-                minimumSize: Size(0, compact ? 32 : 36),
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                textStyle: const TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-            ),
+            _DoneButton(label: doneLabel, onPressed: onDone),
         ],
+      ),
+    );
+  }
+}
+
+class _DoneButton extends StatelessWidget {
+  const _DoneButton({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(9),
+        child: Ink(
+          height: 38,
+          padding: const EdgeInsets.fromLTRB(16, 0, 18, 0),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(9),
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFF243848),
+                Color(0xFF15242E),
+                Color(0xFF0E181F),
+              ],
+            ),
+            border: Border.all(color: const Color(0xF24A7A96)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x404A7A96),
+                blurRadius: 18,
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const PhosphorIcon(
+                PhosphorIconsBold.check,
+                size: 15,
+                color: Colors.white,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

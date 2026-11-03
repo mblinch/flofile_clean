@@ -7,6 +7,7 @@ import '../services/admin_service.dart';
 import '../theme/app_tokens.dart';
 import '../theme/ff_tokens.dart';
 import '../services/auth_service.dart';
+import 'admin_mode_toggle.dart';
 import 'admin_screen.dart';
 import 'app_styled_dialogs.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
@@ -34,6 +35,13 @@ class FloChromeHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: AdminService.previewAsNonAdmin,
+      builder: (context, _, __) => _buildBar(context),
+    );
+  }
+
+  Widget _buildBar(BuildContext context) {
     final ff = Theme.of(context).extension<FfTokens>();
     final useV2Chrome = accountOnly && ff != null;
 
@@ -76,6 +84,10 @@ class FloChromeHeader extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             _chromeBadge('Beta'),
+            if (AdminService.isActuallyAdminSync()) ...[
+              const SizedBox(width: 6),
+              AdminModeToggle(compact: true, onDarkChrome: true),
+            ],
             if (AdminService.isCurrentUserAdminSync()) ...[
               const SizedBox(width: 6),
               AdminBadgeButton(
@@ -106,8 +118,15 @@ class FloChromeHeader extends StatelessWidget {
             ),
             const FloHeaderRestartButton(),
           ] else ...[
-            if (AdminService.isCurrentUserAdminSync()) ...[
+            if (AdminService.isActuallyAdminSync()) ...[
               const SizedBox(width: 12),
+              AdminModeToggle(
+                compact: true,
+                onDarkChrome: !useV2Chrome,
+              ),
+            ],
+            if (AdminService.isCurrentUserAdminSync()) ...[
+              const SizedBox(width: 6),
               AdminBadgeButton(
                 child: _chromeBadge(
                   'Admin',

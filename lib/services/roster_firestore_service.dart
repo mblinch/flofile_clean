@@ -42,7 +42,45 @@ class RosterFirestoreService {
   }) =>
       _db.collection(rootCollection).doc(sportId).collection('teams');
 
-  /// Lists team docs under `{root}/{sportId}/teams` (id + displayName).
+  /// Patches stadium / arena on `teams/{teamId}` without touching players.
+  static Future<void> writeTeamVenue({
+    required String sportId,
+    required String teamId,
+    required String venueName,
+    String rootCollection = leagueRootCollection,
+    String? teamDisplayName,
+    String? source,
+  }) async {
+    if (!isAvailable) return;
+    final venue = venueName.trim();
+    if (venue.isEmpty) return;
+    final teamRef =
+        teamsCollection(sportId, rootCollection: rootCollection).doc(teamId);
+    final teamDoc = await teamRef.get();
+    final curData = teamDoc.data() ?? const <String, dynamic>{};
+    final patch = <String, dynamic>{};
+    if (curData['venueName'] != venue) {
+      patch['venueName'] = venue;
+      patch['venueUpdatedAt'] = FieldValue.serverTimestamp();
+    }
+    final label = teamDisplayName?.trim();
+    if (label != null &&
+        label.isNotEmpty &&
+        curData['displayName'] != label) {
+      patch['displayName'] = label;
+      patch['teamUpdatedAt'] = FieldValue.serverTimestamp();
+    }
+    if (source != null &&
+        source.trim().isNotEmpty &&
+        curData['source'] != source.trim()) {
+      patch['source'] = source.trim();
+    }
+    if (patch.isEmpty) return;
+    await teamRef.set(patch, SetOptions(merge: true));
+  }
+
+  /// Lists team docs under `{root}/{sportId}/teams`
+  /// (id + displayName + optional venueName / locationName).
   static Future<List<TeamInfo>> listTeams({
     required String sportId,
     String rootCollection = leagueRootCollection,
@@ -58,7 +96,15 @@ class RosterFirestoreService {
       final name = (data['displayName'] as String?)?.trim();
       final label =
           (name != null && name.isNotEmpty) ? name : doc.id;
-      out.add(TeamInfo(id: doc.id, name: label));
+      final venue = (data['venueName'] as String?)?.trim();
+      final location = (data['locationName'] as String?)?.trim();
+      out.add(TeamInfo(
+        id: doc.id,
+        name: label,
+        locationName:
+            (location != null && location.isNotEmpty) ? location : null,
+        venueName: (venue != null && venue.isNotEmpty) ? venue : null,
+      ));
     }
     out.sort((a, b) => a.name.compareTo(b.name));
     return out;
@@ -152,6 +198,9 @@ class RosterFirestoreService {
 
     /// Optional marker written onto the team doc (e.g. `tank01`).
     String? source,
+
+    /// Home stadium / arena from the league API (stored on the team doc).
+    String? venueName,
   }) async {
     if (!isAvailable) return;
     final teamRef =
@@ -222,6 +271,13 @@ class RosterFirestoreService {
         source.trim().isNotEmpty &&
         curData['source'] != source.trim()) {
       teamDocPatch['source'] = source.trim();
+    }
+    final venue = venueName?.trim();
+    if (venue != null &&
+        venue.isNotEmpty &&
+        curData['venueName'] != venue) {
+      teamDocPatch['venueName'] = venue;
+      teamDocPatch['venueUpdatedAt'] = FieldValue.serverTimestamp();
     }
 
     if (adds.isEmpty &&

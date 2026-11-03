@@ -85,6 +85,11 @@ flutter:
 
   shaders:
     - shaders/photo_grade.frag
+    - shaders/photo_mask_luma.frag
+    - shaders/photo_box_blur.frag
+    - shaders/photo_mask_square.frag
+    - shaders/photo_guided_ab.frag
+    - shaders/photo_guided_compose.frag
   
   assets:
     - assets/images/

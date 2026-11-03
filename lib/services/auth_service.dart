@@ -83,6 +83,10 @@ class AuthService {
     try {
       final prefs = await PreferencesService.getInstance();
       await prefs.ensureAppDefaultsHydrated();
+      final photographer = (await prefs.getPhotographerName()).trim();
+      CurrentUserService.setPhotographerNameOverride(
+        photographer.isEmpty ? null : photographer,
+      );
     } catch (e, st) {
       print('[Auth] Failed to load app defaults: $e');
       print(st);
@@ -107,6 +111,10 @@ class AuthService {
       } else if (syncResult.action == UserPreferencesSyncAction.failed) {
         debugPrint('[Auth] Cloud settings sync failed: ${syncResult.error}');
       }
+      final photographer = (await prefs.getPhotographerName()).trim();
+      CurrentUserService.setPhotographerNameOverride(
+        photographer.isEmpty ? null : photographer,
+      );
     } catch (e, st) {
       print('[Auth] Failed to persist sync account id: $e');
       print(st);

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
 import '../screens/caption_v2/data/caption_v2_controller.dart';
@@ -7,7 +8,7 @@ import '../screens/caption_v2/widgets/mobile_photo_filmstrip.dart';
 import '../screens/caption_v2/widgets/photo_preview_bar.dart';
 import '../theme/ff_tokens.dart';
 import '../widgets/oriented_file_preview.dart';
-import 'photo_adjustments.dart';
+import 'photo_adjust_config.dart';
 import 'photo_crop_overlay.dart';
 import 'photo_edit_session.dart';
 import 'photo_histogram.dart';
@@ -101,7 +102,7 @@ class PhotoEditModeButton extends StatelessWidget {
 }
 
 /// Full-window edit mode: sliders on the left, the frame large, filmstrip below.
-class PhotoEditWorkspace extends StatelessWidget {
+class PhotoEditWorkspace extends StatefulWidget {
   const PhotoEditWorkspace({
     super.key,
     required this.session,
@@ -112,61 +113,125 @@ class PhotoEditWorkspace extends StatelessWidget {
   final CaptionV2Controller controller;
 
   @override
+  State<PhotoEditWorkspace> createState() => _PhotoEditWorkspaceState();
+}
+
+class _PhotoEditWorkspaceState extends State<PhotoEditWorkspace> {
+  @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    return ColoredBox(
-      color: tokens.bg,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final railWidth = constraints.maxWidth < 760 ? 216.0 : 280.0;
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SizedBox(
-                      width: railWidth,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: tokens.surface,
-                          border: Border(
-                            right: BorderSide(color: tokens.divider),
+    final session = widget.session;
+    final controller = widget.controller;
+    return _CompareKeyBinder(
+      session: session,
+      child: ColoredBox(
+        color: tokens.bg,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final railWidth = constraints.maxWidth < 760 ? 216.0 : 280.0;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(
+                        width: railWidth,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: tokens.surface,
+                            border: Border(
+                              right: BorderSide(color: tokens.divider),
+                            ),
+                          ),
+                          child: _PhotoEditSheet(
+                            session: session,
+                            controller: controller,
+                            rail: true,
                           ),
                         ),
-                        child: _PhotoEditSheet(
+                      ),
+                      Expanded(
+                        child: _EditStage(
                           session: session,
                           controller: controller,
-                          rail: true,
                         ),
                       ),
-                    ),
-                    Expanded(
-                      child: _EditStage(
-                        session: session,
-                        controller: controller,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  color: tokens.surface,
-                  border: Border(top: BorderSide(color: tokens.divider)),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: tokens.surface,
+                    border: Border(top: BorderSide(color: tokens.divider)),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                    child: MobilePhotoFilmstrip(controller: controller),
+                  ),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-                  child: MobilePhotoFilmstrip(controller: controller),
-                ),
-              ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }
+}
+
+/// Hold backslash to flash the ungraded original while editing.
+class _CompareKeyBinder extends StatefulWidget {
+  const _CompareKeyBinder({
+    required this.session,
+    required this.child,
+  });
+
+  final PhotoEditSession session;
+  final Widget child;
+
+  @override
+  State<_CompareKeyBinder> createState() => _CompareKeyBinderState();
+}
+
+class _CompareKeyBinderState extends State<_CompareKeyBinder> {
+  @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_onHardwareKey);
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onHardwareKey);
+    widget.session.setComparing(false);
+    super.dispose();
+  }
+
+  bool _editingTextField() {
+    final primary = FocusManager.instance.primaryFocus;
+    final ctx = primary?.context;
+    if (ctx == null) return false;
+    if (ctx.widget is EditableText) return true;
+    return ctx.findAncestorWidgetOfExactType<EditableText>() != null;
+  }
+
+  bool _onHardwareKey(KeyEvent event) {
+    if (!widget.session.editing || _editingTextField()) return false;
+    if (event.logicalKey != LogicalKeyboardKey.backslash) return false;
+    if (event is KeyDownEvent) {
+      widget.session.setComparing(true);
+      return true;
+    }
+    if (event is KeyUpEvent) {
+      widget.session.setComparing(false);
+      return true;
+    }
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class _EditStage extends StatelessWidget {
@@ -223,11 +288,13 @@ class _EditStage extends StatelessWidget {
                                 path: path,
                                 version: version,
                                 fit: BoxFit.contain,
-                                cacheWidth: 1800,
+                                cacheWidth: PhotoAdjustConfig.previewLongEdge,
                                 adjustments: grade.isNeutral ? null : grade,
                                 viewCrop: viewCrop != null && !viewCrop.isFull
                                     ? viewCrop
                                     : null,
+                                compareOriginal: session.comparing,
+                                debugMask: session.debugMask,
                               ),
                               if (cropping)
                                 PhotoCropOverlay(
@@ -277,49 +344,52 @@ class PhotoEditCover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        child,
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: sheetOnly ? null : 0,
-          child: AnimatedBuilder(
-            animation: session,
-            builder: (context, _) {
-              final open = session.editing;
-              return IgnorePointer(
-                ignoring: !open,
-                child: ClipRect(
-                  child: AnimatedSlide(
-                    offset: open ? Offset.zero : const Offset(0, 1),
-                    duration: const Duration(milliseconds: 220),
-                    curve: Curves.easeOutCubic,
-                    child: sheetOnly
-                        ? _PhotoEditSheet(
-                            session: session,
-                            controller: controller,
-                          )
-                        : ColoredBox(
-                            color: (Theme.of(context).extension<FfTokens>() ??
-                                    FfTokens.dark)
-                                .surface,
-                            child: Align(
-                              alignment: Alignment.topCenter,
-                              child: _PhotoEditSheet(
-                                session: session,
-                                controller: controller,
+    return _CompareKeyBinder(
+      session: session,
+      child: Stack(
+        children: [
+          child,
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: sheetOnly ? null : 0,
+            child: AnimatedBuilder(
+              animation: session,
+              builder: (context, _) {
+                final open = session.editing;
+                return IgnorePointer(
+                  ignoring: !open,
+                  child: ClipRect(
+                    child: AnimatedSlide(
+                      offset: open ? Offset.zero : const Offset(0, 1),
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOutCubic,
+                      child: sheetOnly
+                          ? _PhotoEditSheet(
+                              session: session,
+                              controller: controller,
+                            )
+                          : ColoredBox(
+                              color: (Theme.of(context).extension<FfTokens>() ??
+                                      FfTokens.dark)
+                                  .surface,
+                              child: Align(
+                                alignment: Alignment.topCenter,
+                                child: _PhotoEditSheet(
+                                  session: session,
+                                  controller: controller,
+                                ),
                               ),
                             ),
-                          ),
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -380,7 +450,7 @@ class _PhotoEditSheet extends StatelessWidget {
                             ? null
                             : () => session.reset(path),
                         child: Text(
-                          'Reset',
+                          'Reset all',
                           style: tokens.metaStyle.copyWith(
                             color: tokens.textSecondary,
                             fontWeight: FontWeight.w600,
@@ -407,6 +477,34 @@ class _PhotoEditSheet extends StatelessWidget {
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: path == null || saving
+                            ? null
+                            : session.toggleDebugMask,
+                        child: Text(
+                          session.debugMask ? 'Mask on' : 'Mask',
+                          style: tokens.metaStyle.copyWith(
+                            color: session.debugMask
+                                ? tokens.accent
+                                : tokens.textSecondary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        session.comparing
+                            ? 'Before (\\)'
+                            : 'Hold \\ for before',
+                        style: tokens.metaStyle.copyWith(
+                          color: tokens.textTertiary,
+                          fontSize: tokens.textSizeMicro,
+                        ),
                       ),
                     ],
                   ),
@@ -440,11 +538,37 @@ class _PhotoEditSheet extends StatelessWidget {
                     const SizedBox(height: 8),
                   ],
                   _GradeSlider(
+                    label: 'Temp',
+                    value: adjustments.temperature,
+                    min: PhotoAdjustConfig.sliderUiMin,
+                    max: PhotoAdjustConfig.sliderUiMax,
+                    displayScale: 1,
+                    tokens: tokens,
+                    enabled: path != null && !saving,
+                    onChanged: (v) => session.update(
+                      path!,
+                      adjustments.copyWith(temperature: v),
+                    ),
+                  ),
+                  _GradeSlider(
+                    label: 'Tint',
+                    value: adjustments.tint,
+                    min: PhotoAdjustConfig.sliderUiMin,
+                    max: PhotoAdjustConfig.sliderUiMax,
+                    displayScale: 1,
+                    tokens: tokens,
+                    enabled: path != null && !saving,
+                    onChanged: (v) => session.update(
+                      path!,
+                      adjustments.copyWith(tint: v),
+                    ),
+                  ),
+                  _GradeSlider(
                     label: 'Exposure',
                     value: adjustments.exposure,
-                    min: -5,
-                    max: 5,
-                    fractionDigits: 1,
+                    min: PhotoAdjustConfig.exposureStopsMin,
+                    max: PhotoAdjustConfig.exposureStopsMax,
+                    fractionDigits: 2,
                     displayScale: 1,
                     tokens: tokens,
                     enabled: path != null && !saving,
@@ -456,8 +580,9 @@ class _PhotoEditSheet extends StatelessWidget {
                   _GradeSlider(
                     label: 'Contrast',
                     value: adjustments.contrast,
-                    min: -1,
-                    max: 1,
+                    min: PhotoAdjustConfig.sliderUiMin,
+                    max: PhotoAdjustConfig.sliderUiMax,
+                    displayScale: 1,
                     tokens: tokens,
                     enabled: path != null && !saving,
                     onChanged: (v) => session.update(
@@ -466,22 +591,11 @@ class _PhotoEditSheet extends StatelessWidget {
                     ),
                   ),
                   _GradeSlider(
-                    label: 'Shadows',
-                    value: adjustments.shadows,
-                    min: -1,
-                    max: 1,
-                    tokens: tokens,
-                    enabled: path != null && !saving,
-                    onChanged: (v) => session.update(
-                      path!,
-                      adjustments.copyWith(shadows: v),
-                    ),
-                  ),
-                  _GradeSlider(
                     label: 'Highlights',
                     value: adjustments.highlights,
-                    min: -1,
-                    max: 1,
+                    min: PhotoAdjustConfig.sliderUiMin,
+                    max: PhotoAdjustConfig.sliderUiMax,
+                    displayScale: 1,
                     tokens: tokens,
                     enabled: path != null && !saving,
                     onChanged: (v) => session.update(
@@ -490,10 +604,24 @@ class _PhotoEditSheet extends StatelessWidget {
                     ),
                   ),
                   _GradeSlider(
+                    label: 'Shadows',
+                    value: adjustments.shadows,
+                    min: PhotoAdjustConfig.sliderUiMin,
+                    max: PhotoAdjustConfig.sliderUiMax,
+                    displayScale: 1,
+                    tokens: tokens,
+                    enabled: path != null && !saving,
+                    onChanged: (v) => session.update(
+                      path!,
+                      adjustments.copyWith(shadows: v),
+                    ),
+                  ),
+                  _GradeSlider(
                     label: 'Whites',
                     value: adjustments.whites,
-                    min: -1,
-                    max: 1,
+                    min: PhotoAdjustConfig.sliderUiMin,
+                    max: PhotoAdjustConfig.sliderUiMax,
+                    displayScale: 1,
                     tokens: tokens,
                     enabled: path != null && !saving,
                     onChanged: (v) => session.update(
@@ -504,8 +632,9 @@ class _PhotoEditSheet extends StatelessWidget {
                   _GradeSlider(
                     label: 'Blacks',
                     value: adjustments.blacks,
-                    min: -1,
-                    max: 1,
+                    min: PhotoAdjustConfig.sliderUiMin,
+                    max: PhotoAdjustConfig.sliderUiMax,
+                    displayScale: 1,
                     tokens: tokens,
                     enabled: path != null && !saving,
                     onChanged: (v) => session.update(
@@ -514,37 +643,39 @@ class _PhotoEditSheet extends StatelessWidget {
                     ),
                   ),
                   _GradeSlider(
-                    label: 'Color temp',
-                    value: adjustments.temperature,
-                    min: -1,
-                    max: 1,
+                    label: 'Vibrance',
+                    value: adjustments.vibrance,
+                    min: PhotoAdjustConfig.sliderUiMin,
+                    max: PhotoAdjustConfig.sliderUiMax,
+                    displayScale: 1,
                     tokens: tokens,
                     enabled: path != null && !saving,
                     onChanged: (v) => session.update(
                       path!,
-                      adjustments.copyWith(temperature: v),
+                      adjustments.copyWith(vibrance: v),
                     ),
                   ),
                   _GradeSlider(
-                    label: 'Tint',
-                    value: adjustments.tint,
-                    min: -1,
-                    max: 1,
+                    label: 'Saturation',
+                    value: adjustments.saturation,
+                    min: PhotoAdjustConfig.sliderUiMin,
+                    max: PhotoAdjustConfig.sliderUiMax,
+                    displayScale: 1,
                     tokens: tokens,
                     enabled: path != null && !saving,
                     onChanged: (v) => session.update(
                       path!,
-                      adjustments.copyWith(tint: v),
+                      adjustments.copyWith(saturation: v),
                     ),
                   ),
                   Align(
                     alignment: Alignment.centerLeft,
                     child: Padding(
                       padding: const EdgeInsets.only(top: 2),
-                        child: Text(
-                          session.cropping
-                              ? 'Drag the frame. Double-click or Enter shows the crop.'
-                              : 'Apply saves into the JPEG and keeps the caption.',
+                      child: Text(
+                        session.cropping
+                            ? 'Drag the frame. Double-click or Enter shows the crop.'
+                            : 'Double-click a slider to reset it. Apply keeps EXIF/IPTC/XMP.',
                         style: tokens.metaStyle.copyWith(
                           color: tokens.textTertiary,
                           fontSize: tokens.textSizeMicro,

@@ -2,35 +2,69 @@
 
 #include <flutter/runtime_effect.glsl>
 
-// Keep in sync with gradeLinearRgb in photo_adjustments.dart.
+// Camera Raw–style grade. Keep formulas in sync with photo_adjustments.dart
+// and constants in photo_adjust_config.dart.
+//
+// Pipeline (linear RGB):
+//   1 sRGB→linear  2 WB  3 Exposure  4 Contrast
+//   5 Highlights/Shadows (mask)  6 Whites/Blacks
+//   7 Vibrance/Saturation  8 Soft shoulder
+//   9 linear→sRGB  10 ordered dither
+
 uniform float uDestLeft;
 uniform float uDestTop;
 uniform float uDestWidth;
 uniform float uDestHeight;
-uniform float uExposure;
-uniform float uContrast;
-uniform float uShadows;
-uniform float uHighlights;
-uniform float uTemperature;
-uniform float uTint;
-uniform float uWhites;
-uniform float uBlacks;
-uniform float uHasBase;
+uniform float uTemperature;   // eased −1…1
+uniform float uTint;          // eased −1…1
+uniform float uExposure;      // stops
+uniform float uContrast;      // eased −1…1
+uniform float uHighlights;    // eased −1…1
+uniform float uShadows;       // eased −1…1
+uniform float uWhites;        // eased −1…1
+uniform float uBlacks;        // eased −1…1
+uniform float uVibrance;      // eased −1…1
+uniform float uSaturation;    // eased −1…1
+uniform float uHasMask;       // 1 when local tone mask is bound
+uniform float uDebugMask;     // 1 = show mask instead of graded image
+uniform float uDither;        // 1 = apply ±0.5/255 ordered dither
 uniform float uCropLeft;
 uniform float uCropTop;
 uniform float uCropWidth;
 uniform float uCropHeight;
+// Tunables mirrored from PhotoAdjustConfig (so one place in Dart can push them).
+uniform float uTempStrength;
+uniform float uTintStrength;
+uniform float uContrastPivot;
+uniform float uContrastStrength;
+uniform float uHiMaskLo;
+uniform float uHiMaskHi;
+uniform float uShMaskLo;
+uniform float uShMaskHi;
+uniform float uLocalToneStrength;
+uniform float uWhitesStart;
+uniform float uWhitesAmount;
+uniform float uBlacksEnd;
+uniform float uBlacksAmount;
+uniform float uVibranceAmount;
+uniform float uSaturationAmount;
+uniform float uSkinHueCenter;
+uniform float uSkinHueWidth;
+uniform float uSkinVibranceScale;
+uniform float uShoulderKnee;
+uniform float uShoulderRoom;
+uniform float uDitherAmp;
+uniform float uMaskBlend;     // 0.8 filtered + 0.2 sharp already baked into mask tex
 
 uniform sampler2D uTex;
-uniform sampler2D uBase;
+uniform sampler2D uMask;
 
 out vec4 fragColor;
 
-const vec3 kLuma = vec3(0.2126729, 0.7151522, 0.0721750);
-const float kLogMin = -13.287712379549449;
-const float kLogMax = 2.0;
+const vec3 kLuma = vec3(0.2126, 0.7152, 0.0722);
 
 float srgbToLinear(float c) {
+  // Piecewise sRGB EOTF — not pow(c, 2.2).
   return (c <= 0.04045) ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4);
 }
 
@@ -44,181 +78,177 @@ float gradeSmoothstep(float edge0, float edge1, float x) {
   return t * t * (3.0 - 2.0 * t);
 }
 
-float temperatureKelvin(float slider) {
-  float t = clamp(slider, -1.0, 1.0);
-  if (abs(t) < 0.0005) return 6500.0;
-  float curved = sign(t) * pow(abs(t), 1.6);
-  if (curved >= 0.0) return 6500.0 * pow(2000.0 / 6500.0, curved);
-  return 6500.0 * pow(50000.0 / 6500.0, -curved);
+// Unpack ~16-bit value stored in R/G of the mask texture.
+float unpackMask(vec4 texel) {
+  return (texel.r * 255.0 * 256.0 + texel.g * 255.0) / 65535.0;
 }
 
-vec3 kelvinToRgb(float kelvin) {
-  float k = clamp(kelvin, 1000.0, 50000.0) / 100.0;
-  float r = (k <= 66.0)
-      ? 1.0
-      : clamp(1.2929361860620923 * pow(k - 60.0, -0.1332047592), 0.0, 1.0);
-  float g = (k <= 66.0)
-      ? clamp(0.3900815787690196 * log(k) - 0.6318414437886275, 0.0, 1.0)
-      : clamp(1.129890860895294 * pow(k - 60.0, -0.0755148492), 0.0, 1.0);
-  float b = 1.0;
-  if (k < 66.0) {
-    b = (k <= 19.0)
-        ? 0.0
-        : clamp(0.543206789110196 * log(k - 10.0) - 1.19625408914, 0.0, 1.0);
-  }
-  return vec3(r, g, b);
-}
-
-vec3 linearSrgbToXyz(vec3 c) {
-  return vec3(
-    dot(c, vec3(0.4124564, 0.3575761, 0.1804375)),
-    dot(c, vec3(0.2126729, 0.7151522, 0.0721750)),
-    dot(c, vec3(0.0193339, 0.1191920, 0.9503041))
+vec3 whiteBalance(vec3 c, float temperature, float tint) {
+  if (abs(temperature) < 1e-6 && abs(tint) < 1e-6) return c;
+  vec3 gain = vec3(
+    max(1.0 + uTempStrength * temperature, 1e-4),
+    max(1.0 - uTintStrength * tint, 1e-4),
+    max(1.0 - uTempStrength * temperature, 1e-4)
   );
-}
-
-vec3 xyzToLinearSrgb(vec3 c) {
-  return vec3(
-    dot(c, vec3(3.2404542, -1.5371385, -0.4985314)),
-    dot(c, vec3(-0.9692660, 1.8760108, 0.0415560)),
-    dot(c, vec3(0.0556434, -0.2040259, 1.0572252))
-  );
-}
-
-vec3 whiteBalanceGain(float temperature, float tint) {
-  if (abs(temperature) < 0.0005 && abs(tint) < 0.0005) return vec3(1.0);
-  vec3 gain = vec3(1.0);
-  if (abs(temperature) >= 0.0005) {
-    vec3 ill = kelvinToRgb(temperatureKelvin(temperature));
-    vec3 d65 = kelvinToRgb(6500.0);
-    gain = ill / d65;
-  }
-  if (abs(tint) >= 0.0005) {
-    vec3 xyz = linearSrgbToXyz(gain);
-    float sum = xyz.x + xyz.y + xyz.z;
-    if (sum > 1e-8) {
-      float chromaX = xyz.x / sum;
-      float chromaY = clamp(xyz.y / sum - tint * 0.045, 0.04, 0.75);
-      float bigX = chromaX / chromaY;
-      float bigZ = (1.0 - chromaX - chromaY) / chromaY;
-      gain = xyzToLinearSrgb(vec3(bigX, 1.0, bigZ));
-    }
-  }
+  // Renormalize so overall luminance is preserved.
   float y = dot(gain, kLuma);
-  return gain / max(y, 1e-4);
+  gain /= max(y, 1e-4);
+  return c * gain;
 }
 
-float exposeLinear(float x, float ev) {
-  if (abs(ev) < 0.0005) return x;
-  float gained = x * exp2(ev);
-  if (ev < 0.0 || gained <= 0.80) return gained;
-  float over = gained - 0.80;
-  return 0.80 + 0.20 * (over / (over + 0.20));
+// Contrast: stretch log2 stops about mid-grey, then rescale RGB (preserve hue).
+vec3 applyContrast(vec3 c, float amount) {
+  if (abs(amount) < 1e-6) return c;
+  float y = dot(max(c, 0.0), kLuma);
+  if (y <= 1e-8) return c;
+  float stops = log2(y / uContrastPivot);
+  float shaped = stops * (1.0 + uContrastStrength * amount);
+  float y2 = max(0.0, uContrastPivot * exp2(shaped));
+  return c * (y2 / y);
 }
 
-float contrastCurve(float y, float amount) {
-  if (abs(amount) < 0.0005 || y <= 0.0) return y;
-  float stops = log2(y / 0.18);
-  float shaped = stops + amount * 1.15 * tanh(stops);
-  return max(0.0, 0.18 * exp2(shaped));
+vec3 applyLocalTone(vec3 c, float mask01, float highlights, float shadows) {
+  if (abs(highlights) < 1e-6 && abs(shadows) < 1e-6) return c;
+  float hiW = gradeSmoothstep(uHiMaskLo, uHiMaskHi, mask01);
+  float shW = 1.0 - gradeSmoothstep(uShMaskLo, uShMaskHi, mask01);
+  // Negative highlights darken brights; positive shadows lift darks.
+  float stops = hiW * highlights * uLocalToneStrength
+              + shW * shadows * uLocalToneStrength;
+  return c * exp2(stops);
 }
 
-float whitesBlacksCurve(float y, float whites, float blacks) {
-  if (abs(whites) < 0.0005 && abs(blacks) < 0.0005) return y;
+vec3 applyWhitesBlacks(vec3 c, float whites, float blacks) {
+  if (abs(whites) < 1e-6 && abs(blacks) < 1e-6) return c;
+  float y = dot(max(c, 0.0), kLuma);
   float x = y;
-  if (abs(blacks) >= 0.0005) {
-    float knee = 1.0 - gradeSmoothstep(0.0, 0.02, x);
-    if (blacks > 0.0) x += blacks * 0.045 * knee;
+  if (abs(blacks) >= 1e-6) {
+    float knee = 1.0 - gradeSmoothstep(0.0, uBlacksEnd, x);
+    if (blacks > 0.0) x += blacks * uBlacksAmount * knee;
     else x *= 1.0 + blacks * knee;
   }
-  if (abs(whites) >= 0.0005) {
-    float knee = gradeSmoothstep(0.55, 1.0, x);
-    x += whites * 0.40 * knee;
+  if (abs(whites) >= 1e-6) {
+    float knee = gradeSmoothstep(uWhitesStart, 1.0, x);
+    x += whites * uWhitesAmount * knee;
   }
-  return max(x, 0.0);
+  x = max(x, 0.0);
+  if (y < 1e-8) return c;
+  return c * (x / y);
 }
 
-float shadowMask(float linearBase) {
-  float display = linearToSrgb(clamp(linearBase, 0.0, 1.0));
-  float weight = 1.0 - gradeSmoothstep(0.05, 0.62, display);
-  return pow(clamp(weight, 0.0, 1.0), 1.05);
+float hueDegrees(vec3 c) {
+  float maxC = max(c.r, max(c.g, c.b));
+  float minC = min(c.r, min(c.g, c.b));
+  float d = maxC - minC;
+  if (d < 1e-8) return 0.0;
+  float h;
+  if (maxC == c.r) h = mod((c.g - c.b) / d, 6.0);
+  else if (maxC == c.g) h = (c.b - c.r) / d + 2.0;
+  else h = (c.r - c.g) / d + 4.0;
+  h *= 60.0;
+  if (h < 0.0) h += 360.0;
+  return h;
 }
 
-float shadowTone(float linearY, float amount) {
-  float display = linearToSrgb(clamp(linearY, 0.0, 1.0));
-  float weight = pow(max(1.0 - gradeSmoothstep(0.0, 0.58, display), 0.0), 1.15);
-  float next = (amount >= 0.0)
-      ? display + amount * 0.34 * weight * (1.0 - display)
-      : display * (1.0 + amount * 0.75 * weight);
-  return srgbToLinear(clamp(next, 0.0, 1.0));
+float chroma(vec3 c, float y) {
+  vec3 d = c - vec3(y);
+  return sqrt(dot(d, d));
 }
 
-float highlightMask(float linearBase) {
-  if (linearBase > 1.0) return exp(-(linearBase - 1.0));
-  float display = linearToSrgb(clamp(linearBase, 0.0, 1.0));
-  float rise = gradeSmoothstep(0.55, 0.82, display);
-  float hold = 1.0 - gradeSmoothstep(0.94, 1.0, display);
-  return rise * hold;
-}
+vec3 applyVibranceSaturation(vec3 c, float vibrance, float saturation) {
+  if (abs(vibrance) < 1e-6 && abs(saturation) < 1e-6) return c;
+  float y = dot(max(c, 0.0), kLuma);
+  vec3 outc = c;
 
-float highlightTone(float linearY, float amount) {
-  float display = linearToSrgb(clamp(linearY, 0.0, 1.0));
-  if (amount >= 0.0) {
-    float weight = gradeSmoothstep(0.45, 0.90, display);
-    return srgbToLinear(clamp(display + amount * 0.25 * weight * (1.0 - display), 0.0, 1.0));
+  if (abs(vibrance) >= 1e-6) {
+    float sat = chroma(outc, y);
+    float lowSatWeight = 1.0 - clamp(sat * 2.5, 0.0, 1.0);
+    float hue = hueDegrees(outc);
+    float skinDist = min(abs(hue - uSkinHueCenter), 360.0 - abs(hue - uSkinHueCenter));
+    float skin = 1.0 - gradeSmoothstep(0.0, uSkinHueWidth, skinDist);
+    float skinScale = pow(uSkinVibranceScale, skin);
+    float amount = vibrance * uVibranceAmount * lowSatWeight * skinScale;
+    outc = vec3(y) + (outc - vec3(y)) * (1.0 + amount);
   }
-  float weight = gradeSmoothstep(0.50, 0.88, display) *
-      (1.0 - gradeSmoothstep(0.96, 1.0, display));
-  return srgbToLinear(clamp(display + amount * 0.28 * weight, 0.0, 1.0));
+
+  if (abs(saturation) >= 1e-6) {
+    float amount = saturation * uSaturationAmount;
+    outc = vec3(y) + (outc - vec3(y)) * (1.0 + amount);
+  }
+  return outc;
 }
 
-float decodeBase(float encoded) {
-  float logv = kLogMin + encoded * (kLogMax - kLogMin);
-  return exp2(logv) - 1e-4;
+// Soft highlight shoulder, hue-preserving via max-channel scale.
+vec3 softShoulder(vec3 c) {
+  float m = max(c.r, max(c.g, c.b));
+  if (m <= uShoulderKnee || m < 1e-8) return c;
+  float over = m - uShoulderKnee;
+  float m2 = uShoulderKnee + over / (1.0 + over / uShoulderRoom);
+  return c * (m2 / m);
 }
 
-vec3 gradeLinear(vec3 c, float baseLuma) {
-  c.r = exposeLinear(c.r, uExposure);
-  c.g = exposeLinear(c.g, uExposure);
-  c.b = exposeLinear(c.b, uExposure);
-  float y = whitesBlacksCurve(contrastCurve(dot(max(c, 0.0), kLuma), uContrast), uWhites, uBlacks);
-  float current = dot(max(c, 0.0), kLuma);
-  if (current > 1e-8) c *= y / current;
-
-  if (abs(uShadows) < 0.0005 && abs(uHighlights) < 0.0005) return c;
-  y = dot(max(c, 0.0), kLuma);
-  if (y < 1e-6) return c;
-  float base = baseLuma >= 0.0 ? baseLuma : y;
-  float tone = y;
-  if (abs(uShadows) >= 0.0005) {
-    float curved = shadowTone(tone, uShadows);
-    tone += (curved - tone) * shadowMask(base);
-  }
-  if (abs(uHighlights) >= 0.0005) {
-    float curved = highlightTone(tone, uHighlights);
-    tone += (curved - tone) * highlightMask(base);
-  }
-  return c * clamp(tone / y, 0.05, 8.0);
+// Bayer 4×4 → −1…1
+float bayerDither(vec2 frag) {
+  int x = int(mod(floor(frag.x), 4.0));
+  int y = int(mod(floor(frag.y), 4.0));
+  // 4×4 Bayer matrix / 16 − 0.5, then *2 → −1…1
+  int idx = y * 4 + x;
+  float v = 0.0;
+  if (idx == 0) v = 0.0;
+  else if (idx == 1) v = 8.0;
+  else if (idx == 2) v = 2.0;
+  else if (idx == 3) v = 10.0;
+  else if (idx == 4) v = 12.0;
+  else if (idx == 5) v = 4.0;
+  else if (idx == 6) v = 14.0;
+  else if (idx == 7) v = 6.0;
+  else if (idx == 8) v = 3.0;
+  else if (idx == 9) v = 11.0;
+  else if (idx == 10) v = 1.0;
+  else if (idx == 11) v = 9.0;
+  else if (idx == 12) v = 15.0;
+  else if (idx == 13) v = 7.0;
+  else if (idx == 14) v = 13.0;
+  else v = 5.0;
+  return (v / 16.0 - 0.5) * 2.0;
 }
 
 void main() {
-  vec2 uv = (FlutterFragCoord().xy - vec2(uDestLeft, uDestTop)) /
-      vec2(uDestWidth, uDestHeight);
+  vec2 frag = FlutterFragCoord().xy;
+  vec2 uv = (frag - vec2(uDestLeft, uDestTop)) / vec2(uDestWidth, uDestHeight);
   uv = vec2(uCropLeft, uCropTop) + uv * vec2(uCropWidth, uCropHeight);
+
+  // Mask is sampled with the sampler's LINEAR filter (never nearest).
+  float mask01 = 0.5;
+  if (uHasMask > 0.5) {
+    mask01 = unpackMask(texture(uMask, uv));
+  }
+
+  if (uDebugMask > 0.5) {
+    fragColor = vec4(vec3(mask01), 1.0);
+    return;
+  }
+
   vec4 src = texture(uTex, uv);
-  vec3 lin = vec3(
-    srgbToLinear(src.r),
-    srgbToLinear(src.g),
-    srgbToLinear(src.b)
+  vec3 lin = vec3(srgbToLinear(src.r), srgbToLinear(src.g), srgbToLinear(src.b));
+
+  lin = whiteBalance(lin, uTemperature, uTint);
+  lin *= exp2(uExposure);
+  lin = applyContrast(lin, uContrast);
+  lin = applyLocalTone(lin, mask01, uHighlights, uShadows);
+  lin = applyWhitesBlacks(lin, uWhites, uBlacks);
+  lin = applyVibranceSaturation(lin, uVibrance, uSaturation);
+  lin = softShoulder(lin);
+
+  vec3 srgb = vec3(
+    linearToSrgb(lin.r),
+    linearToSrgb(lin.g),
+    linearToSrgb(lin.b)
   );
-  lin *= whiteBalanceGain(uTemperature, uTint);
-  float base = -1.0;
-  if (uHasBase > 0.5) base = decodeBase(texture(uBase, uv).r);
-  vec3 graded = gradeLinear(lin, base);
-  fragColor = vec4(
-    clamp(linearToSrgb(graded.r), 0.0, 1.0),
-    clamp(linearToSrgb(graded.g), 0.0, 1.0),
-    clamp(linearToSrgb(graded.b), 0.0, 1.0),
-    src.a
-  );
+
+  if (uDither > 0.5) {
+    float d = bayerDither(frag) * uDitherAmp;
+    srgb += vec3(d);
+  }
+
+  fragColor = vec4(clamp(srgb, 0.0, 1.0), src.a);
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
 import '../../../services/mac_spell_check_service.dart';
+import '../../../services/preferences_service.dart';
 import '../../../theme/ff_tokens.dart';
 import '../data/caption_v2_controller.dart' show CaptionProvenanceSpan;
 
@@ -1095,15 +1096,35 @@ class _CaptionPanel extends StatefulWidget {
 
 class _CaptionPanelState extends State<_CaptionPanel> {
   bool _hovered = false;
-  double _captionSize = 15;
+  double _captionSize = PreferencesService.captionTextSizeDefault;
+  PreferencesService? _prefs;
 
-  static const double _minCaptionSize = 13;
-  static const double _maxCaptionSize = 26;
+  @override
+  void initState() {
+    super.initState();
+    _loadCaptionSize();
+  }
 
-  void _stepCaptionSize(double delta) {
+  Future<void> _loadCaptionSize() async {
+    final prefs = await PreferencesService.getInstance();
+    final size = await prefs.getCaptionTextSize();
+    if (!mounted) return;
     setState(() {
-      _captionSize = (_captionSize + delta).clamp(_minCaptionSize, _maxCaptionSize);
+      _prefs = prefs;
+      _captionSize = size;
     });
+  }
+
+  Future<void> _stepCaptionSize(double delta) async {
+    final next = (_captionSize + delta).clamp(
+      PreferencesService.captionTextSizeMin,
+      PreferencesService.captionTextSizeMax,
+    );
+    if (next == _captionSize) return;
+    setState(() => _captionSize = next);
+    final prefs = _prefs ?? await PreferencesService.getInstance();
+    _prefs = prefs;
+    await prefs.saveCaptionTextSize(next);
   }
 
   @override
@@ -1118,8 +1139,8 @@ class _CaptionPanelState extends State<_CaptionPanel> {
     final Color? alert = multi ? multiAlert : (burst ? burstAlert : null);
     final sizeStepper = _CaptionSizeStepper(
       tokens: t,
-      canDecrease: _captionSize > _minCaptionSize,
-      canIncrease: _captionSize < _maxCaptionSize,
+      canDecrease: _captionSize > PreferencesService.captionTextSizeMin,
+      canIncrease: _captionSize < PreferencesService.captionTextSizeMax,
       onDecrease: () => _stepCaptionSize(-1),
       onIncrease: () => _stepCaptionSize(1),
     );

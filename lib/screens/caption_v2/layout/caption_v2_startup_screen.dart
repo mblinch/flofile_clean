@@ -11,7 +11,9 @@ import '../../../caption_style/caption_formula_renderer.dart';
 import '../../../caption_style/caption_style_catalog.dart';
 import '../../../caption_style/caption_template.dart';
 import '../../../caption_style/game_info.dart';
+import '../../../caption_style/team_home_place.dart';
 import '../../../config/tank01_config.dart';
+import '../../../caption_style/wire_iptc_specs.dart';
 import '../../../services/admin_service.dart';
 import '../../../services/api_manager.dart';
 import '../../../services/app_defaults_firestore_service.dart';
@@ -24,8 +26,12 @@ import '../../../services/preferences_service.dart';
 import '../../../services/verb_admin_choice.dart';
 import '../../../theme/ff_tokens.dart';
 import '../../../utils/native_file_picker.dart';
+import '../../../services/camera_serial_service.dart';
 import '../../../widgets/app_styled_dialogs.dart';
+import '../../../widgets/camera_serial_dialog.dart';
 import '../../../widgets/ff_menu.dart';
+import '../../../widgets/ftp_settings_panel.dart';
+import '../../../widgets/file_rename_dialog.dart';
 import '../../../widgets/caption_layout_builder_dialog.dart';
 import '../data/team_abbrev.dart';
 import 'caption_v2_iptc_dialog.dart';
@@ -92,16 +98,30 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   final _rootFocus = FocusNode();
   final _awayFocus = FocusNode();
   final _homeFocus = FocusNode();
+  final _captionBuilderKey = GlobalKey<CaptionLayoutBuilderDialogState>();
+  Future<void> Function()? _flushCaptionBuilder;
+  bool _savingCaptionDefault = false;
   PreferencesService? _prefs;
 
   String? _sport;
   int _sportSelectGen = 0;
   String? _folderPath;
   int _imageCount = 0;
+  /// Caption preview date: EXIF from folder photos, else today.
+  DateTime _previewPhotoDate = DateTime.now();
+  /// True when [_previewPhotoDate] came from a folder photo; false when today.
+  bool _previewDateFromFolder = false;
   String? _homeTeam;
   String? _awayTeam;
   List<Player>? _homeRoster;
   List<Player>? _awayRoster;
+  /// Real roster names for the caption style preview / shuffle.
+  List<CaptionPreviewPlayer> _captionPreviewPlayers = const [];
+  int _captionPreviewRosterGen = 0;
+  int _captionPreviewSeed =
+      DateTime.now().microsecondsSinceEpoch & 0x7fffffff;
+  /// Home venue from the league API when available.
+  String? _previewHomeVenue;
 
   List<String> _teams = const [];
   bool _loadingTeams = false;
@@ -115,13 +135,20 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   String? _favoriteHome;
   String? _favoriteAway;
   bool _useOfficialLeagueApis = false;
-  bool _isAdmin = false;
   IptcApplyMode _iptcMode = IptcApplyMode.none;
-  String _iptcStatus = "Don't write IPTC";
+  String _iptcStatus = 'Off';
   List<String> _missingCaptionIptc = const [];
   bool _scanningIptc = false;
   int _iptcScanGen = 0;
+
+  /// Latest folder + template IPTC panel values (for caption / structure preview).
+  Map<String, String> _iptcPanelForPreview = const {};
+
+  /// True when sampled folder photos already have Personality and/or Keywords.
+  bool _folderHasPersonalityOrKeywords = false;
   bool _ftpModeEnabled = true;
+  bool _fileRenamingEnabled = true;
+  String _fileRenameTemplate = '';
   String? _ftpProfileName;
   List<String> _ftpProfileNames = const [];
   /// When true, the caption Firebar is hidden. Same pref as the session menu.
@@ -130,17 +157,16 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   /// session header toggle.
   bool _jerseyOcrEnabled = false;
   bool _serialBylinesEnabled = false;
-  List<MapEntry<String, String>> _recentMatchups = const [];
-  StreamSubscription<void>? _cloudPrefsSub;
   int? _openMenuId;
 
   CaptionStyleCatalog? _styleCatalog;
   CaptionTemplate? _captionTemplate;
   String? _selectedStyleToken;
-  /// Null follows the selected style. A tap pins Wire defaults or Custom.
-  bool? _styleTabCustom;
   bool _gettyNoteIsNbae = false;
   bool _loadingStyles = true;
+
+  /// IPTC pad already opened for this wire on the Caption step (avoid loops).
+  String? _iptcOpenedForStyleToken;
 
   static const _sports = <String>[
     'baseball',
@@ -191,7 +217,10 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
   String get _apiLabel {
     if (!_sportChosen) return '';
-    final official = _isAdmin && _useOfficialLeagueApis && _tank01Supported;
+    // Official league APIs are admin-only (also hides under User view preview).
+    final official = AdminService.isCurrentUserAdminSync() &&
+        _useOfficialLeagueApis &&
+        _tank01Supported;
     final tank01Fb = _tank01Supported && !official;
     switch (_sport) {
       case 'baseball':
@@ -209,52 +238,67 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     }
   }
 
-  String get _outputLabel {
-    final parts = <String>[
-      if (_writeIptc) 'IPTC',
-      if (_ftpModeEnabled) 'FTP',
-      if (_jerseyOcrEnabled) 'Text',
-    ];
-    if (parts.isEmpty) return 'Captions only';
-    return 'Captions + ${parts.join(', ')}';
-  }
-
-  String get _teamsReadyValue {
-    if (_awayFilled && _homeFilled) {
-      return '${mlbTeamAbbreviation(_awayTeam!)} @ ${mlbTeamAbbreviation(_homeTeam!)}';
-    }
-    if (_awayFilled) return mlbTeamAbbreviation(_awayTeam!);
-    if (_homeFilled) return mlbTeamAbbreviation(_homeTeam!);
-    return 'Not chosen';
-  }
-
   String get _goHint {
-    if (_canGo) {
-      final n = _imageCount;
-      return n == 1 ? '1 image ready' : '$n images ready';
+    if (_canGo) return 'Press Enter to start';
+    // One step at a time: folder → league → teams.
+    if (!_folderChosen) return 'Choose an images folder to start';
+    if (!_sportChosen) return 'Choose a league to start';
+    if (!_awayFilled && !_homeFilled) return 'Choose away and home teams to start';
+    if (!_awayFilled) return 'Choose an away team to start';
+    if (!_homeFilled) return 'Choose a home team to start';
+    if (_homeTeam == _awayTeam) return 'Home and away must be different';
+    return 'Complete setup to start.';
+  }
+
+  void _swapTeams() {
+    setState(() {
+      final away = _awayTeam;
+      final home = _homeTeam;
+      final awayRoster = _awayRoster;
+      final homeRoster = _homeRoster;
+      _awayTeam = home;
+      _homeTeam = away;
+      _awayRoster = homeRoster;
+      _homeRoster = awayRoster;
+      final favAway = _favoriteAway;
+      _favoriteAway = _favoriteHome;
+      _favoriteHome = favAway;
+      _captionPreviewPlayers = const [];
+    });
+    unawaited(_refreshCaptionPreviewPlayers());
+  }
+
+  IconData _sportIcon(String? sport) {
+    switch ((sport ?? '').toLowerCase()) {
+      case 'hockey':
+        return PhosphorIconsRegular.hockey;
+      case 'basketball':
+      case 'wnba':
+        return PhosphorIconsRegular.basketball;
+      case 'soccer':
+        return PhosphorIconsRegular.soccerBall;
+      case 'baseball':
+        return PhosphorIconsRegular.baseball;
+      case 'football':
+        return PhosphorIconsRegular.football;
+      default:
+        return PhosphorIconsRegular.circlesThree;
     }
-    final missing = <String>[];
-    if (!_folderChosen) missing.add('a folder');
-    if (!_sportChosen) missing.add('a sport');
-    if (!_bothTeamsChosen) missing.add('both teams');
-    if (missing.isEmpty) return 'Complete setup to start.';
-    if (missing.length == 1) return 'Add ${missing.first} to start.';
-    if (missing.length == 2) {
-      return 'Add ${missing[0]} and ${missing[1]} to start.';
-    }
-    return 'Add ${missing[0]}, ${missing[1]} and ${missing[2]} to start.';
   }
 
   String? get _iptcWarningText {
     if (!_folderChosen) return null;
-    if (_scanningIptc) return 'Scanning folder IPTC for caption fields…';
+    if (_scanningIptc) return 'Scanning folder IPTC…';
     if (_missingCaptionIptc.isEmpty) return null;
     final fields = _missingCaptionIptc.join(', ');
     if (_writeIptc) {
-      return 'Missing IPTC for caption: $fields';
+      return 'Missing IPTC: $fields';
     }
-    return 'Missing IPTC for caption: $fields — turn on Write IPTC or fix files';
+    return 'Missing IPTC: $fields — add them in Images · IPTC';
   }
+
+  bool get _iptcComplete =>
+      _folderChosen && !_scanningIptc && _missingCaptionIptc.isEmpty;
 
   @override
   void initState() {
@@ -264,32 +308,46 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
   @override
   void dispose() {
-    _cloudPrefsSub?.cancel();
     _rootFocus.dispose();
     _awayFocus.dispose();
     _homeFocus.dispose();
     super.dispose();
   }
 
+  /// Setup unlocks in order: folder → league → teams → the rest.
+  bool get _leagueUnlocked => _folderChosen;
+  bool get _teamsUnlocked => _folderChosen && _sportChosen;
+  bool get _postTeamsUnlocked =>
+      _folderChosen && _sportChosen && _bothTeamsChosen;
+
+  Widget _setupGate({required bool unlocked, required Widget child}) {
+    return IgnorePointer(
+      ignoring: !unlocked,
+      child: AnimatedOpacity(
+        opacity: unlocked ? 1 : 0.42,
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        child: child,
+      ),
+    );
+  }
+
   Future<void> _bootstrap() async {
     try {
       _prefs = await PreferencesService.getInstance();
-      _cloudPrefsSub ??=
-          _prefs!.cloudPreferencesAppliedController.stream.listen((_) {
-        unawaited(_reloadRecentMatchups());
-      });
       // Match legacy StartupDialog: fetch public appDefaults so skip-sign-in
       // users get Firebase verbs, caption styles, IPTC catalog, game IDs.
       await _prefs!.ensureAppDefaultsHydrated();
       _useOfficialLeagueApis = await _prefs!.getUseOfficialLeagueApis();
-      _isAdmin = await AdminService.isCurrentUserAdmin();
       // Write IPTC starts off every visit. It turns on only after the user
       // opens the IPTC dialog from the switch and finishes it.
       _iptcMode = IptcApplyMode.none;
       await _prefs!.saveIptcApplyMode(_iptcMode);
       _iptcStatus = await _iptcStatusFromPrefs();
       _ftpModeEnabled = await _prefs!.getFtpModeEnabled();
+      _fileRenamingEnabled = await _prefs!.getFileRenamingEnabled();
       await _loadFtpProfiles();
+      await _refreshFileRenameTemplate();
       _hideFirebar = await _prefs!.getHideFirebar();
       _jerseyOcrEnabled = JerseyOcrChannel.supported &&
           await _prefs!.getJerseyOcrEnabled();
@@ -316,11 +374,15 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     final label = (id == null || id.isEmpty) ? 'template' : id;
     switch (mode) {
       case IptcApplyMode.none:
-        return "Don't write IPTC";
+        return 'Off';
       case IptcApplyMode.onImport:
-        return 'Write IPTC on import · $label';
+        return 'On load · $label';
       case IptcApplyMode.onSave:
-        return 'Write IPTC on save · $label';
+        return 'On save · $label';
+      case IptcApplyMode.onFtp:
+        return 'On FTP · $label';
+      case IptcApplyMode.onSaveAndFtp:
+        return 'On save & FTP · $label';
     }
   }
 
@@ -493,14 +555,6 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       away = null;
     }
 
-    final recent = _sport == null
-        ? const <MapEntry<String, String>>[]
-        : (await _prefs?.getRecentMatchups(sport: _sport!) ??
-            const <MapEntry<String, String>>[]);
-    final visibleRecent = recent
-        .where((e) => names.contains(e.key) && names.contains(e.value))
-        .toList();
-
     if (!mounted) return;
     setState(() {
       _offline = offline;
@@ -508,17 +562,31 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       _loadingTeams = false;
       _homeTeam = home;
       _awayTeam = away;
-      _recentMatchups = visibleRecent;
       _error = error;
+      _captionPreviewPlayers = const [];
     });
+    unawaited(_refreshCaptionPreviewPlayers());
   }
 
   Future<void> _setFolder(String path) async {
     final files = await _imageFilesInFolder(path);
+    // Prefer EXIF from a photo in the folder; empty folder → today.
+    DateTime previewDate = DateTime.now();
+    var fromFolderPhoto = false;
+    if (files.isNotEmpty) {
+      final fromFolder =
+          await FileRenameDialog.previewDateFromFolder(path);
+      if (fromFolder != null) {
+        previewDate = fromFolder;
+        fromFolderPhoto = true;
+      }
+    }
     if (!mounted) return;
     setState(() {
       _folderPath = path;
       _imageCount = files.length;
+      _previewPhotoDate = previewDate;
+      _previewDateFromFolder = fromFolderPhoto;
       _pickingFolder = false;
       _folderDragOver = false;
     });
@@ -527,6 +595,112 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       await prefs.setString('last_images_folder', path);
     } catch (_) {}
     await _refreshIptcCaptionWarning();
+  }
+
+  static String _exifDateTimeOriginal(DateTime dt) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${dt.year}:${two(dt.month)}:${two(dt.day)} '
+        '${two(dt.hour)}:${two(dt.minute)}:${two(dt.second)}';
+  }
+
+  /// Provenance line for the New Session caption preview.
+  String? get _captionPreviewSourceNote {
+    final bits = <String>[];
+    if (_folderChosen) {
+      bits.add(
+        _previewDateFromFolder
+            ? 'Date from folder photo'
+            : 'Date is today (no photos in folder)',
+      );
+    }
+    if (_captionPreviewPlayers.isNotEmpty) {
+      if (_homeFilled && _awayFilled) {
+        bits.add('Players from $_homeTeam / $_awayTeam rosters');
+      } else {
+        bits.add(
+          'Players from ${(_homeFilled ? _homeTeam : _awayTeam)!} roster',
+        );
+      }
+    } else if (_homeFilled || _awayFilled) {
+      bits.add('Loading team roster…');
+    }
+    final home = _homeFilled
+        ? _homeTeam
+        : (_awayFilled ? _awayTeam : null);
+    if (home != null && teamHomePlace(home) != null) {
+      bits.add('Location from $home');
+    }
+    final iptcLocation = IptcTemplateApplyService.lookupValue(
+          _iptcPanelForPreview,
+          'Location',
+        ) ??
+        IptcTemplateApplyService.lookupValue(_iptcPanelForPreview, 'Stadium');
+    final venue = (iptcLocation ?? _previewHomeVenue ?? '').trim();
+    if (venue.isNotEmpty) {
+      bits.add('Location: $venue');
+    }
+    if (bits.isEmpty) return null;
+    return bits.join(' · ');
+  }
+
+  /// Sample [GameInfo] for caption style preview / layout editor.
+  /// City/state from the selected home team; Location from IPTC when set,
+  /// otherwise the league API stadium for home.
+  GameInfo _buildPreviewGameInfo() {
+    final date = _previewPhotoDate;
+    final fromPanel =
+        IptcTemplateApplyService.gameInfoFromPanelValues(_iptcPanelForPreview);
+    final iptcLocation = fromPanel.venue.trim();
+    var info = GameInfo(
+      gameDate: date,
+      photographerName: fromPanel.photographerName.trim().isNotEmpty
+          ? fromPanel.photographerName
+          : CurrentUserService.displayNameOrPlaceholder(),
+      agencyName: fromPanel.agencyName,
+      iptcMetadata: {
+        'DateTimeOriginal': _exifDateTimeOriginal(date),
+        ...fromPanel.iptcMetadata,
+      },
+    );
+    final home = _homeFilled
+        ? _homeTeam
+        : (_awayFilled ? _awayTeam : null);
+    if (home != null) {
+      final place = teamHomePlace(home);
+      if (place != null) {
+        info = place.applyTo(info);
+      }
+    }
+    // Prefer IPTC City / Province / Country when the template or folder has them.
+    if (fromPanel.city.trim().isNotEmpty ||
+        fromPanel.region.trim().isNotEmpty ||
+        fromPanel.country.trim().isNotEmpty) {
+      info = info.copyWith(
+        city: fromPanel.city.trim().isNotEmpty ? fromPanel.city : info.city,
+        region:
+            fromPanel.region.trim().isNotEmpty ? fromPanel.region : info.region,
+        country: fromPanel.country.trim().isNotEmpty
+            ? fromPanel.country
+            : info.country,
+        countryCode: fromPanel.countryCode.trim().isNotEmpty
+            ? fromPanel.countryCode
+            : info.countryCode,
+      );
+    }
+    final apiVenue = (_previewHomeVenue ?? '').trim();
+    final venue = iptcLocation.isNotEmpty ? iptcLocation : apiVenue;
+    if (venue.isNotEmpty) {
+      info = info.copyWith(
+        venue: venue,
+        iptcMetadata: iptcLocation.isNotEmpty
+            ? CaptionFormulaRenderer.iptcLocationMetadata(
+                iptcLocation,
+                info.iptcMetadata,
+              )
+            : info.iptcMetadata,
+      );
+    }
+    return info;
   }
 
   Future<List<String>> _imageFilesInFolder(String dirPath) async {
@@ -612,19 +786,6 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     if (mounted) setState(() {});
   }
 
-  void _applyRecentMatchup(String away, String home) {
-    if (!_teams.contains(away) || !_teams.contains(home) || away == home) {
-      return;
-    }
-    setState(() {
-      _usingCustomRosters = false;
-      _awayTeam = away;
-      _homeTeam = home;
-      _homeRoster = null;
-      _awayRoster = null;
-    });
-  }
-
   Future<void> _setUseOfficialLeagueApis(bool enabled) async {
     await _prefs?.saveUseOfficialLeagueApis(enabled);
     if (!mounted) return;
@@ -638,7 +799,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       if (!mounted) return;
       setState(() {
         _iptcMode = IptcApplyMode.none;
-        _iptcStatus = "Don't write IPTC";
+        _iptcStatus = 'Off';
       });
       await _refreshIptcCaptionWarning();
       return;
@@ -648,21 +809,23 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       context,
       folderPath: _folderPath,
       enableWriting: true,
+      populateFromFolder: _folderChosen,
     );
     if (!mounted) return;
-    if (summary == null) {
+    if (summary == null || summary.mode == IptcApplyMode.none) {
       await _prefs?.saveIptcApplyMode(IptcApplyMode.none);
       if (!mounted) return;
       setState(() {
         _iptcMode = IptcApplyMode.none;
-        _iptcStatus = "Don't write IPTC";
+        _iptcStatus = 'Off';
       });
+      await _refreshIptcCaptionWarning();
       return;
     }
-    await _prefs?.saveIptcApplyMode(IptcApplyMode.onImport);
+    await _prefs?.saveIptcApplyMode(summary.mode);
     if (!mounted) return;
     setState(() {
-      _iptcMode = IptcApplyMode.onImport;
+      _iptcMode = summary.mode;
       _iptcStatus = summary.statusLine;
     });
     await _refreshIptcCaptionWarning();
@@ -676,6 +839,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       if (!mounted || gen != _iptcScanGen) return;
       setState(() {
         _missingCaptionIptc = const [];
+        _folderHasPersonalityOrKeywords = false;
         _scanningIptc = false;
       });
       return;
@@ -730,29 +894,30 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         }
       }
 
-      // 2) If Write IPTC is on, template values fill gaps (on import/save).
-      final effective = Map<String, String>.from(fromFiles);
-      if (_writeIptc) {
-        var preset = await prefs.getIptcWirePreset(wire);
-        if (preset.isEmpty) {
-          for (final t in visible) {
-            if (t.wireStyle == wire && t.preset.isNotEmpty) {
-              preset = t.preset;
-              break;
-            }
+      // 2) Selected IPTC template fills gaps for structure/caption preview.
+      // Write-IPTC warnings only count the template when writing is enabled.
+      var preset = await prefs.getIptcWirePreset(wire);
+      if (preset.isEmpty) {
+        for (final t in visible) {
+          if (t.wireStyle == wire && t.preset.isNotEmpty) {
+            preset = t.preset;
+            break;
           }
         }
-        final templatePanel =
-            IptcTemplateApplyService.denormalizeForPanel(preset);
-        templatePanel.forEach((k, v) {
-          final trimmed = v.trim();
-          if (trimmed.isEmpty) return;
-          if (IptcTemplateApplyService.isInAppGeneratedPlaceholder(trimmed)) {
-            return;
-          }
-          effective.putIfAbsent(k, () => trimmed);
-        });
       }
+      final templatePanel =
+          IptcTemplateApplyService.denormalizeForPanel(preset);
+      final previewPanel = Map<String, String>.from(fromFiles);
+      templatePanel.forEach((k, v) {
+        final trimmed = v.trim();
+        if (trimmed.isEmpty) return;
+        if (IptcTemplateApplyService.isInAppGeneratedPlaceholder(trimmed)) {
+          return;
+        }
+        previewPanel.putIfAbsent(k, () => trimmed);
+      });
+      final effective =
+          _writeIptc ? previewPanel : Map<String, String>.from(fromFiles);
 
       final captionTemplate = _captionTemplate ?? CaptionTemplate.getty();
       final missing = CaptionFormulaRenderer.missingCaptionIptcLabels(
@@ -760,15 +925,32 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         game: IptcTemplateApplyService.gameInfoFromPanelValues(effective),
         includeCreator: false,
       );
+      final hasPersonality = IptcTemplateApplyService.lookupValue(
+            fromFiles,
+            'Personality',
+          )
+              ?.trim()
+              .isNotEmpty ==
+          true;
+      final hasKeywords = IptcTemplateApplyService.lookupValue(
+            fromFiles,
+            'Keywords',
+          )
+              ?.trim()
+              .isNotEmpty ==
+          true;
       if (!mounted || gen != _iptcScanGen) return;
       setState(() {
+        _iptcPanelForPreview = previewPanel;
         _missingCaptionIptc = missing;
+        _folderHasPersonalityOrKeywords = hasPersonality || hasKeywords;
         _scanningIptc = false;
       });
     } catch (_) {
       if (!mounted || gen != _iptcScanGen) return;
       setState(() {
         _missingCaptionIptc = const [];
+        _folderHasPersonalityOrKeywords = false;
         _scanningIptc = false;
       });
     }
@@ -788,30 +970,45 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     });
   }
 
-  Future<void> _pickFtpProfile(BuildContext anchorContext) async {
-    if (_ftpProfileNames.isEmpty) return;
-    final box = anchorContext.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize) return;
-    final origin = box.localToGlobal(Offset.zero);
-    final picked = await showFfMenu<String>(
-      context: anchorContext,
-      anchorGlobal: origin & box.size,
-      width: 220,
-      colors: FfMenuColors.session,
-      choices: [
-        for (final name in _ftpProfileNames)
-          FfMenuChoice<String>(
-            value: name,
-            selected: name == _ftpProfileName,
-            child: Text(name),
+  Future<void> _openFtpSettings(BuildContext anchorContext) async {
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.55),
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            width: 820,
+            height: 580,
+            decoration: BoxDecoration(
+              color: FfTokens.sessionPanel,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: FfTokens.sessionLn),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x8C000000),
+                  blurRadius: 60,
+                  offset: Offset(0, 24),
+                ),
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: FtpSettingsPanel(
+              embedded: false,
+              onClose: () {
+                Navigator.pop(dialogContext);
+              },
+              onProfilesChanged: () {
+                unawaited(_loadFtpProfiles());
+              },
+            ),
           ),
-      ],
+        );
+      },
     );
-    final name = picked?.value;
-    if (name == null || name == _ftpProfileName) return;
-    await _prefs?.saveCurrentFtpProfile(name);
     if (!mounted) return;
-    setState(() => _ftpProfileName = name);
+    await _loadFtpProfiles();
+    await _refreshFileRenameTemplate();
   }
 
   Future<void> _setFtpMode(bool enabled) async {
@@ -819,6 +1016,45 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     await _prefs?.saveFtpModeEnabled(enabled);
     if (!mounted) return;
     setState(() => _ftpModeEnabled = enabled);
+  }
+
+  Future<void> _refreshFileRenameTemplate() async {
+    final prefs = _prefs;
+    if (prefs == null) return;
+    final current = await prefs.getCurrentFtpProfile();
+    final profiles = await prefs.getFtpProfiles();
+    final name = current != null && profiles.containsKey(current)
+        ? current
+        : (profiles.isNotEmpty ? profiles.keys.first : null);
+    final template =
+        name == null ? '' : (profiles[name]?['renameAs']?.toString() ?? '');
+    if (!mounted) return;
+    setState(() => _fileRenameTemplate = template.trim());
+  }
+
+  Future<void> _setFileRenaming(bool enabled) async {
+    if (enabled == _fileRenamingEnabled) return;
+    await _prefs?.saveFileRenamingEnabled(enabled);
+    if (!mounted) return;
+    setState(() => _fileRenamingEnabled = enabled);
+  }
+
+  Future<void> _openFileRename() async {
+    final preview = await FileRenameDialog.previewDataFromFolder(
+      _folderPath,
+      awayTeam: _awayFilled ? mlbTeamAbbreviation(_awayTeam!) : '',
+      homeTeam: _homeFilled ? mlbTeamAbbreviation(_homeTeam!) : '',
+    );
+    if (!mounted) return;
+    final saved = await FileRenameDialog.show(
+      context,
+      preview: preview,
+    );
+    if (!mounted) return;
+    await _refreshFileRenameTemplate();
+    if (saved != null && !_fileRenamingEnabled) {
+      await _setFileRenaming(true);
+    }
   }
 
   Future<void> _setFirebarShown(bool shown) async {
@@ -843,18 +1079,91 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     setState(() => _serialBylinesEnabled = enabled);
   }
 
-  Future<void> _openIptc() async {
+  Future<void> _openSerialNumbers() async {
+    final cameraService = CameraSerialService.instance;
+    await cameraService.initialize();
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => CameraSerialDialog(
+        cameraService: cameraService,
+      ),
+    );
+  }
+
+  Future<void> _openIptc({
+    bool populateFromFolder = false,
+    bool enableWriting = false,
+  }) async {
     final summary = await showCaptionV2IptcDialog(
       context,
       folderPath: _folderPath,
+      enableWriting: enableWriting,
+      // Always fill the pad from folder IPTC when a folder is set.
+      populateFromFolder: _folderChosen || populateFromFolder,
     );
     if (!mounted || summary == null) return;
-    await _refreshIptcCaptionWarning();
+    await _prefs?.saveIptcApplyMode(summary.mode);
     if (!mounted) return;
     setState(() {
       _iptcMode = summary.mode;
       _iptcStatus = summary.statusLine;
     });
+    await _refreshIptcCaptionWarning();
+  }
+
+  /// Opens IPTC on the Caption step after a wire is chosen, when caption
+  /// fields are still missing. Folder pick alone must not open the pad.
+  Future<void> _maybeOpenIptcAfterWirePick() async {
+    if (!_postTeamsUnlocked || !_folderChosen) return;
+    final token = _selectedStyleToken;
+    if (token == null || _captionTemplate == null) return;
+
+    if (_scanningIptc) {
+      await _refreshIptcCaptionWarning();
+      if (!mounted) return;
+    }
+    if (_missingCaptionIptc.isEmpty) {
+      _iptcOpenedForStyleToken = token;
+      return;
+    }
+    // Skip only if we already opened for this wire in this pass (e.g. wire
+    // change fired select + onWireChanged together).
+    if (_iptcOpenedForStyleToken == token) return;
+
+    _iptcOpenedForStyleToken = token;
+    await _openIptc(populateFromFolder: true, enableWriting: true);
+    if (!mounted) return;
+    await _refreshIptcCaptionWarning();
+    // Still missing after dismiss → allow another open on the next wire tap.
+    if (!_iptcComplete) _iptcOpenedForStyleToken = null;
+  }
+
+  /// Opens IPTC when caption fields are missing. Returns true only when
+  /// everything needed for captions is present (folder and/or template).
+  Future<bool> _ensureCaptionIptcReady() async {
+    if (_scanningIptc) {
+      await _refreshIptcCaptionWarning();
+      if (!mounted) return false;
+    }
+    if (_iptcComplete) return true;
+
+    await _openIptc(populateFromFolder: true, enableWriting: true);
+    if (!mounted) return false;
+    if (_iptcComplete) return true;
+
+    final missing = _missingCaptionIptc;
+    if (missing.isNotEmpty) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Need IPTC before starting: ${missing.join(', ')}',
+          ),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+    return false;
   }
 
   Future<void> _pasteRoster() async {
@@ -878,12 +1187,21 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       if (result.awayPlayers != null) {
         _awayTeam = result.awayTeamName;
       }
+      _captionPreviewPlayers = const [];
     });
+    unawaited(_refreshCaptionPreviewPlayers());
   }
 
   Future<void> _selectStyle(String token) async {
     final catalog = _styleCatalog;
-    if (catalog == null || token == _selectedStyleToken) return;
+    if (catalog == null) return;
+    if (token == _selectedStyleToken) {
+      // Same wire re-tapped on the Caption step — open IPTC if still missing.
+      await _refreshIptcCaptionWarning();
+      if (!mounted) return;
+      await _maybeOpenIptcAfterWirePick();
+      return;
+    }
     final prefs = _prefs ?? await PreferencesService.getInstance();
     final template = catalog
         .resolve(token, refForCustom: _captionTemplate)
@@ -901,11 +1219,32 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       _selectedStyleToken = token;
       _captionTemplate = sportAware;
     });
+    // GlobalKey keeps the embedded builder State alive across KeyedSubtree
+    // remounts — push the new wire template into Structure + PREVIEW.
+    _captionBuilderKey.currentState?.applyHostCaptionTemplate(sportAware);
     await _refreshIptcCaptionWarning();
+    if (!mounted) return;
+    // Caption box + wire chosen → open IPTC if caption fields are still missing.
+    await _maybeOpenIptcAfterWirePick();
   }
 
   Future<void> _editStyles() async {
-    final applied = await CaptionLayoutBuilderDialog.show(context);
+    if (_captionPreviewPlayers.isEmpty &&
+        (_homeFilled || _awayFilled)) {
+      await _refreshCaptionPreviewPlayers();
+      if (!mounted) return;
+    }
+    final applied = await CaptionLayoutBuilderDialog.show(
+      context,
+      initialSport: _sport,
+      previewHomeTeam: _homeFilled ? _homeTeam : null,
+      previewAwayTeam: _awayFilled ? _awayTeam : null,
+      previewGameInfo: _buildPreviewGameInfo(),
+      previewPlayers: _captionPreviewPlayers.isEmpty
+          ? null
+          : List<CaptionPreviewPlayer>.from(_captionPreviewPlayers),
+      previewDateFromFolder: _folderChosen ? _previewDateFromFolder : null,
+    );
     if (!mounted) return;
     if (applied != null) {
       final prefs = _prefs ?? await PreferencesService.getInstance();
@@ -932,10 +1271,20 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   }
 
   Future<bool> _confirmWriteIptc() async {
-    final confirmed = await showDialog<bool>(
+    final hasLists = _folderHasPersonalityOrKeywords;
+    final choice = await showDialog<Object>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.55),
       builder: (ctx) {
+        final body = hasLists
+            ? 'Template fields will be written to these photos. Existing '
+                'captions stay as they are.\n'
+                '\n'
+                'These photos already have personality and/or keywords. '
+                'Merge adds template values onto what’s already there. '
+                'Overwrite replaces them with the template values.'
+            : 'Template fields will be written to these photos. Existing '
+                'captions stay as they are.';
         return Dialog(
           backgroundColor: FfTokens.sessionPanel,
           shape: RoundedRectangleBorder(
@@ -954,7 +1303,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                     children: [
                       const Expanded(
                         child: Text(
-                          'Write IPTC?',
+                          'Apply IPTC?',
                           style: TextStyle(
                             fontFamily: FfTokens.fontFamily,
                             fontSize: 15,
@@ -965,7 +1314,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                       ),
                       IconButton(
                         visualDensity: VisualDensity.compact,
-                        onPressed: () => Navigator.pop(ctx, false),
+                        onPressed: () => Navigator.pop(ctx),
                         icon: const PhosphorIcon(
                           PhosphorIconsRegular.x,
                           size: 16,
@@ -974,23 +1323,25 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                       ),
                     ],
                   ),
-                  const Padding(
-                    padding: EdgeInsets.only(right: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
                     child: Text(
-                      'Existing IPTC on these photos will be cleared, then the template — including captions — will be written.',
-                      style: TextStyle(
+                      body,
+                      style: const TextStyle(
                         fontFamily: FfTokens.fontFamily,
                         fontSize: 13,
                         height: 1.45,
-                        color: FfTokens.danger,
+                        color: FfTokens.sessionT2,
                       ),
                     ),
                   ),
                   const SizedBox(height: 16),
                   Padding(
                     padding: const EdgeInsets.only(right: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
+                    child: Wrap(
+                      alignment: WrapAlignment.end,
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
                         _Pressable(
                           height: 34,
@@ -1000,7 +1351,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                           hoverColor: FfTokens.sessionHv,
                           borderColor: FfTokens.sessionLn2,
                           borderWidth: 1,
-                          onPressed: () => Navigator.pop(ctx, false),
+                          onPressed: () => Navigator.pop(ctx),
                           child: const Text(
                             'Cancel',
                             style: TextStyle(
@@ -1011,24 +1362,70 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        _Pressable(
-                          height: 34,
-                          radius: 8,
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          color: FfTokens.sessionTx,
-                          hoverColor: FfTokens.sessionGoHover,
-                          onPressed: () => Navigator.pop(ctx, true),
-                          child: const Text(
-                            'Write IPTC',
-                            style: TextStyle(
-                              fontFamily: FfTokens.fontFamily,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: FfTokens.nocturneBg,
+                        if (hasLists) ...[
+                          _Pressable(
+                            height: 34,
+                            radius: 8,
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            color: FfTokens.sessionEl,
+                            hoverColor: FfTokens.sessionHv,
+                            borderColor: FfTokens.sessionLn2,
+                            borderWidth: 1,
+                            onPressed: () => Navigator.pop(
+                              ctx,
+                              IptcOnLoadListMode.overwrite,
+                            ),
+                            child: const Text(
+                              'Overwrite',
+                              style: TextStyle(
+                                fontFamily: FfTokens.fontFamily,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: FfTokens.sessionTx,
+                              ),
                             ),
                           ),
-                        ),
+                          _Pressable(
+                            height: 34,
+                            radius: 8,
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            color: FfTokens.sessionTx,
+                            hoverColor: FfTokens.sessionGoHover,
+                            onPressed: () => Navigator.pop(
+                              ctx,
+                              IptcOnLoadListMode.merge,
+                            ),
+                            child: const Text(
+                              'Merge',
+                              style: TextStyle(
+                                fontFamily: FfTokens.fontFamily,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: FfTokens.nocturneBg,
+                              ),
+                            ),
+                          ),
+                        ] else
+                          _Pressable(
+                            height: 34,
+                            radius: 8,
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            color: FfTokens.sessionTx,
+                            hoverColor: FfTokens.sessionGoHover,
+                            onPressed: () => Navigator.pop(
+                              ctx,
+                              IptcOnLoadListMode.merge,
+                            ),
+                            child: const Text(
+                              'Apply IPTC',
+                              style: TextStyle(
+                                fontFamily: FfTokens.fontFamily,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: FfTokens.nocturneBg,
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -1039,7 +1436,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         );
       },
     );
-    return confirmed == true;
+    if (choice is! IptcOnLoadListMode) return false;
+    await _prefs?.saveIptcOnLoadListMode(choice);
+    return true;
   }
 
   Future<void> _goTime() async {
@@ -1058,6 +1457,10 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       );
       if (confirmed != true || !mounted) return;
     }
+
+    // Caption IPTC must be complete before the session starts.
+    final iptcReady = await _ensureCaptionIptcReady();
+    if (!iptcReady || !mounted) return;
 
     if (_writeIptc) {
       final confirmed = await _confirmWriteIptc();
@@ -1098,11 +1501,6 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         sport: _sport!,
         homeTeam: home,
         awayTeam: away,
-      );
-      await _prefs?.pushRecentMatchup(
-        sport: _sport!,
-        away: away,
-        home: home,
       );
     }
 
@@ -1158,7 +1556,11 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       }
       _homeRoster = null;
       _awayRoster = null;
+      _captionPreviewPlayers = const [];
+      _previewHomeVenue = null;
+      if (!_postTeamsUnlocked) _iptcOpenedForStyleToken = null;
     });
+    unawaited(_refreshCaptionPreviewPlayers());
   }
 
   void _setHomeTeam(String? team) {
@@ -1170,6 +1572,99 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       }
       _homeRoster = null;
       _awayRoster = null;
+      _captionPreviewPlayers = const [];
+      _previewHomeVenue = null;
+      if (!_postTeamsUnlocked) _iptcOpenedForStyleToken = null;
+    });
+    unawaited(_refreshCaptionPreviewPlayers());
+  }
+
+  Future<void> _refreshCaptionPreviewPlayers() async {
+    final home = _homeFilled ? _homeTeam!.trim() : null;
+    final away = _awayFilled ? _awayTeam!.trim() : null;
+    if (home == null && away == null) {
+      if (!mounted) return;
+      setState(() {
+        _captionPreviewPlayers = const [];
+        _previewHomeVenue = null;
+      });
+      return;
+    }
+    final gen = ++_captionPreviewRosterGen;
+    final sport = _sport;
+    if (sport == null || sport.isEmpty) return;
+
+    CaptionPreviewPlayer? toPreview(Player p, String team, String opp) {
+      final rawNum = (p.jerseyNumber ?? '').trim();
+      final number =
+          int.tryParse(rawNum.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+      final position = (p.position ?? '').trim();
+      var name = p.fullName.trim();
+      if (name.isEmpty) {
+        name = p.displayName.trim().replaceAll(RegExp(r'\s*#\d+\s*$'), '');
+      }
+      if (name.isEmpty) return null;
+      if (name.toLowerCase() == team.toLowerCase()) return null;
+      return CaptionPreviewPlayer(
+        team,
+        position.isEmpty ? 'P' : position,
+        name,
+        number,
+        opp,
+      );
+    }
+
+    final out = <CaptionPreviewPlayer>[];
+    String? homeVenue;
+    try {
+      _api.setSport(sport);
+      if (home != null) {
+        try {
+          final team = await _api.findTeamByName(home);
+          final venue = team?.venueName?.trim();
+          if (venue != null && venue.isNotEmpty) {
+            homeVenue = venue;
+          } else {
+            homeVenue = await _api.fetchVenueForTeam(home);
+          }
+        } catch (_) {}
+      }
+      if (_usingCustomRosters) {
+        for (final p in _homeRoster ?? const <Player>[]) {
+          if (home == null) continue;
+          final preview = toPreview(p, home, away ?? '');
+          if (preview != null) out.add(preview);
+        }
+        for (final p in _awayRoster ?? const <Player>[]) {
+          if (away == null) continue;
+          final preview = toPreview(p, away, home ?? '');
+          if (preview != null) out.add(preview);
+        }
+      } else {
+        if (home != null) {
+          final roster = await _api.fetchTeamRoster(home);
+          for (final p in roster) {
+            final preview = toPreview(p, home, away ?? '');
+            if (preview != null) out.add(preview);
+          }
+        }
+        if (away != null && away != home) {
+          final roster = await _api.fetchTeamRoster(away);
+          for (final p in roster) {
+            final preview = toPreview(p, away, home ?? '');
+            if (preview != null) out.add(preview);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Caption preview roster failed: $e');
+    }
+    if (!mounted || gen != _captionPreviewRosterGen) return;
+    setState(() {
+      _captionPreviewPlayers = out;
+      if (homeVenue != null && homeVenue.trim().isNotEmpty) {
+        _previewHomeVenue = homeVenue.trim();
+      }
     });
   }
 
@@ -1182,34 +1677,63 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       autofocus: true,
       onKeyEvent: _onKey,
       child: ColoredBox(
-        color: FfTokens.nocturneBg,
+        color: FfTokens.sessionBg,
         child: LayoutBuilder(
           builder: (context, constraints) {
             final width = constraints.maxWidth;
-            final twoColumn = width >= 880;
-            final styleColumns = width <= 640 ? 1 : (twoColumn ? 3 : 2);
-            final stackTeams = width <= 640;
-            final contentWidth =
-                width > 1340 ? 1300.0 : (width - 20).clamp(0.0, 1300.0);
+            const compact = true;
+            final stackTeams = width <= 1000;
+            const padH = 24.0;
+            const padV = 16.0;
+            const gap = 12.0;
             return Padding(
-              padding: const EdgeInsets.all(10),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.topCenter,
-                child: SizedBox(
-                  width: contentWidth,
-                  child: twoColumn
-                      ? _buildWideLayout(
-                          t,
-                          styleColumns: styleColumns,
-                          stackTeams: stackTeams,
-                        )
-                      : _buildNarrowLayout(
-                          t,
-                          styleColumns: styleColumns,
-                          stackTeams: stackTeams,
-                        ),
-                ),
+              padding: const EdgeInsets.fromLTRB(padH, padV, padH, padV),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildV4SetupCard(
+                    t,
+                    compact: compact,
+                    stackTeams: stackTeams,
+                  ),
+                  const SizedBox(height: gap),
+                  Expanded(
+                    child: _setupGate(
+                      unlocked: _postTeamsUnlocked,
+                      child: ValueListenableBuilder<bool>(
+                        valueListenable: AdminService.previewAsNonAdmin,
+                        builder: (context, _, __) {
+                          final showAdminSave =
+                              _postTeamsUnlocked &&
+                              AdminService.isCurrentUserAdminSync();
+                          return _buildV4CaptionCard(
+                            showAdminSave: showAdminSave,
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: gap),
+                  _setupGate(
+                    unlocked: _postTeamsUnlocked,
+                    child: _buildSessionStep(t, compact: compact),
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      _error!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 12,
+                        color: FfTokens.danger,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: gap),
+                  _buildReadyBar(t, compact: compact),
+                ],
               ),
             );
           },
@@ -1218,213 +1742,396 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     );
   }
 
-  Widget _buildWideLayout(
+  /// v4: single setup card — Images | League | Away·Home.
+  Widget _buildV4SetupCard(
     FfTokens t, {
-    required int styleColumns,
+    required bool compact,
     required bool stackTeams,
   }) {
-    return SizedBox(
-      height: 750,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.topCenter,
-                  child: SizedBox(
-                    width: constraints.maxWidth,
-                    child: _buildSteps(
-                      t,
-                      styleColumns: styleColumns,
-                      stackTeams: stackTeams,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: FfTokens.sessionPanel,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: stackTeams
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: _buildV4ImagesField()),
+                      _v4FieldDivider(),
+                      Expanded(
+                        child: _setupGate(
+                          unlocked: _leagueUnlocked,
+                          child: _buildV4LeagueField(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _setupGate(
+                  unlocked: _teamsUnlocked,
+                  child: _buildV4TeamsField(stack: true),
+                ),
+              ],
+            )
+          : IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(flex: 10, child: _buildV4ImagesField()),
+                  _v4FieldDivider(),
+                  Expanded(
+                    flex: 10,
+                    child: _setupGate(
+                      unlocked: _leagueUnlocked,
+                      child: _buildV4LeagueField(),
                     ),
                   ),
-                );
-              },
+                  _v4FieldDivider(),
+                  Expanded(
+                    flex: 22,
+                    child: _setupGate(
+                      unlocked: _teamsUnlocked,
+                      child: _buildV4TeamsField(stack: false),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(width: 10),
-          SizedBox(
-            width: 400,
-            child: _buildSidePanel(t),
+    );
+  }
+
+  Widget _v4FieldDivider() {
+    return Container(
+      width: 1,
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      color: FfTokens.sessionLn,
+    );
+  }
+
+  Widget _buildV4FieldHeader({
+    required String label,
+    Widget? trailing,
+  }) {
+    // Fixed height so Images / League / Teams boxes stay aligned even when
+    // a column has no trailing control (e.g. Images has no Change link).
+    return SizedBox(
+      height: 24,
+      child: Row(
+        children: [
+          Text(label, style: _kSectionLabel),
+          const Spacer(),
+          if (trailing != null) trailing,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildV4LinkButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback? onPressed,
+  }) {
+    return _Pressable(
+      height: 24,
+      radius: 6,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      color: Colors.transparent,
+      hoverColor: FfTokens.sessionHv,
+      hoverForeground: true,
+      foreground: FfTokens.sessionT3,
+      onPressed: onPressed,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          PhosphorIcon(icon, size: 14),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: const TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildNarrowLayout(
-    FfTokens t, {
-    required int styleColumns,
-    required bool stackTeams,
-  }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildSteps(
-          t,
-          styleColumns: styleColumns,
-          stackTeams: stackTeams,
-        ),
-        const SizedBox(height: 10),
-        _buildSidePanel(t),
-      ],
-    );
-  }
-
-  Widget _buildSteps(
-    FfTokens t, {
-    required int styleColumns,
-    required bool stackTeams,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildFolderStep(t),
-        const SizedBox(height: 10),
-        _buildSportStep(t),
-        const SizedBox(height: 10),
-        _StepCard(
-          number: 3,
-          title: 'Teams',
-          complete: _bothTeamsChosen,
-          headerControl: _recentMatchupRow(),
-          expandHeader: _recentMatchups.isNotEmpty,
-          trailing: _LinkButton(
-            label: 'Refresh rosters',
-            icon: PhosphorIconsRegular.arrowClockwise,
-            onPressed: _sportChosen && !_loadingTeams ? _loadTeams : null,
-          ),
-          child: _buildTeamsStep(t, stack: stackTeams),
-        ),
-        const SizedBox(height: 10),
-        _StepCard(
-          number: 4,
-          title: 'Caption style',
-          complete: _selectedStyleToken != null,
-          headerControl: _styleTabs(),
-          trailing: _LinkButton(
-            label: 'Edit styles',
-            icon: PhosphorIconsRegular.pencilSimple,
-            onPressed: _editStyles,
-          ),
-          child: _buildStyleStep(t, columns: styleColumns),
-        ),
-        const SizedBox(height: 10),
-        _buildSessionStep(t),
-        if (_error != null) ...[
-          const SizedBox(height: 8),
-          Text(
-            _error!,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontSize: 12,
-              color: FfTokens.danger,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildFolderStep(FfTokens t) {
+  Widget _buildV4ImagesField() {
     final chosen = _folderChosen;
-    final prompt = chosen
-        ? '${p.basename(_folderPath!)} · ${_imageCount == 1 ? '1 image' : '$_imageCount images'}'
-        : 'Drop a folder here';
+    final title = chosen ? p.basename(_folderPath!) : 'Drop a folder here';
+    final subtitle = chosen
+        ? (_imageCount == 1 ? '1 photo' : '$_imageCount photos')
+        : 'Choose a folder';
     return DropTarget(
       onDragEntered: (_) => setState(() => _folderDragOver = true),
       onDragExited: (_) => setState(() => _folderDragOver = false),
       onDragDone: _onFolderDropped,
-      child: _StepCard(
-        number: 1,
-        title: 'Images folder',
-        complete: chosen,
-        inline: true,
-        highlighted: _folderDragOver,
-        trailing: _RaisedButton(
-          label: _pickingFolder
-              ? 'Opening…'
-              : (chosen ? 'Change' : 'Choose folder'),
-          onPressed: _pickingFolder ? null : _pickFolder,
-        ),
-        child: _DropSlot(
-          emphasized: _folderDragOver,
-          child: Text(
-            prompt,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: chosen ? FfTokens.sessionTx : FfTokens.sessionT2,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildV4FieldHeader(label: 'Images'),
+          const SizedBox(height: 6),
+          _Pressable(
+            height: 38,
+            radius: 9,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            color: _folderDragOver
+                ? FfTokens.sessionOnSoft
+                : FfTokens.sessionEl,
+            hoverColor: FfTokens.sessionHv,
+            borderColor: _folderDragOver
+                ? FfTokens.sessionOn
+                : Colors.transparent,
+            borderWidth: _folderDragOver ? 1 : 0,
+            onPressed: _pickingFolder ? null : _pickFolder,
+            child: Row(
+              children: [
+                PhosphorIcon(
+                  chosen
+                      ? PhosphorIconsRegular.folder
+                      : PhosphorIconsRegular.folderSimpleDashed,
+                  size: 16,
+                  color: FfTokens.sessionT3,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: chosen
+                          ? FfTokens.sessionTx
+                          : FfTokens.sessionT3,
+                    ),
+                  ),
+                ),
+                Text(
+                  _pickingFolder ? 'Opening…' : subtitle,
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: FfTokens.sessionT3,
+                  ),
+                ),
+              ],
             ),
           ),
-        ),
+          const SizedBox(height: 6),
+          _buildImagesIptcStrip(),
+        ],
       ),
     );
   }
 
-  Widget _buildSportStep(FfTokens t) {
-    final soccerNote = _sport == 'soccer'
-        ? const Text(
-            'Always use ESPN MLS rosters for soccer',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontSize: 12,
-              color: FfTokens.sessionT3,
+  Widget _buildImagesIptcStrip() {
+    final enabled = _folderChosen;
+    final complete = _iptcComplete;
+    final missing = _missingCaptionIptc;
+    final scanning = enabled && _scanningIptc;
+    final needsAdd = enabled && !scanning && !complete;
+    const warn = FfTokens.danger;
+
+    final Widget statusIcon;
+    if (!enabled) {
+      statusIcon = const PhosphorIcon(
+        PhosphorIconsRegular.tag,
+        size: 15,
+        color: FfTokens.sessionT3,
+      );
+    } else if (scanning) {
+      statusIcon = const SizedBox(
+        width: 15,
+        height: 15,
+        child: CircularProgressIndicator(strokeWidth: 1.5),
+      );
+    } else if (complete) {
+      statusIcon = const PhosphorIcon(
+        PhosphorIconsFill.checkCircle,
+        size: 15,
+        color: FfTokens.sessionOk,
+      );
+    } else {
+      statusIcon = const PhosphorIcon(
+        PhosphorIconsFill.warningCircle,
+        size: 15,
+        color: warn,
+      );
+    }
+
+    return Opacity(
+      opacity: enabled ? 1 : 0.45,
+      child: Container(
+        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        decoration: BoxDecoration(
+          color: complete
+              ? FfTokens.nocturneAccentRow
+              : FfTokens.sessionEl,
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(
+            color: complete
+                ? FfTokens.nocturneAccentEdge
+                : Colors.transparent,
+          ),
+        ),
+        child: Row(
+          children: [
+            statusIcon,
+            const SizedBox(width: 7),
+            const Text(
+              'IPTC',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                height: 1.1,
+                color: FfTokens.sessionTx,
+              ),
             ),
-          )
-        : null;
-    final apiChoice = _isAdmin && soccerNote == null
-        ? _AttachedChoice(
-            enabled: _sportChosen && _tank01Supported,
-            selected: (!_tank01Supported || _useOfficialLeagueApis) ? 1 : 0,
-            options: const ['Tank01 APIs', 'Official league APIs'],
-            onSelected: (index) => _setUseOfficialLeagueApis(index == 1),
-          )
-        : null;
-    return _StepCard(
-      number: 2,
-      title: 'Sport',
-      complete: _sportChosen,
-      inline: true,
-      headerControl: SizedBox(
-        width: 180,
-        child: _SessionSelect(
-          value: _sport,
-          hint: 'Select sport…',
-          options: [
-            for (final sport in _sports) (sport, _sportLabel(sport)),
+            if (needsAdd) ...[
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  missing.join(', '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    height: 1.1,
+                    color: warn,
+                  ),
+                ),
+              ),
+            ] else if (complete) ...[
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Enough existing IPTC',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    height: 1.1,
+                    color: FfTokens.sessionOk,
+                  ),
+                ),
+              ),
+            ] else
+              const Spacer(),
+            _SessionOptionAction(
+              label: 'Edit',
+              icon: PhosphorIconsRegular.pencilSimple,
+              onPressed: enabled
+                  ? () => unawaited(
+                        needsAdd
+                            ? _openIptc(
+                                populateFromFolder: true,
+                                enableWriting: true,
+                              )
+                            : _openIptc(),
+                      )
+                  : null,
+            ),
           ],
-          onChanged: _selectSport,
         ),
       ),
-      child: apiChoice ?? soccerNote,
     );
   }
 
-  Widget _buildTeamsStep(FfTokens t, {required bool stack}) {
+  Widget _buildV4LeagueField() {
+    return ValueListenableBuilder<bool>(
+      valueListenable: AdminService.previewAsNonAdmin,
+      builder: (context, _, __) {
+        final showApi = AdminService.isCurrentUserAdminSync() &&
+            _sport != 'soccer';
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildV4FieldHeader(
+              label: 'League',
+              trailing: showApi
+                  ? _buildV4LinkButton(
+                      icon: PhosphorIconsRegular.plug,
+                      label: (!_tank01Supported || _useOfficialLeagueApis)
+                          ? 'Official'
+                          : 'Tank01',
+                      onPressed: !_sportChosen || !_tank01Supported
+                          ? null
+                          : () => _setUseOfficialLeagueApis(
+                                !_useOfficialLeagueApis,
+                              ),
+                    )
+                  : (_sport == 'soccer'
+                      ? const Text(
+                          'ESPN MLS',
+                          style: TextStyle(
+                            fontFamily: FfTokens.fontFamily,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: FfTokens.sessionT3,
+                          ),
+                        )
+                      : null),
+            ),
+            const SizedBox(height: 6),
+            _SessionSelect(
+              value: _sport,
+              hint: _leagueUnlocked
+                  ? 'Select league…'
+                  : 'Pick a folder first',
+              enabled: _leagueUnlocked,
+              height: 38,
+              fontSize: 13,
+              leading: PhosphorIcon(
+                _sportIcon(_sport),
+                size: 16,
+                color: FfTokens.sessionT3,
+              ),
+              options: [
+                for (final sport in _sports) (sport, _leagueLabel(sport)),
+              ],
+              onChanged: _selectSport,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildV4TeamsField({required bool stack}) {
     final away = _TeamDropdown(
       menuId: 0,
       openMenuId: _openMenuId,
       label: 'Away',
       value: _awayTeam,
       teams: _sortedTeams(exclude: _homeTeam),
-      enabled: _sportChosen && !_loadingTeams,
+      enabled: _teamsUnlocked && !_loadingTeams,
       sideFavorite: _favoriteAway,
       favoriteNames: _favoriteTeamNames,
       focusNode: _awayFocus,
-      hintText: _sportChosen ? 'Select away…' : 'Pick a sport first',
+      hideLabel: true,
+      fieldHeight: 38,
+      hintText: !_folderChosen
+          ? 'Pick a folder first'
+          : (_sportChosen ? 'Select away team' : 'Pick a league first'),
       onChanged: _setAwayTeam,
       onToggleFavorite: (team) =>
           unawaited(_toggleFavoriteTeam(team, isHome: false)),
@@ -1438,11 +2145,15 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       label: 'Home',
       value: _homeTeam,
       teams: _sortedTeams(exclude: _awayTeam),
-      enabled: _sportChosen && !_loadingTeams,
+      enabled: _teamsUnlocked && !_loadingTeams,
       sideFavorite: _favoriteHome,
       favoriteNames: _favoriteTeamNames,
       focusNode: _homeFocus,
-      hintText: _sportChosen ? 'Select home…' : 'Pick a sport first',
+      hideLabel: true,
+      fieldHeight: 38,
+      hintText: !_folderChosen
+          ? 'Pick a folder first'
+          : (_sportChosen ? 'Select home team' : 'Pick a league first'),
       onChanged: _setHomeTeam,
       onToggleFavorite: (team) =>
           unawaited(_toggleFavoriteTeam(team, isHome: true)),
@@ -1450,29 +2161,58 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         _openMenuId = open ? 1 : (_openMenuId == 1 ? null : _openMenuId);
       }),
     );
+    final pastedCount =
+        (_awayRoster?.length ?? 0) + (_homeRoster?.length ?? 0);
+    final customRosters = _buildV4LinkButton(
+      icon: PhosphorIconsRegular.clipboardText,
+      label: _usingCustomRosters && pastedCount > 0
+          ? 'Custom rosters ($pastedCount)'
+          : 'Custom rosters',
+      onPressed: _sportChosen ? _pasteRoster : null,
+    );
+    final swap = _Pressable(
+      height: 38,
+      radius: 8,
+      padding: EdgeInsets.zero,
+      color: Colors.transparent,
+      hoverColor: FfTokens.sessionHv,
+      onPressed: _teamsUnlocked ? _swapTeams : null,
+      child: const SizedBox(
+        width: 30,
+        child: PhosphorIcon(
+          PhosphorIconsRegular.arrowsLeftRight,
+          size: 15,
+          color: FfTokens.sessionT3,
+        ),
+      ),
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        _buildV4FieldHeader(
+          label: 'Away  ·  Home',
+          trailing: customRosters,
+        ),
+        const SizedBox(height: 6),
         if (stack)
           Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               away,
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               home,
             ],
           )
         else
           Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Expanded(child: away),
-              const SizedBox(width: 10),
+              swap,
               Expanded(child: home),
             ],
           ),
         if (_loadingTeams && availableTeamsEmpty) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           const Text(
             'Loading team list…',
             style: TextStyle(
@@ -1482,72 +2222,452 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
             ),
           ),
         ],
-        if (_offline && _sportChosen) ...[
-          const SizedBox(height: 8),
-          const Text(
-            'Offline list',
-            style: TextStyle(
+      ],
+    );
+  }
+
+  /// v4: Caption card — wire segments + colour code + shuffle over structure.
+  Widget _buildV4CaptionCard({required bool showAdminSave}) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      decoration: BoxDecoration(
+        color: FfTokens.sessionPanel,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildV4CaptionHeader(showAdminSave: showAdminSave),
+          const SizedBox(height: 12),
+          Expanded(
+            child: _buildEmbeddedCaptionBuilder(showAdminSave: false),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildV4CaptionHeader({required bool showAdminSave}) {
+    final catalog = _styleCatalog;
+    final tokens = <String>[
+      if (catalog != null)
+        for (final option in catalog.options)
+          if (!CaptionStyleCatalog.isCustomMenuToken(option.token))
+            option.token,
+    ];
+    final current = tokens.contains(_selectedStyleToken)
+        ? _selectedStyleToken
+        : (tokens.isNotEmpty ? tokens.first : null);
+    final colorOn =
+        _captionBuilderKey.currentState?.structurePreviewColorCode ?? false;
+
+    return Row(
+      children: [
+        const Text(
+          'Caption',
+          style: TextStyle(
+            fontFamily: FfTokens.fontFamily,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: FfTokens.sessionTx,
+          ),
+        ),
+        const SizedBox(width: 10),
+        if (tokens.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              color: FfTokens.sessionBg,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final token in tokens)
+                  _Pressable(
+                    height: 28,
+                    radius: 6,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    color: token == current
+                        ? FfTokens.nocturneAccentSoft
+                        : Colors.transparent,
+                    borderColor: token == current
+                        ? FfTokens.nocturneAccentEdge
+                        : Colors.transparent,
+                    borderWidth: token == current ? 1 : 0,
+                    hoverColor: FfTokens.sessionHv,
+                    hoverForeground: token != current,
+                    foreground: token == current
+                        ? FfTokens.sessionTx
+                        : FfTokens.sessionT3,
+                    onPressed: () => unawaited(_selectStyle(token)),
+                    child: Text(
+                      catalog!.labelFor(token),
+                      style: const TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        const Spacer(),
+        if (showAdminSave)
+          _Pressable(
+            height: 30,
+            radius: 7,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            color: FfTokens.nocturneAccentSoft,
+            borderColor: FfTokens.nocturneAccentEdge,
+            borderWidth: 1,
+            hoverColor: FfTokens.nocturneAccentDeep,
+            foreground: FfTokens.sessionTx,
+            onPressed: _savingCaptionDefault
+                ? null
+                : () => unawaited(_saveCaptionStyleAsFirebaseDefault()),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const PhosphorIcon(PhosphorIconsRegular.floppyDisk, size: 15),
+                const SizedBox(width: 6),
+                Text(
+                  _savingCaptionDefault ? 'Saving…' : 'Save as default',
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        if (showAdminSave) const SizedBox(width: 6),
+        _Pressable(
+          height: 30,
+          radius: 7,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          color: colorOn ? FfTokens.sessionOnSoft : Colors.transparent,
+          hoverColor: FfTokens.sessionHv,
+          hoverForeground: true,
+          foreground: colorOn ? FfTokens.sessionTx : FfTokens.sessionT2,
+          onPressed: () {
+            _captionBuilderKey.currentState
+                ?.toggleStructurePreviewColorCode();
+            setState(() {});
+          },
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              PhosphorIcon(PhosphorIconsRegular.highlighter, size: 15),
+              SizedBox(width: 6),
+              Text(
+                'Colour code',
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 4),
+        _Pressable(
+          height: 34,
+          radius: 8,
+          padding: EdgeInsets.zero,
+          color: Colors.transparent,
+          hoverColor: FfTokens.sessionHv,
+          onPressed: () =>
+              _captionBuilderKey.currentState?.shuffleCaptionSample(),
+          child: const SizedBox(
+            width: 34,
+            child: PhosphorIcon(
+              PhosphorIconsRegular.shuffle,
+              size: 17,
+              color: FfTokens.sessionT2,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFolderStep(
+    FfTokens t, {
+    required bool compact,
+  }) {
+    final chosen = _folderChosen;
+    final title = chosen ? p.basename(_folderPath!) : 'Drop a folder here';
+    final subtitle = chosen
+        ? (_imageCount == 1 ? '1 image' : '$_imageCount images')
+        : 'or choose one from your computer';
+    return DropTarget(
+      onDragEntered: (_) => setState(() => _folderDragOver = true),
+      onDragExited: (_) => setState(() => _folderDragOver = false),
+      onDragDone: _onFolderDropped,
+      child: _StepCard(
+        number: 1,
+        title: 'Images folder',
+        complete: chosen,
+        compact: compact,
+        highlighted: _folderDragOver,
+        child: _FolderDropRow(
+          empty: !chosen,
+          emphasized: _folderDragOver,
+          compact: compact,
+          icon: chosen
+              ? PhosphorIconsRegular.folderSimple
+              : PhosphorIconsRegular.folderSimpleDashed,
+          title: title,
+          subtitle: subtitle,
+          buttonLabel: _pickingFolder
+              ? 'Opening…'
+              : (chosen ? 'Change' : 'Choose folder'),
+          onPressed: _pickingFolder ? null : _pickFolder,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSportStep(
+    FfTokens t, {
+    required bool compact,
+  }) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: AdminService.previewAsNonAdmin,
+      builder: (context, _, __) {
+        final soccerNote = _sport == 'soccer'
+            ? const Text(
+                'Always use ESPN MLS rosters for soccer',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 12,
+                  color: FfTokens.sessionT3,
+                ),
+              )
+            : null;
+        // Tank01 vs official league APIs — admin accounts only.
+        final apiChoice = AdminService.isCurrentUserAdminSync() &&
+                soccerNote == null
+            ? _AttachedChoice(
+                expand: true,
+                enabled: _sportChosen && _tank01Supported,
+                selected:
+                    (!_tank01Supported || _useOfficialLeagueApis) ? 1 : 0,
+                options: const ['Tank01 APIs', 'Official league APIs'],
+                onSelected: (index) => _setUseOfficialLeagueApis(index == 1),
+              )
+            : null;
+        return _StepCard(
+          number: 2,
+          title: 'League',
+          // Saved/favorite league may already be set, but don't show a check
+          // until this step is unlocked (folder chosen).
+          complete: _leagueUnlocked && _sportChosen,
+          compact: compact,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _SessionSelect(
+                value: _sport,
+                hint: _leagueUnlocked
+                    ? 'Select league…'
+                    : 'Pick a folder first',
+                enabled: _leagueUnlocked,
+                leading: PhosphorIcon(
+                  _sportIcon(_sport),
+                  size: 16,
+                  color: FfTokens.sessionT3,
+                ),
+                options: [
+                  for (final sport in _sports) (sport, _leagueLabel(sport)),
+                ],
+                onChanged: _selectSport,
+              ),
+              if (apiChoice != null) ...[
+                SizedBox(height: compact ? 6 : 8),
+                apiChoice,
+              ],
+              if (soccerNote != null) ...[
+                SizedBox(height: compact ? 6 : 8),
+                soccerNote,
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildTeamsStepCard(
+    FfTokens t, {
+    required bool stack,
+    required bool compact,
+  }) {
+    final away = _TeamDropdown(
+      menuId: 0,
+      openMenuId: _openMenuId,
+      label: 'Away',
+      value: _awayTeam,
+      teams: _sortedTeams(exclude: _homeTeam),
+      enabled: _teamsUnlocked && !_loadingTeams,
+      sideFavorite: _favoriteAway,
+      favoriteNames: _favoriteTeamNames,
+      focusNode: _awayFocus,
+      hintText: !_folderChosen
+          ? 'Pick a folder first'
+          : (_sportChosen ? 'Select away team' : 'Pick a league first'),
+      onChanged: _setAwayTeam,
+      onToggleFavorite: (team) =>
+          unawaited(_toggleFavoriteTeam(team, isHome: false)),
+      onMenuOpenChanged: (open) => setState(() {
+        _openMenuId = open ? 0 : (_openMenuId == 0 ? null : _openMenuId);
+      }),
+    );
+    final home = _TeamDropdown(
+      menuId: 1,
+      openMenuId: _openMenuId,
+      label: 'Home',
+      value: _homeTeam,
+      teams: _sortedTeams(exclude: _awayTeam),
+      enabled: _teamsUnlocked && !_loadingTeams,
+      sideFavorite: _favoriteHome,
+      favoriteNames: _favoriteTeamNames,
+      focusNode: _homeFocus,
+      hintText: !_folderChosen
+          ? 'Pick a folder first'
+          : (_sportChosen ? 'Select home team' : 'Pick a league first'),
+      onChanged: _setHomeTeam,
+      onToggleFavorite: (team) =>
+          unawaited(_toggleFavoriteTeam(team, isHome: true)),
+      onMenuOpenChanged: (open) => setState(() {
+        _openMenuId = open ? 1 : (_openMenuId == 1 ? null : _openMenuId);
+      }),
+    );
+
+    final swap = _Pressable(
+      height: 32,
+      radius: 8,
+      padding: EdgeInsets.zero,
+      color: Colors.transparent,
+      hoverColor: FfTokens.sessionHv,
+      onPressed: _teamsUnlocked ? _swapTeams : null,
+      child: const SizedBox(
+        width: 28,
+        child: PhosphorIcon(
+          PhosphorIconsRegular.arrowsLeftRight,
+          size: 14,
+          color: FfTokens.sessionT3,
+        ),
+      ),
+    );
+
+    final pastedCount =
+        (_awayRoster?.length ?? 0) + (_homeRoster?.length ?? 0);
+    final customRosters = _Pressable(
+      height: 32,
+      radius: 8,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      color: _usingCustomRosters
+          ? FfTokens.sessionOnSoft
+          : FfTokens.sessionEl,
+      hoverColor: FfTokens.sessionHv,
+      borderColor:
+          _usingCustomRosters ? FfTokens.sessionOnRing : Colors.transparent,
+      borderWidth: _usingCustomRosters ? 1 : 0,
+      foreground: _sportChosen
+          ? (_usingCustomRosters ? FfTokens.sessionOn : FfTokens.sessionT2)
+          : FfTokens.sessionT3,
+      hoverForeground: _sportChosen,
+      onPressed: _sportChosen ? _pasteRoster : null,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const PhosphorIcon(
+            PhosphorIconsRegular.clipboardText,
+            size: 15,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            _usingCustomRosters && pastedCount > 0
+                ? 'Custom rosters ($pastedCount)'
+                : 'Custom rosters',
+            style: const TextStyle(
               fontFamily: FfTokens.fontFamily,
               fontSize: 12,
-              color: FfTokens.sessionT3,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
-        const SizedBox(height: 12),
-        _PasteRosterButton(
-          enabled: _sportChosen,
-          pastedCount: _usingCustomRosters
-              ? (_awayRoster?.length ?? 0) + (_homeRoster?.length ?? 0)
-              : 0,
-          onPressed: _sportChosen ? _pasteRoster : null,
-        ),
-      ],
+      ),
+    );
+
+    return _StepCard(
+      number: 3,
+      title: 'Teams',
+      complete: _teamsUnlocked && _bothTeamsChosen,
+      compact: compact,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (stack)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                away,
+                SizedBox(height: compact ? 4 : 8),
+                home,
+                SizedBox(height: compact ? 4 : 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: customRosters,
+                ),
+              ],
+            )
+          else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(child: away),
+                swap,
+                Expanded(child: home),
+                const SizedBox(width: 8),
+                customRosters,
+              ],
+            ),
+          if (_loadingTeams && availableTeamsEmpty) ...[
+            SizedBox(height: compact ? 4 : 8),
+            const Text(
+              'Loading team list…',
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 12,
+                color: FfTokens.sessionT3,
+              ),
+            ),
+          ],
+          if (_offline && _sportChosen) ...[
+            SizedBox(height: compact ? 4 : 8),
+            const Text(
+              'Offline list',
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 12,
+                color: FfTokens.sessionT3,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
   bool get availableTeamsEmpty => _teams.isEmpty;
-
-  Future<void> _reloadRecentMatchups() async {
-    final sport = _sport;
-    final prefs = _prefs;
-    if (sport == null || prefs == null) return;
-    final names = _teams.toSet();
-    final recent = await prefs.getRecentMatchups(sport: sport);
-    final visible = recent
-        .where((e) => names.contains(e.key) && names.contains(e.value))
-        .toList();
-    if (!mounted) return;
-    setState(() => _recentMatchups = visible);
-  }
-
-  Widget? _recentMatchupRow() {
-    if (_recentMatchups.isEmpty) return null;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Text(
-          'Recent',
-          style: TextStyle(
-            fontFamily: FfTokens.fontFamily,
-            fontSize: 12,
-            color: FfTokens.sessionT3,
-          ),
-        ),
-        const SizedBox(width: 8),
-        for (var i = 0; i < _recentMatchups.length; i++) ...[
-          if (i > 0) const SizedBox(width: 6),
-          _MatchupChip(
-            label:
-                '${mlbTeamAbbreviation(_recentMatchups[i].key)} @ ${mlbTeamAbbreviation(_recentMatchups[i].value)}',
-            onPressed: () => _applyRecentMatchup(
-              _recentMatchups[i].key,
-              _recentMatchups[i].value,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
 
   Future<void> _setNbae(bool next) async {
     setState(() => _gettyNoteIsNbae = next);
@@ -1555,38 +2675,182 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     await prefs.saveGettyNoteIsNbae(next);
   }
 
-  String _styleSubtitle(String token) {
-    switch (token) {
-      case CaptionStyleCatalog.tokGetty:
-      case CaptionStyleCatalog.tokGettyIntl:
-      case CaptionStyleCatalog.tokNbae:
-        return 'Getty Images';
-      case CaptionStyleCatalog.tokAp:
-        return 'Associated Press';
-      case CaptionStyleCatalog.tokImagn:
-        return 'Imagn';
-      case CaptionStyleCatalog.tokCp:
-        return 'The Canadian Press';
-      case CaptionStyleCatalog.tokCustom:
-        return 'My layout';
-      default:
-        return 'Saved layout';
+  String _tokenForWire(WireStyle wire) {
+    switch (wire) {
+      case WireStyle.getty:
+      case WireStyle.gettyInternational:
+        return CaptionStyleCatalog.tokGetty;
+      case WireStyle.imagn:
+        return CaptionStyleCatalog.tokImagn;
+      case WireStyle.ap:
+        return CaptionStyleCatalog.tokAp;
+      case WireStyle.cp:
+        return CaptionStyleCatalog.tokCp;
+      case WireStyle.custom:
+        return CaptionStyleCatalog.tokCustom;
     }
   }
 
-  Widget _styleTabs() {
-    final token = _selectedStyleToken;
-    final onCustom = _styleTabCustom ??
-        (token != null && CaptionStyleCatalog.isCustomMenuToken(token));
-    return _AttachedChoice(
-      expand: false,
-      selected: onCustom ? 1 : 0,
-      options: const ['Wire Style Defaults', 'Custom'],
-      onSelected: (index) => setState(() => _styleTabCustom = index == 1),
+  void _onEmbeddedCaptionDraft(WireStyle wire, CaptionTemplate template) {
+    if (!mounted) return;
+    setState(() {
+      _captionTemplate = template;
+      _selectedStyleToken = _tokenForWire(wire);
+    });
+    unawaited(() async {
+      final prefs = _prefs ?? await PreferencesService.getInstance();
+      await prefs.saveCaptionTemplate(template);
+      await _refreshIptcCaptionWarning();
+    }());
+  }
+
+  Widget _buildCaptionStyleTrailingActions() {
+    return Tooltip(
+      message: 'Shuffle sample',
+      waitDuration: const Duration(milliseconds: 350),
+      child: _Pressable(
+        height: 24,
+        radius: 6,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        color: Colors.transparent,
+        hoverColor: FfTokens.sessionHv,
+        hoverForeground: true,
+        foreground: FfTokens.sessionT2,
+        onPressed: () =>
+            _captionBuilderKey.currentState?.shuffleCaptionSample(),
+        child: PhosphorIcon(
+          PhosphorIconsRegular.shuffle,
+          size: 13,
+          color: FfTokens.sessionT2,
+        ),
+      ),
     );
   }
 
-  Widget _buildStyleStep(FfTokens t, {required int columns}) {
+  /// Admin: publish the current Structure (notes, free-text add-ons, etc.)
+  /// as the Firebase wire master for all users.
+  Future<void> _saveCaptionStyleAsFirebaseDefault() async {
+    if (!AdminService.isCurrentUserAdminSync()) return;
+    if (!_postTeamsUnlocked) return;
+    final wire = _captionTemplate?.wireStyle ?? WireStyle.getty;
+    // Confirm copy: Getty USA / International both read as "Getty".
+    final wireLabel =
+        (wire == WireStyle.getty || wire == WireStyle.gettyInternational)
+            ? 'Getty'
+            : WireIptcSpecs.factoryWireLabel(wire);
+    final sport = (_sport ?? '').trim();
+    final sportLabel = sport.isEmpty
+        ? ''
+        : sport[0].toUpperCase() + sport.substring(1);
+
+    final scope = sportLabel.isEmpty ? wireLabel : '$wireLabel - $sportLabel';
+    final ok = await showAppConfirmDialog(
+      context: context,
+      title: 'Save as default?',
+      message:
+          'Are you sure you want to make this the default for $scope?',
+      confirmLabel: 'Save',
+    );
+    if (ok != true || !mounted) return;
+
+    final okAdmin = await showAppConfirmDialog(
+      context: context,
+      title: 'Publishing as admin',
+      message:
+          'You are signed in as an admin. This writes Firebase app originals '
+          'that affect all users — not your personal Preferences.',
+      confirmLabel: 'Publish as admin',
+    );
+    if (okAdmin != true || !mounted) return;
+
+    setState(() => _savingCaptionDefault = true);
+    try {
+      await _flushCaptionBuilder?.call();
+      await _captionBuilderKey.currentState?.flushDraft();
+      if (!mounted) return;
+
+      final state = _captionBuilderKey.currentState;
+      final template = state?.currentTemplate ?? _captionTemplate;
+      if (template == null) {
+        throw StateError('No caption template to publish');
+      }
+      final publishWire = state?.currentWire ?? template.wireStyle;
+
+      await AppDefaultsFirestoreService.publishCaptionWireDefault(
+        publishWire,
+        template,
+        gameIdentifierForSport: template.gameIdentifierText,
+        gameIdentifierSport: sport.isEmpty ? null : sport,
+        // Startup save is sport-scoped — basketball must not overwrite hockey.
+        structureSport: sport.isEmpty ? null : sport,
+      );
+
+      final prefs = _prefs ?? await PreferencesService.getInstance();
+      final catalog = await CaptionStyleCatalog.load(prefs, sport: _sport);
+      if (!mounted) return;
+      setState(() {
+        _styleCatalog = catalog;
+        _captionTemplate = template.copyWith(wireStyle: publishWire);
+        _selectedStyleToken = _tokenForWire(publishWire);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            sportLabel.isEmpty
+                ? 'Saved the $wireLabel Structure to Firebase.'
+                : 'Saved the $wireLabel Structure for $sportLabel to Firebase.',
+          ),
+          backgroundColor: FfTokens.sessionOk,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to save caption default: $e'),
+          backgroundColor: FfTokens.danger,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _savingCaptionDefault = false);
+    }
+  }
+
+  /// Wire picker on the Caption style title row (saves vertical space).
+  Widget? _buildCaptionStyleHeaderWirePicker({required bool compact}) {
+    final catalog = _styleCatalog;
+    if (_loadingStyles || catalog == null) return null;
+    final tokens = <String>[
+      for (final option in catalog.options)
+        if (!CaptionStyleCatalog.isCustomMenuToken(option.token)) option.token,
+    ];
+    if (tokens.isEmpty) return null;
+    final current = tokens.contains(_selectedStyleToken)
+        ? _selectedStyleToken!
+        : tokens.first;
+    return SizedBox(
+      width: compact ? 132 : 148,
+      child: _SessionSelect(
+        value: current,
+        hint: 'Select wire…',
+        fontWeight: FontWeight.w400,
+        height: 24,
+        fontSize: 12,
+        options: [
+          for (final token in tokens) (token, catalog.labelFor(token)),
+        ],
+        onChanged: (token) => unawaited(_selectStyle(token)),
+      ),
+    );
+  }
+
+  /// Same nocturne caption layout builder used in Admin Mode (embedded).
+  Widget _buildEmbeddedCaptionBuilder({bool showAdminSave = false}) {
+    // Don't mount the builder (or its caption preview) until this step
+    // is reachable — a saved style may already be selected.
+    if (!_postTeamsUnlocked) {
+      return const SizedBox.expand();
+    }
     if (_loadingStyles) {
       return const Center(
         child: SizedBox(
@@ -1599,175 +2863,328 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         ),
       );
     }
-    final catalog = _styleCatalog;
-    if (catalog == null) return const SizedBox.shrink();
-
-    final gettyBasketball = (_sport ?? '').toLowerCase() == 'basketball' &&
-        (_selectedStyleToken == CaptionStyleCatalog.tokGetty ||
-            _selectedStyleToken == CaptionStyleCatalog.tokGettyIntl);
-    final tokens = catalog.options.map((option) => option.token).toList();
-    if (tokens.isEmpty) return const SizedBox.shrink();
-    final current = tokens.contains(_selectedStyleToken)
-        ? _selectedStyleToken!
-        : tokens.first;
-    final onCustom =
-        _styleTabCustom ?? CaptionStyleCatalog.isCustomMenuToken(current);
-    final visible = [
-      for (final token in tokens)
-        if (CaptionStyleCatalog.isCustomMenuToken(token) == onCustom) token,
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (visible.isEmpty)
-          const Text(
-            'No styles in this tab.',
-            style: TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontSize: 12,
-              color: FfTokens.sessionT3,
-            ),
-          )
-        else
-          LayoutBuilder(
-            builder: (context, constraints) {
-              const gap = 8.0;
-              final cols = columns.clamp(1, visible.length);
-              final tileWidth =
-                  (constraints.maxWidth - gap * (cols - 1)) / cols;
-              return Wrap(
-                spacing: gap,
-                runSpacing: gap,
+    if (_captionTemplate == null && _styleCatalog == null) {
+      return const SizedBox.shrink();
+    }
+    final dialog = KeyedSubtree(
+      key: ValueKey(
+        'startup_caption_${_sport ?? 'none'}_'
+        '${_selectedStyleToken ?? 'none'}',
+      ),
+      child: CaptionLayoutBuilderDialog(
+        key: _captionBuilderKey,
+        embedded: true,
+        adminMode: false,
+        initialSport: _sport,
+        initialTemplate: _captionTemplate,
+        previewHomeTeam: _homeFilled ? _homeTeam : null,
+        previewAwayTeam: _awayFilled ? _awayTeam : null,
+        previewGameInfo: _buildPreviewGameInfo(),
+        previewPlayers: _captionPreviewPlayers.isEmpty
+            ? null
+            : List<CaptionPreviewPlayer>.from(_captionPreviewPlayers),
+        previewDateFromFolder:
+            _folderChosen ? _previewDateFromFolder : null,
+        onRegisterFlush: (flush) => _flushCaptionBuilder = flush,
+        onDraftChanged: _onEmbeddedCaptionDraft,
+        onWireChanged: (wire) {
+          if (!mounted) return;
+          setState(() => _selectedStyleToken = _tokenForWire(wire));
+          unawaited(_maybeOpenIptcAfterWirePick());
+        },
+      ),
+    );
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(9),
+      child: ColoredBox(
+        color: FfTokens.sessionEl,
+        child: showAdminSave
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (final token in visible)
-                    SizedBox(
-                      width: tileWidth,
-                      child: _StyleCard(
-                        token: token,
-                        title: catalog.labelFor(token),
-                        subtitle: _styleSubtitle(token),
-                        selected: token == current,
-                        onPressed: () => unawaited(_selectStyle(token)),
+                  Expanded(child: dialog),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: _Pressable(
+                        height: 28,
+                        radius: 8,
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 12),
+                        color: FfTokens.gold,
+                        hoverColor: FfTokens.favoritesLight,
+                        borderColor: FfTokens.sessionWarnRing,
+                        borderWidth: 1,
+                        foreground: FfTokens.nocturneBg,
+                        onPressed: _savingCaptionDefault
+                            ? null
+                            : () => unawaited(
+                                  _saveCaptionStyleAsFirebaseDefault(),
+                                ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const PhosphorIcon(
+                              PhosphorIconsRegular.cloudArrowUp,
+                              size: 14,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              _savingCaptionDefault
+                                  ? 'Saving…'
+                                  : 'Save as default',
+                              style: const TextStyle(
+                                fontFamily: FfTokens.fontFamily,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
+                  ),
                 ],
-              );
-            },
-          ),
-        if (gettyBasketball) ...[
-          const SizedBox(height: 12),
-          _OptionRow(
-            title: 'NBAE credit',
-            description:
-                'Keeps the NBAE copyright line when the layout includes it',
-            value: _gettyNoteIsNbae,
-            onChanged: (next) => unawaited(_setNbae(next)),
-          ),
-        ],
-      ],
+              )
+            : dialog,
+      ),
     );
   }
 
-  Widget _buildSessionStep(FfTokens t) {
-    final iptcWarning = _missingCaptionIptc.isNotEmpty && !_scanningIptc;
+  Widget _buildSessionStep(
+    FfTokens t, {
+    required bool compact,
+  }) {
     final cards = <Widget>[
       _SessionOptionCard(
         icon: PhosphorIconsRegular.uploadSimple,
-        title: (_ftpProfileName == null || _ftpProfileName!.isEmpty)
-            ? 'No FTP profile'
-            : 'FTP: $_ftpProfileName',
-        description: 'Sends images with this profile',
+        title: 'FTP',
+        description: 'Show the FTP button',
         value: _ftpModeEnabled,
+        compact: compact,
         onChanged: (next) => unawaited(_setFtpMode(next)),
-        onTitleTap: _ftpProfileNames.isEmpty ? null : _pickFtpProfile,
+        actionLabel: (_ftpProfileName != null && _ftpProfileName!.isNotEmpty)
+            ? _ftpProfileName!
+            : 'Edit',
+        actionIcon: PhosphorIconsRegular.pencilSimple,
+        onAction: _openFtpSettings,
+      ),
+      _SessionOptionCard(
+        icon: PhosphorIconsRegular.textbox,
+        title: 'File renaming',
+        description: 'Rename on FTP upload',
+        value: _fileRenamingEnabled,
+        compact: compact,
+        onChanged: (next) => unawaited(_setFileRenaming(next)),
+        actionLabel: 'Edit',
+        actionIcon: PhosphorIconsRegular.pencilSimple,
+        onAction: (_) => unawaited(_openFileRename()),
+      ),
+      _SessionOptionCard(
+        icon: PhosphorIconsRegular.lightning,
+        title: 'Firebar',
+        description: 'Pin quick-caption bar',
+        value: !_hideFirebar,
+        compact: compact,
+        onChanged: (next) => unawaited(_setFirebarShown(next)),
       ),
       if (JerseyOcrChannel.supported)
         _SessionOptionCard(
           icon: PhosphorIconsRegular.scan,
           title: 'Text recognition',
-          description: 'Reads jersey numbers and names in the background',
+          description: 'Read jersey numbers',
           value: _jerseyOcrEnabled,
+          compact: compact,
           onChanged: (next) => unawaited(_setJerseyOcr(next)),
         ),
       _SessionOptionCard(
-        icon: PhosphorIconsRegular.lightning,
-        title: 'Firebar',
-        description: 'Keeps the quick-caption bar pinned while you work',
-        value: !_hideFirebar,
-        onChanged: (next) => unawaited(_setFirebarShown(next)),
-      ),
-      _SessionOptionCard(
         icon: PhosphorIconsRegular.hash,
         title: 'Serial numbers',
-        description: 'Writes the byline according to serial numbers from cameras',
+        description: 'Byline from serials',
         value: _serialBylinesEnabled,
+        compact: compact,
         onChanged: (next) => unawaited(_setSerialBylines(next)),
+        actionLabel: 'Edit',
+        actionIcon: PhosphorIconsRegular.pencilSimple,
+        onAction: (_) => unawaited(_openSerialNumbers()),
       ),
     ];
-    return _StepCard(
-      number: 5,
-      title: 'Session options',
-      complete: true,
+    final body = LayoutBuilder(
+      builder: (context, constraints) {
+        // Keep every option on one row whenever it fits.
+        final gap = compact ? 6.0 : 8.0;
+        final oneRow = constraints.maxWidth >= 640;
+        if (oneRow) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < cards.length; i++) ...[
+                if (i > 0) SizedBox(width: gap),
+                Expanded(child: cards[i]),
+              ],
+            ],
+          );
+        }
+        const cols = 2;
+        final rows = <Widget>[];
+        for (var i = 0; i < cards.length; i += cols) {
+          final slice = cards.sublist(
+            i,
+            i + cols > cards.length ? cards.length : i + cols,
+          );
+          rows.add(
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var j = 0; j < cols; j++) ...[
+                    if (j > 0) SizedBox(width: gap),
+                    Expanded(
+                      child: j < slice.length
+                          ? slice[j]
+                          : const SizedBox.shrink(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < rows.length; i++) ...[
+              if (i > 0) SizedBox(height: gap),
+              rows[i],
+            ],
+          ],
+        );
+      },
+    );
+    return Container(
+      padding: EdgeInsets.fromLTRB(16, compact ? 8 : 10, 16, compact ? 8 : 10),
+      decoration: BoxDecoration(
+        color: FfTokens.sessionPanel,
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _SessionLeadOption(
-            icon: PhosphorIconsRegular.pencilSimple,
-            title: 'Write IPTC',
-            description: iptcWarning
-                ? '${_iptcWarningText ?? 'When on, writes over IPTC on every photo when the folder loads.'} Existing IPTC will be permanently written over top.'
-                : 'When on, writes over IPTC on every photo when the folder loads. Existing IPTC will be permanently written over top.',
-            warn: iptcWarning,
-            descriptionColor: FfTokens.sessionTx,
-            value: _writeIptc,
-            onChanged: (next) => unawaited(_setWriteIptc(next)),
-            trailing: _writeIptc
-                ? Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: _Pressable(
-                      height: 30,
-                      radius: 8,
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      color: FfTokens.sessionEl,
-                      hoverColor: FfTokens.sessionHv,
-                      borderColor: FfTokens.sessionLn2,
-                      borderWidth: 1,
-                      onPressed: _openIptc,
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          PhosphorIcon(
-                            PhosphorIconsRegular.pencilSimple,
-                            size: 14,
-                            color: FfTokens.sessionTx,
-                          ),
-                          SizedBox(width: 6),
-                          Text(
-                            'Edit IPTC',
-                            style: TextStyle(
-                              fontFamily: FfTokens.fontFamily,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: FfTokens.sessionTx,
-                            ),
-                          ),
-                        ],
-                      ),
+          const Text('Session options', style: _kSectionLabel),
+          const SizedBox(height: 6),
+          SizedBox(height: compact ? 34 : 36, child: body),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReadyBar(FfTokens t, {required bool compact}) {
+    final note = _iptcWarningText;
+    final noteIsWarning = note != null &&
+        _missingCaptionIptc.isNotEmpty &&
+        !_scanningIptc;
+    final checks = <(String, bool)>[
+      if (_folderChosen)
+        (
+          _imageCount == 1 ? '1 photo' : '$_imageCount photos',
+          true,
+        ),
+      if (_bothTeamsChosen)
+        (
+          '${mlbTeamAbbreviation(_awayTeam ?? '')} @ ${mlbTeamAbbreviation(_homeTeam ?? '')}',
+          true,
+        ),
+      if (_selectedStyleToken != null && _styleCatalog != null)
+        (
+          '${_styleCatalog!.labelFor(_selectedStyleToken!)} style',
+          true,
+        ),
+    ];
+    final onOptions = <String>[
+      if (_writeIptc) 'IPTC',
+      if (_ftpModeEnabled) 'FTP',
+      if (_fileRenamingEnabled) 'File renaming',
+      if (!_hideFirebar) 'Firebar',
+      if (JerseyOcrChannel.supported && _jerseyOcrEnabled) 'Text recognition',
+      if (_serialBylinesEnabled) 'Serial numbers',
+    ];
+    if (onOptions.isNotEmpty) {
+      checks.add((onOptions.join(', '), true));
+    }
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        compact ? 12 : 16,
+        compact ? 10 : 12,
+        compact ? 12 : 16,
+        compact ? 10 : 12,
+      ),
+      decoration: BoxDecoration(
+        color: FfTokens.sessionPanel,
+        borderRadius: BorderRadius.circular(12),
+        border: const Border(
+          top: BorderSide(color: FfTokens.sessionLn),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: noteIsWarning
+                ? Text(
+                    note!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 12,
+                      color: FfTokens.danger,
                     ),
                   )
-                : null,
+                : Wrap(
+                    spacing: 14,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      for (final c in checks)
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const PhosphorIcon(
+                              PhosphorIconsBold.check,
+                              size: 14,
+                              color: FfTokens.sessionOk,
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              c.$1,
+                              style: const TextStyle(
+                                fontFamily: FfTokens.fontFamily,
+                                fontSize: 12,
+                                color: FfTokens.sessionT2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      Text(
+                        _canGo ? 'Press Enter to start' : _goHint,
+                        style: const TextStyle(
+                          fontFamily: FfTokens.fontFamily,
+                          fontSize: 12,
+                          color: FfTokens.sessionT3,
+                        ),
+                      ),
+                    ],
+                  ),
           ),
-          const SizedBox(height: 8),
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (var i = 0; i < cards.length; i++) ...[
-                  if (i > 0) const SizedBox(width: 8),
-                  Expanded(child: cards[i]),
-                ],
-              ],
+          SizedBox(width: compact ? 10 : 12),
+          SizedBox(
+            width: compact ? 148 : 168,
+            child: _GoTimeButton(
+              enabled: _canGo,
+              loading: _going,
+              compact: compact,
+              onPressed: _goTime,
             ),
           ),
         ],
@@ -1775,102 +3192,20 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     );
   }
 
-  Widget _buildSidePanel(FfTokens t) {
-    final note = _iptcWarningText;
-    final noteIsWarning = note != null &&
-        _missingCaptionIptc.isNotEmpty &&
-        !_scanningIptc;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: _SideCard(
-            expand: true,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  'CAPTION PREVIEW',
-                  style: _kSectionLabel,
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: _CaptionPreviewLive(
-                    sport: _sport,
-                    awayTeam: _awayTeam,
-                    homeTeam: _homeTeam,
-                    template: _captionTemplate,
-                    gettyNbaeNote: _gettyNoteIsNbae &&
-                        (_sport ?? '').toLowerCase() == 'basketball',
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        _SideCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('READY CHECK', style: _kSectionLabel),
-              const SizedBox(height: 12),
-              _ReadyRow(
-                label: 'Folder',
-                value: _folderChosen ? p.basename(_folderPath!) : 'Not chosen',
-                done: _folderChosen,
-              ),
-              _ReadyRow(
-                label: 'Sport',
-                value: _sportChosen ? _sportLabel(_sport!) : 'Not chosen',
-                done: _sportChosen,
-              ),
-              _ReadyRow(
-                label: 'Teams',
-                value: _teamsReadyValue,
-                done: _bothTeamsChosen,
-              ),
-              _ReadyRow(
-                label: 'Style',
-                value: _styleCatalog != null && _selectedStyleToken != null
-                    ? _styleCatalog!.labelFor(_selectedStyleToken!)
-                    : 'Not chosen',
-                done: _selectedStyleToken != null,
-              ),
-              _ReadyRow(
-                label: 'Output',
-                value: _outputLabel,
-                done: true,
-              ),
-              const SizedBox(height: 12),
-              _GoTimeButton(
-                enabled: _canGo,
-                loading: _going,
-                onPressed: _goTime,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                note ??
-                    (_canGo ? 'Opens the captioning screen' : _goHint),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontSize: 12,
-                  height: 1.4,
-                  color: noteIsWarning ? FfTokens.danger : FfTokens.sessionT3,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  static String _sportLabel(String s) {
-    switch (s) {
+  static String _leagueLabel(String s) {
+    switch (s.toLowerCase()) {
+      case 'hockey':
+        return 'NHL';
+      case 'basketball':
+        return 'NBA';
       case 'wnba':
         return 'WNBA';
+      case 'baseball':
+        return 'MLB';
+      case 'soccer':
+        return 'MLS';
+      case 'football':
+        return 'NFL';
       default:
         return s[0].toUpperCase() + s.substring(1);
     }
@@ -2043,15 +3378,23 @@ class _CaptionPreviewLive extends StatelessWidget {
     required this.sport,
     required this.awayTeam,
     required this.homeTeam,
+    required this.gameInfo,
+    required this.previewPlayers,
+    required this.sampleSeed,
     required this.template,
     required this.gettyNbaeNote,
+    required this.fontSize,
   });
 
   final String? sport;
   final String? awayTeam;
   final String? homeTeam;
+  final GameInfo gameInfo;
+  final List<CaptionPreviewPlayer> previewPlayers;
+  final int sampleSeed;
   final CaptionTemplate? template;
   final bool gettyNbaeNote;
+  final double fontSize;
 
   static const _awayPlaceholder = 'Away team';
   static const _homePlaceholder = 'Home team';
@@ -2080,27 +3423,27 @@ class _CaptionPreviewLive extends StatelessWidget {
         ? CaptionFormulaRenderer.previewTimePhraseForSport(sportKey)
         : 'in the $_periodPlaceholder';
 
-    final action = _actionFor(sportKey, timing);
-    final body =
-        '$away #00 Heater Ace $action against the $home $timing ahead of their ${leagueId.replaceFirst('in their ', '')}';
-
-    final game = GameInfo(
-      gameDate: DateTime.now(),
-      city: 'Los Angeles',
-      region: 'California',
-      regionCode: 'CA',
-      country: 'United States',
-      countryCode: 'USA',
-      venue: 'Los Angeles Sports Stadium',
-      photographerName: CurrentUserService.displayNameOrPlaceholder(),
-      agencyName: '',
-    );
-
+    final game = gameInfo;
     final agency = _agencyFor(tpl.wireStyle);
     // Force sport-correct game identifier even if the stored template is stale.
     final previewTemplate = hasSport
         ? CaptionTemplate.applyGameIdentifierText(tpl, leagueId)
         : tpl.copyWith(gameIdentifierText: leagueId);
+
+    final String body;
+    if (previewPlayers.isNotEmpty) {
+      body = CaptionFormulaRenderer.randomSinglePlayerCaption(
+        previewTemplate,
+        seed: sampleSeed,
+        previewPlayers: previewPlayers,
+        sport: hasSport ? sportKey : null,
+      );
+    } else if (awayFilled || homeFilled) {
+      body = 'Loading ${awayFilled ? away : home} roster…';
+    } else {
+      body =
+          '$away player against the $home $timing ahead of their ${leagueId.replaceFirst('in their ', '')}';
+    }
 
     // Prefer a full formula render when we have a template; fall back to body.
     String caption;
@@ -2109,16 +3452,23 @@ class _CaptionPreviewLive extends StatelessWidget {
         template: previewTemplate,
         game: game,
         sampleAgency: agency,
-        captionOverride:
-            '$away #00 Heater Ace $action against the $home $timing',
+        captionOverride: body,
         sport: hasSport ? sportKey : null,
         applyGettyNoteVariant: true,
         gettyNbaeNote: gettyNbaeNote,
       );
     } catch (_) {
+      final loc = [
+        if (game.city.trim().isNotEmpty) game.city.trim(),
+        if (game.region.trim().isNotEmpty) game.region.trim(),
+        if (game.countryCode.trim().isNotEmpty) game.countryCode.trim(),
+      ].join(', ');
+      final venue = game.venue.trim().isNotEmpty
+          ? game.venue.trim()
+          : 'Sports Stadium';
+      final when = game.gameDate != null ? _weekday(game.gameDate!) : '';
       caption =
-          'Los Angeles, California, USA. $body at Los Angeles Sports Stadium '
-          '${_weekday(game.gameDate!)}. '
+          '$loc. $body at $venue${when.isEmpty ? '' : ' $when'}. '
           '${game.photographerName}/${CaptionFormulaRenderer.defaultAgencyLabel(agency)}';
     }
 
@@ -2127,10 +3477,10 @@ class _CaptionPreviewLive extends StatelessWidget {
       caption = caption
           .replaceAll(
             RegExp(
-              r'\b(in the third period|during the third inning|in the fourth quarter|in the second half)\b',
+              r'\b(during the third period|during the third inning|during the fourth quarter|during the second half)\b',
               caseSensitive: false,
             ),
-            'in the $_periodPlaceholder',
+            'during the $_periodPlaceholder',
           )
           .replaceAll(
             RegExp(
@@ -2151,43 +3501,27 @@ class _CaptionPreviewLive extends StatelessWidget {
       if (!hasSport) _leaguePlaceholder,
     ];
 
-    return SingleChildScrollView(
-      child: Text.rich(
-        TextSpan(
-          children: _spanCaption(
-            caption,
-            filled: filled,
-            missing: missing,
-            text: FfTokens.sessionTx,
-            hot: FfTokens.sessionHot,
-            missingColor: FfTokens.sessionT3,
-            rule: FfTokens.sessionLn2,
-          ),
-        ),
-        style: const TextStyle(
-          fontFamily: FfTokens.fontFamily,
-          fontSize: 15,
-          height: 1.6,
-          color: FfTokens.sessionTx,
+    return Text.rich(
+      TextSpan(
+        children: _spanCaption(
+          caption,
+          filled: filled,
+          missing: missing,
+          text: FfTokens.sessionTx,
+          hot: FfTokens.sessionHot,
+          missingColor: FfTokens.sessionT3,
+          rule: FfTokens.sessionLn2,
         ),
       ),
+      maxLines: 6,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontFamily: FfTokens.fontFamily,
+        fontSize: fontSize,
+        height: 1.35,
+        color: FfTokens.sessionTx,
+      ),
     );
-  }
-
-  static String _actionFor(String sport, String timing) {
-    switch (sport) {
-      case 'hockey':
-        return 'scores a goal';
-      case 'basketball':
-      case 'wnba':
-        return 'dunks';
-      case 'soccer':
-        return 'scores a goal';
-      case 'baseball':
-        return 'hits a home run';
-      default:
-        return 'scores a goal';
-    }
   }
 
   static CreditSampleAgency _agencyFor(WireStyle wire) {
@@ -2326,6 +3660,8 @@ class _StepCard extends StatelessWidget {
     this.expandHeader = false,
     this.inline = false,
     this.highlighted = false,
+    this.compact = false,
+    this.expand = false,
   });
 
   final int number;
@@ -2337,118 +3673,147 @@ class _StepCard extends StatelessWidget {
   final bool expandHeader;
   final bool inline;
   final bool highlighted;
+  final bool compact;
+  final bool expand;
 
   @override
   Widget build(BuildContext context) {
+    final denseHeader = expandHeader;
     final titleStyle = _kBody.copyWith(
-      fontSize: 14,
+      fontSize: denseHeader ? 12 : (compact ? 13 : 14),
       fontWeight: FontWeight.w600,
+    );
+    final padV = denseHeader
+        ? (compact ? 4.0 : 6.0)
+        : (compact ? 8.0 : 12.0);
+    final padH = compact ? 12.0 : 14.0;
+    final headerH = denseHeader ? 24.0 : (inline ? 32.0 : 22.0);
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: headerH,
+          child: Row(
+            children: [
+              _StepBadge(
+                number: number,
+                complete: complete,
+                compact: denseHeader,
+              ),
+              SizedBox(width: denseHeader ? 6 : 8),
+              if (inline || expandHeader || headerControl != null)
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: titleStyle,
+                )
+              else
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: titleStyle,
+                  ),
+                ),
+              if (inline) ...[
+                const SizedBox(width: 12),
+                Expanded(child: child ?? const SizedBox.shrink()),
+              ],
+              if (expandHeader && headerControl != null) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: headerControl,
+                    ),
+                  ),
+                ),
+              ] else if (headerControl != null) ...[
+                const SizedBox(width: 10),
+                headerControl!,
+                if (!inline) const Spacer(),
+              ],
+              if (trailing != null) ...[
+                SizedBox(width: denseHeader ? 4 : 8),
+                trailing!,
+              ],
+            ],
+          ),
+        ),
+        if (!inline && child != null) ...[
+          SizedBox(height: denseHeader ? 4 : (compact ? 6 : 10)),
+          if (expand)
+            Expanded(child: child!)
+          else
+            child!,
+        ],
+      ],
     );
     return AnimatedContainer(
       duration: const Duration(milliseconds: 150),
-      padding: EdgeInsets.fromLTRB(14, inline ? 8 : 14, 14, inline ? 8 : 14),
+      width: double.infinity,
+      height: expand ? double.infinity : null,
+      padding: EdgeInsets.fromLTRB(
+        padH,
+        inline ? 6 : padV,
+        padH,
+        inline ? 6 : padV,
+      ),
       decoration: BoxDecoration(
-        color: highlighted ? FfTokens.nocturneSunken : FfTokens.nocturneEl,
-        borderRadius: BorderRadius.circular(12),
+        color: highlighted ? FfTokens.sessionEl : FfTokens.sessionPanel,
+        borderRadius: BorderRadius.circular(compact ? 12 : 14),
         border: Border.all(
-          color: highlighted ? FfTokens.sessionAc : Colors.transparent,
+          color: highlighted ? FfTokens.sessionOn : Colors.transparent,
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ConstrainedBox(
-            constraints: BoxConstraints(minHeight: inline ? 36 : 28),
-            child: SizedBox(
-              height: expandHeader ? 30 : null,
-              child: Row(
-                children: [
-                  _StepBadge(number: number, complete: complete),
-                  const SizedBox(width: 10),
-                  if (inline || expandHeader || headerControl != null)
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: titleStyle,
-                    )
-                  else
-                    Expanded(
-                      child: Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: titleStyle,
-                      ),
-                    ),
-                  if (inline) ...[
-                    const SizedBox(width: 14),
-                    Expanded(child: child ?? const SizedBox.shrink()),
-                  ],
-                  if (expandHeader && headerControl != null) ...[
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: headerControl,
-                        ),
-                      ),
-                    ),
-                  ] else if (headerControl != null) ...[
-                    const SizedBox(width: 12),
-                    headerControl!,
-                    if (!inline) const Spacer(),
-                  ],
-                  if (trailing != null) ...[
-                    const SizedBox(width: 10),
-                    trailing!,
-                  ],
-                ],
-              ),
-            ),
-          ),
-          if (!inline && child != null) ...[
-            const SizedBox(height: 10),
-            child!,
-          ],
-        ],
-      ),
+      child: body,
     );
   }
 }
 
 class _StepBadge extends StatelessWidget {
-  const _StepBadge({required this.number, required this.complete});
+  const _StepBadge({
+    required this.number,
+    required this.complete,
+    this.compact = false,
+  });
 
   final int number;
   final bool complete;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
+    final size = compact ? 18.0 : 22.0;
     return Container(
-      width: 22,
-      height: 22,
+      width: size,
+      height: size,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: complete ? FfTokens.sessionOkSoft : FfTokens.nocturneSunken,
+        color: complete ? FfTokens.sessionOkSoft : Colors.transparent,
+        border: complete
+            ? null
+            : Border.all(color: FfTokens.sessionLn2, width: compact ? 1 : 1.5),
       ),
       child: complete
-          ? const PhosphorIcon(
+          ? PhosphorIcon(
               PhosphorIconsBold.check,
-              size: 13,
+              size: compact ? 11 : 13,
               color: FfTokens.sessionOk,
             )
           : Text(
               '$number',
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: FfTokens.fontFamily,
-                fontSize: 11,
+                fontSize: compact ? 10 : 11,
                 fontWeight: FontWeight.w700,
-                color: FfTokens.sessionT2,
+                color: FfTokens.sessionT3,
                 height: 1,
               ),
             ),
@@ -2457,20 +3822,138 @@ class _StepBadge extends StatelessWidget {
 }
 
 class _SideCard extends StatelessWidget {
-  const _SideCard({required this.child, this.expand = false});
+  const _SideCard({
+    required this.child,
+    this.expand = false,
+    this.compact = false,
+  });
 
   final Widget child;
   final bool expand;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
+    final pad = compact ? 12.0 : 14.0;
     return Container(
       width: double.infinity,
       height: expand ? double.infinity : null,
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      padding: EdgeInsets.fromLTRB(pad, compact ? 10 : 12, pad, compact ? 12 : 14),
       decoration: BoxDecoration(
-        color: FfTokens.nocturneEl,
-        borderRadius: BorderRadius.circular(12),
+        color: FfTokens.sessionPanel,
+        borderRadius: BorderRadius.circular(compact ? 12 : 14),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _FolderDropRow extends StatelessWidget {
+  const _FolderDropRow({
+    required this.empty,
+    required this.emphasized,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.buttonLabel,
+    required this.onPressed,
+    this.compact = false,
+  });
+
+  final bool empty;
+  final bool emphasized;
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String buttonLabel;
+  final VoidCallback? onPressed;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final height = compact ? 36.0 : 40.0;
+    final row = Row(
+      children: [
+        PhosphorIcon(icon, size: compact ? 18 : 20, color: FfTokens.sessionT3),
+        SizedBox(width: compact ? 10 : 12),
+        Expanded(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: FfTokens.sessionTx,
+                  height: 1.1,
+                ),
+              ),
+              Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 11,
+                  color: FfTokens.sessionT3,
+                  height: 1.1,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        _Pressable(
+          height: compact ? 26 : 30,
+          radius: 6,
+          padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 12),
+          color: FfTokens.sessionPanel,
+          hoverColor: FfTokens.sessionHv,
+          onPressed: onPressed,
+          child: Text(
+            buttonLabel,
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: onPressed == null
+                  ? FfTokens.sessionT3
+                  : FfTokens.sessionTx,
+            ),
+          ),
+        ),
+      ],
+    );
+    final child = Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 6, 0),
+      child: row,
+    );
+    if (empty) {
+      return SizedBox(
+        height: height,
+        child: CustomPaint(
+          painter: _DottedRRectPainter(
+            color: emphasized ? FfTokens.sessionOn : FfTokens.sessionLn2,
+            radius: 9,
+          ),
+          child: child,
+        ),
+      );
+    }
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      height: height,
+      decoration: BoxDecoration(
+        color: FfTokens.sessionEl,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(
+          color: emphasized ? FfTokens.sessionOn : FfTokens.sessionLn2,
+        ),
       ),
       child: child,
     );
@@ -2554,12 +4037,22 @@ class _SessionSelect extends StatelessWidget {
     required this.hint,
     required this.options,
     required this.onChanged,
+    this.leading,
+    this.fontWeight = FontWeight.w600,
+    this.enabled = true,
+    this.height = 32,
+    this.fontSize = 13,
   });
 
   final String? value;
   final String hint;
   final List<(String, String)> options;
   final ValueChanged<String> onChanged;
+  final Widget? leading;
+  final FontWeight fontWeight;
+  final bool enabled;
+  final double height;
+  final double fontSize;
 
   @override
   Widget build(BuildContext context) {
@@ -2571,41 +4064,49 @@ class _SessionSelect extends StatelessWidget {
             .map((option) => option.$2)
             .firstOrNull;
     final hasValue = label != null && current != null;
-    return _Pressable(
-      height: 36,
-      radius: 10,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      color: FfTokens.nocturneSunken,
-      hoverColor: FfTokens.nocturneHv,
-      onPressed: () => _open(context),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              hasValue ? label : hint,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.left,
-              style: TextStyle(
-                fontFamily: FfTokens.fontFamily,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: hasValue ? FfTokens.sessionTx : FfTokens.sessionT3,
+    return Opacity(
+      opacity: enabled ? 1 : 0.55,
+      child: _Pressable(
+        height: height,
+        radius: 7,
+        padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
+        color: FfTokens.sessionEl,
+        hoverColor: enabled ? FfTokens.sessionHv : FfTokens.sessionEl,
+        onPressed: enabled ? () => _open(context) : null,
+        child: Row(
+          children: [
+            if (leading != null) ...[
+              leading!,
+              const SizedBox(width: 6),
+            ],
+            Expanded(
+              child: Text(
+                hasValue ? label : hint,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.left,
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: fontSize,
+                  fontWeight: fontWeight,
+                  color: hasValue ? FfTokens.sessionTx : FfTokens.sessionT3,
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          const PhosphorIcon(
-            PhosphorIconsRegular.caretDown,
-            size: 12,
-            color: FfTokens.sessionT3,
-          ),
-        ],
+            const SizedBox(width: 8),
+            const PhosphorIcon(
+              PhosphorIconsRegular.caretDown,
+              size: 12,
+              color: FfTokens.sessionT3,
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Future<void> _open(BuildContext context) async {
+    if (!enabled) return;
     final box = context.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return;
     final origin = box.localToGlobal(Offset.zero);
@@ -2619,7 +4120,14 @@ class _SessionSelect extends StatelessWidget {
           FfMenuChoice<String>(
             value: option.$1,
             selected: option.$1 == value,
-            child: Text(option.$2),
+            child: Text(
+              option.$2,
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 13,
+                fontWeight: fontWeight,
+              ),
+            ),
           ),
       ],
     );
@@ -2635,99 +4143,40 @@ class _SessionSwitch extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.alignment = Alignment.centerRight,
+    this.activeColor = FfTokens.sessionOn,
   });
 
   final bool value;
-  final ValueChanged<bool> onChanged;
+  final ValueChanged<bool>? onChanged;
   final Alignment alignment;
+  final Color activeColor;
 
   @override
   Widget build(BuildContext context) {
-    return Transform.scale(
-      scale: 0.72,
-      alignment: alignment,
-      child: Switch(
-        value: value,
-        onChanged: onChanged,
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        thumbIcon: const WidgetStatePropertyAll(
-          Icon(Icons.circle, size: 0, color: Colors.transparent),
+    // Scale visually, but also clamp layout size so option cards stay compact.
+    return SizedBox(
+      width: 30,
+      height: 18,
+      child: Transform.scale(
+        scale: 0.64,
+        alignment: alignment,
+        child: Switch(
+          value: value,
+          onChanged: onChanged,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          thumbIcon: const WidgetStatePropertyAll(
+            Icon(Icons.circle, size: 0, color: Colors.transparent),
+          ),
+          thumbColor: const WidgetStatePropertyAll(Colors.white),
+          trackColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return activeColor;
+            }
+            // Darker than sessionEl / option card fills so the off state reads.
+            return FfTokens.sessionBg;
+          }),
+          trackOutlineColor: const WidgetStatePropertyAll(FfTokens.sessionLn2),
         ),
-        thumbColor: const WidgetStatePropertyAll(Colors.white),
-        trackColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) {
-            return FfTokens.nocturneAc;
-          }
-          return FfTokens.nocturneEl;
-        }),
-        trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
-      ),
-    );
-  }
-}
-
-class _SessionLeadOption extends StatelessWidget {
-  const _SessionLeadOption({
-    required this.icon,
-    required this.title,
-    required this.description,
-    required this.value,
-    required this.onChanged,
-    this.warn = false,
-    this.descriptionColor,
-    this.trailing,
-  });
-
-  final IconData icon;
-  final String title;
-  final String description;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-  final bool warn;
-  final Color? descriptionColor;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(2, 2, 2, 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          PhosphorIcon(icon, size: 16, color: FfTokens.sessionT2),
-          const SizedBox(width: 10),
-          Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: warn ? FfTokens.danger : FfTokens.sessionTx,
-            ),
-          ),
-          const SizedBox(width: 14),
-          _SessionSwitch(
-            value: value,
-            onChanged: onChanged,
-            alignment: Alignment.centerLeft,
-          ),
-          if (trailing != null) trailing!,
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              description,
-              maxLines: 3,
-              style: TextStyle(
-                fontFamily: FfTokens.fontFamily,
-                fontSize: 12,
-                color: descriptionColor ??
-                    (warn ? FfTokens.danger : FfTokens.sessionT3),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -2740,7 +4189,11 @@ class _SessionOptionCard extends StatelessWidget {
     required this.description,
     required this.value,
     required this.onChanged,
-    this.onTitleTap,
+    this.actionLabel,
+    this.actionIcon,
+    this.onAction,
+    this.compact = false,
+    this.enabled = true,
   });
 
   final IconData icon;
@@ -2748,81 +4201,158 @@ class _SessionOptionCard extends StatelessWidget {
   final String description;
   final bool value;
   final ValueChanged<bool> onChanged;
-  final void Function(BuildContext anchor)? onTitleTap;
+  final String? actionLabel;
+  final IconData? actionIcon;
+  final void Function(BuildContext anchor)? onAction;
+  final bool compact;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: FfTokens.nocturneSunken,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: value ? FfTokens.nocturneAc : Colors.transparent,
-          width: 1.5,
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 8, 4, 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                PhosphorIcon(
-                  icon,
-                  size: 15,
-                  color: value ? FfTokens.sessionTx : FfTokens.sessionT2,
+    final showAction = actionLabel != null && onAction != null && value;
+    return Opacity(
+      opacity: enabled ? 1 : 0.55,
+      child: Tooltip(
+        message: description,
+        waitDuration: const Duration(milliseconds: 450),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: enabled ? () => onChanged(!value) : null,
+            borderRadius: BorderRadius.circular(8),
+            hoverColor: enabled ? FfTokens.sessionHv : Colors.transparent,
+            child: Ink(
+              decoration: BoxDecoration(
+                color: value
+                    ? FfTokens.nocturneAccentRow
+                    : FfTokens.nocturneSf,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: value
+                      ? FfTokens.nocturneAccentEdge
+                      : Colors.transparent,
                 ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Builder(
-                    builder: (context) {
-                      final tappable = onTitleTap != null;
-                      return GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: tappable ? () => onTitleTap!(context) : null,
-                        child: Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontFamily: FfTokens.fontFamily,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: FfTokens.sessionTx,
-                                ),
-                              ),
-                            ),
-                            if (tappable) ...[
-                              const SizedBox(width: 4),
-                              const PhosphorIcon(
-                                PhosphorIconsRegular.caretDown,
-                                size: 12,
-                                color: FfTokens.sessionT3,
-                              ),
-                            ],
-                          ],
+              ),
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: compact ? 8 : 9,
+                  vertical: compact ? 6 : 7,
+                ),
+                child: Row(
+                  children: [
+                    PhosphorIcon(
+                      icon,
+                      size: 14,
+                      color: value
+                          ? FfTokens.accentHover
+                          : FfTokens.sessionT3,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontFamily: FfTokens.fontFamily,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          height: 1.1,
+                          color: FfTokens.sessionTx,
                         ),
-                      );
-                    },
-                  ),
+                      ),
+                    ),
+                    if (showAction) ...[
+                      const SizedBox(width: 4),
+                      Builder(
+                        builder: (context) {
+                          return _SessionOptionAction(
+                            label: actionLabel!,
+                            icon: actionIcon,
+                            onPressed:
+                                enabled ? () => onAction!(context) : null,
+                          );
+                        },
+                      ),
+                    ],
+                    const SizedBox(width: 4),
+                    _SessionSwitch(
+                      value: value,
+                      onChanged: enabled ? onChanged : null,
+                    ),
+                  ],
                 ),
-                _SessionSwitch(value: value, onChanged: onChanged),
-              ],
-            ),
-            Text(
-              description,
-              style: const TextStyle(
-                fontFamily: FfTokens.fontFamily,
-                fontSize: 12,
-                height: 1.3,
-                color: FfTokens.sessionT3,
               ),
             ),
-          ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SessionOptionAction extends StatefulWidget {
+  const _SessionOptionAction({
+    required this.label,
+    required this.onPressed,
+    this.icon,
+  });
+
+  final String label;
+  final IconData? icon;
+  final VoidCallback? onPressed;
+
+  @override
+  State<_SessionOptionAction> createState() => _SessionOptionActionState();
+}
+
+class _SessionOptionActionState extends State<_SessionOptionAction> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.onPressed != null;
+    final color = !enabled
+        ? FfTokens.sessionT3
+        : (_hover ? FfTokens.sessionTx : FfTokens.sessionT2);
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      onEnter: enabled ? (_) => setState(() => _hover = true) : null,
+      onExit: enabled ? (_) => setState(() => _hover = false) : null,
+      child: GestureDetector(
+        onTap: widget.onPressed,
+        behavior: HitTestBehavior.opaque,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 160),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.icon == PhosphorIconsRegular.pencilSimple) ...[
+                PhosphorIcon(widget.icon!, size: 11, color: color),
+                const SizedBox(width: 3),
+              ],
+              Flexible(
+                child: Text(
+                  widget.label,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                ),
+              ),
+              if (widget.icon == PhosphorIconsRegular.caretDown) ...[
+                const SizedBox(width: 2),
+                PhosphorIcon(widget.icon!, size: 11, color: color),
+              ],
+            ],
+          ),
         ),
       ),
     );
@@ -2870,19 +4400,19 @@ class _AttachedChoice extends StatelessWidget {
       ),
     );
     final button = _Pressable(
-      height: 32,
+      height: 26,
       radius: 0,
       padding: expand
           ? EdgeInsets.zero
-          : const EdgeInsets.symmetric(horizontal: 12),
+          : const EdgeInsets.symmetric(horizontal: 8),
       borderRadius: BorderRadius.horizontal(
-        left: i == 0 ? const Radius.circular(10) : Radius.zero,
-        right: i == options.length - 1 ? const Radius.circular(10) : Radius.zero,
+        left: i == 0 ? const Radius.circular(8) : Radius.zero,
+        right: i == options.length - 1 ? const Radius.circular(8) : Radius.zero,
       ),
-      borderColor: i == selected ? FfTokens.nocturneLn2 : Colors.transparent,
+      borderColor: i == selected ? FfTokens.sessionLn2 : Colors.transparent,
       borderWidth: i == selected ? 1 : 0,
-      color: i == selected ? FfTokens.nocturneHv : FfTokens.nocturneSunken,
-      hoverColor: i == selected ? FfTokens.nocturneHv : FfTokens.nocturneSunken,
+      color: i == selected ? FfTokens.sessionHv : FfTokens.sessionEl,
+      hoverColor: i == selected ? FfTokens.sessionHv : FfTokens.sessionEl,
       hoverForeground: enabled && i != selected,
       foreground: i == selected ? FfTokens.sessionTx : FfTokens.sessionT2,
       onPressed: !enabled || i == selected ? null : () => onSelected(i),
@@ -3042,6 +4572,8 @@ class _TeamDropdown extends StatefulWidget {
     required this.onToggleFavorite,
     required this.onMenuOpenChanged,
     required this.focusNode,
+    this.hideLabel = false,
+    this.fieldHeight = 32,
   });
 
   final int menuId;
@@ -3057,6 +4589,8 @@ class _TeamDropdown extends StatefulWidget {
   final ValueChanged<String> onToggleFavorite;
   final ValueChanged<bool> onMenuOpenChanged;
   final FocusNode focusNode;
+  final bool hideLabel;
+  final double fieldHeight;
 
   @override
   State<_TeamDropdown> createState() => _TeamDropdownState();
@@ -3252,15 +4786,7 @@ class _TeamDropdownState extends State<_TeamDropdown> {
     final value = widget.value;
     final hasValue = value != null && value.isNotEmpty;
     final favorited = hasValue && widget.sideFavorite == value;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          widget.label.toUpperCase(),
-          style: _kSectionLabel,
-        ),
-        const SizedBox(height: 6),
-        CompositedTransformTarget(
+    final field = CompositedTransformTarget(
           link: _link,
           child: Focus(
             focusNode: widget.focusNode,
@@ -3274,39 +4800,38 @@ class _TeamDropdownState extends State<_TeamDropdown> {
               return KeyEventResult.ignored;
             },
             child: _Pressable(
-              height: 48,
-              radius: 10,
-              padding: const EdgeInsets.fromLTRB(6, 0, 12, 0),
-              color: FfTokens.nocturneSunken,
-              hoverColor: FfTokens.nocturneHv,
+              height: widget.fieldHeight,
+              radius: 9,
+              padding: const EdgeInsets.fromLTRB(4, 0, 8, 0),
+              color: FfTokens.sessionEl,
+              hoverColor: FfTokens.sessionHv,
               onPressed: widget.enabled ? _toggle : null,
               child: Row(
                 children: [
-                  if (hasValue) ...[
-                    Container(
-                      height: 34,
-                      constraints: const BoxConstraints(minWidth: 44, maxWidth: 72),
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: FfTokens.nocturneEl,
-                        borderRadius: BorderRadius.circular(7),
-                      ),
-                      child: Text(
-                        mlbTeamAbbreviation(value),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontFamily: FfTokens.fontFamily,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.48,
-                          color: FfTokens.sessionTx,
-                        ),
+                  Container(
+                    width: 40,
+                    height: 24,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: FfTokens.sessionPanel,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      hasValue ? mlbTeamAbbreviation(value) : '—',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.4,
+                        color: hasValue
+                            ? FfTokens.sessionTx
+                            : FfTokens.sessionT3,
                       ),
                     ),
-                    const SizedBox(width: 10),
-                  ],
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       hasValue ? value : widget.hintText,
@@ -3314,8 +4839,9 @@ class _TeamDropdownState extends State<_TeamDropdown> {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontFamily: FfTokens.fontFamily,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        fontWeight:
+                            hasValue ? FontWeight.w600 : FontWeight.w500,
                         color: hasValue
                             ? FfTokens.sessionTx
                             : FfTokens.sessionT3,
@@ -3326,9 +4852,9 @@ class _TeamDropdownState extends State<_TeamDropdown> {
                     const PhosphorIcon(
                       PhosphorIconsFill.star,
                       size: 14,
-                      color: FfTokens.gold,
+                      color: FfTokens.sessionWarn,
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                   ],
                   const PhosphorIcon(
                     PhosphorIconsRegular.caretDown,
@@ -3339,7 +4865,17 @@ class _TeamDropdownState extends State<_TeamDropdown> {
               ),
             ),
           ),
+        );
+    if (widget.hideLabel) return field;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          widget.label.toUpperCase(),
+          style: _kSectionLabel,
         ),
+        const SizedBox(height: 2),
+        field,
       ],
     );
   }
@@ -3362,35 +4898,6 @@ class _MenuHeader extends StatelessWidget {
           fontWeight: FontWeight.w600,
           letterSpacing: 0.8,
           color: FfTokens.sessionT3,
-        ),
-      ),
-    );
-  }
-}
-
-class _MatchupChip extends StatelessWidget {
-  const _MatchupChip({required this.label, required this.onPressed});
-
-  final String label;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return _Pressable(
-      height: 28,
-      radius: 99,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      color: FfTokens.nocturneSunken,
-      hoverColor: FfTokens.nocturneHv,
-      hoverForeground: true,
-      foreground: FfTokens.sessionT2,
-      onPressed: onPressed,
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontFamily: FfTokens.fontFamily,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -3462,259 +4969,18 @@ class _PasteRosterButton extends StatelessWidget {
   }
 }
 
-class _LinkButton extends StatelessWidget {
-  const _LinkButton({
-    required this.label,
-    this.icon,
-    this.onPressed,
-  });
-
-  final String label;
-  final IconData? icon;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = onPressed != null;
-    return _Pressable(
-      height: 30,
-      radius: 7,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      color: Colors.transparent,
-      hoverColor: enabled ? FfTokens.nocturneSunken : Colors.transparent,
-      hoverForeground: enabled,
-      foreground: enabled ? FfTokens.sessionT2 : FfTokens.sessionT3,
-      onPressed: onPressed,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            PhosphorIcon(icon!, size: 15),
-            const SizedBox(width: 6),
-          ],
-          Text(
-            label,
-            style: const TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RaisedButton extends StatelessWidget {
-  const _RaisedButton({required this.label, this.onPressed});
-
-  final String label;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = onPressed != null;
-    return _Pressable(
-      height: 36,
-      radius: 9,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      color: FfTokens.nocturneSunken,
-      hoverColor: enabled ? FfTokens.nocturneHv : FfTokens.nocturneSunken,
-      onPressed: onPressed,
-      child: Text(
-        label,
-        style: TextStyle(
-          fontFamily: FfTokens.fontFamily,
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: enabled ? FfTokens.sessionTx : FfTokens.sessionT3,
-        ),
-      ),
-    );
-  }
-}
-
-class _StyleCard extends StatelessWidget {
-  const _StyleCard({
-    required this.token,
-    required this.title,
-    required this.subtitle,
-    required this.selected,
-    required this.onPressed,
-  });
-
-  final String token;
-  final String title;
-  final String subtitle;
-  final bool selected;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final mark = _wordmark(token, title);
-    return _Pressable(
-      radius: 10,
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      color: selected ? FfTokens.nocturneHv : FfTokens.nocturneSunken,
-      hoverColor: FfTokens.nocturneHv,
-      borderColor: selected ? FfTokens.sessionTx : Colors.transparent,
-      borderWidth: 2,
-      onPressed: onPressed,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            mark.text,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: mark.style,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontSize: 11,
-              letterSpacing: 0.2,
-              color: FfTokens.sessionT3,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static ({String text, TextStyle style}) _wordmark(String token, String title) {
-    const base = TextStyle(
-      color: FfTokens.sessionTx,
-      height: 1,
-    );
-    switch (token) {
-      case CaptionStyleCatalog.tokGetty:
-      case CaptionStyleCatalog.tokGettyIntl:
-      case CaptionStyleCatalog.tokNbae:
-        return (
-          text: 'GETTY',
-          style: base.copyWith(
-            fontFamily: FfTokens.fontFamily,
-            fontSize: 16,
-            fontWeight: FontWeight.w300,
-            letterSpacing: 4.4,
-          ),
-        );
-      case CaptionStyleCatalog.tokImagn:
-        return (
-          text: 'imagn',
-          style: base.copyWith(
-            fontFamily: 'InterTight',
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.8,
-          ),
-        );
-      case CaptionStyleCatalog.tokAp:
-        return (
-          text: 'AP',
-          style: base.copyWith(
-            fontFamily: 'InterTight',
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.6,
-          ),
-        );
-      case CaptionStyleCatalog.tokCp:
-        return (
-          text: 'CP',
-          style: base.copyWith(
-            fontFamily: FfTokens.fontFamily,
-            fontSize: 20,
-            fontWeight: FontWeight.w500,
-            letterSpacing: 5,
-          ),
-        );
-      default:
-        return (
-          text: title,
-          style: base.copyWith(
-            fontFamily: FfTokens.fontFamily,
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
-            letterSpacing: 0.3,
-          ),
-        );
-    }
-  }
-}
-
-class _ReadyRow extends StatelessWidget {
-  const _ReadyRow({
-    required this.label,
-    required this.value,
-    required this.done,
-  });
-
-  final String label;
-  final String value;
-  final bool done;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 32,
-      child: Row(
-        children: [
-          PhosphorIcon(
-            done ? PhosphorIconsFill.checkCircle : PhosphorIconsRegular.circle,
-            size: 16,
-            color: done ? FfTokens.sessionOk : FfTokens.sessionT3,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontFamily: FfTokens.fontFamily,
-                fontSize: 13,
-                color: FfTokens.sessionT2,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Flexible(
-            child: Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                fontFamily: FfTokens.fontFamily,
-                fontSize: 13,
-                fontWeight: done ? FontWeight.w600 : FontWeight.w500,
-                color: done ? FfTokens.sessionTx : FfTokens.sessionT3,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _GoTimeButton extends StatefulWidget {
   const _GoTimeButton({
     required this.enabled,
     required this.loading,
     required this.onPressed,
+    this.compact = false,
   });
 
   final bool enabled;
   final bool loading;
   final VoidCallback onPressed;
+  final bool compact;
 
   @override
   State<_GoTimeButton> createState() => _GoTimeButtonState();
@@ -3722,27 +4988,69 @@ class _GoTimeButton extends StatefulWidget {
 
 class _GoTimeButtonState extends State<_GoTimeButton> {
   bool _hover = false;
+  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
     final enabled = widget.enabled && !widget.loading;
-    final bg = !widget.enabled
-        ? FfTokens.nocturneSunken
-        : (_hover ? FfTokens.sessionGoHover : FfTokens.sessionTx);
-    final fg = widget.enabled ? FfTokens.nocturneBg : FfTokens.sessionT3;
+    final active = widget.enabled;
+    final fg = active ? Colors.white : FfTokens.sessionT3;
+    final gradient = !active
+        ? null
+        : LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: _pressed
+                ? const [
+                    Color(0xFF1A2A36),
+                    Color(0xFF0C141A),
+                    Color(0xFF080E12),
+                  ]
+                : _hover
+                    ? const [
+                        Color(0xFF2E4658),
+                        Color(0xFF1A2E3A),
+                        Color(0xFF121F28),
+                      ]
+                    : const [
+                        Color(0xFF243848),
+                        Color(0xFF15242E),
+                        Color(0xFF0E181F),
+                      ],
+            stops: const [0.0, 0.45, 1.0],
+          );
     return MouseRegion(
       cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
+      onExit: (_) => setState(() {
+        _hover = false;
+        _pressed = false;
+      }),
       child: GestureDetector(
+        onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+        onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+        onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
         onTap: enabled ? widget.onPressed : null,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          height: 52,
+          height: widget.compact ? 42 : 42,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(12),
+            color: active ? null : FfTokens.sessionEl,
+            gradient: gradient,
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(
+              color: !active
+                  ? Colors.transparent
+                  : (_hover
+                      ? Colors.white.withValues(alpha: 0.92)
+                      : FfTokens.nocturneAc.withValues(alpha: 0.95)),
+            ),
+            boxShadow: active
+                ? FfTokens.accentButtonGlow(
+                    _hover ? Colors.white : FfTokens.nocturneAc,
+                  )
+                : null,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -3751,19 +5059,21 @@ class _GoTimeButtonState extends State<_GoTimeButton> {
                 widget.loading ? 'Starting…' : 'Go time',
                 style: TextStyle(
                   fontFamily: FfTokens.fontFamily,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
+                  fontSize: widget.compact ? 14 : 15,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.3,
                   color: fg,
                 ),
               ),
               if (!widget.loading) ...[
                 const SizedBox(width: 10),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: widget.enabled
-                        ? FfTokens.sessionKbd
-                        : FfTokens.nocturneHv,
+                    color: active
+                        ? Colors.black.withValues(alpha: 0.28)
+                        : const Color(0x0FFFFFFF),
                     borderRadius: BorderRadius.circular(5),
                   ),
                   child: Text(
@@ -3839,7 +5149,9 @@ class _PressableState extends State<_Pressable> {
           width: widget.width,
           height: widget.height,
           padding: widget.padding,
-          alignment: Alignment.center,
+          // Only align when width is explicit. A non-null alignment makes
+          // Container expand to max width, which un-right-justified actions.
+          alignment: widget.width != null ? Alignment.center : null,
           decoration: BoxDecoration(
             color: hovering && !widget.hoverForeground
                 ? widget.hoverColor
@@ -3863,7 +5175,9 @@ class _PressableState extends State<_Pressable> {
                     ? FfTokens.sessionTx
                     : widget.foreground,
               ),
-              child: widget.child,
+              child: widget.width == null && widget.height != null
+                  ? Center(widthFactor: 1, child: widget.child)
+                  : widget.child,
             ),
           ),
         ),

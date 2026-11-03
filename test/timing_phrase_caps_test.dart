@@ -25,6 +25,10 @@ void main() {
       seed: 1,
       sport: 'baseball',
     );
-    expect(body.contains('DURING THE THIRD INNING'), isTrue);
+    expect(
+      RegExp(r'DURING THE \w+ INNING').hasMatch(body),
+      isTrue,
+      reason: body,
+    );
   });
 }

@@ -1,87 +1,191 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'photo_adjust_config.dart';
 import 'photo_tone_base.dart';
 
-/// Live photo grade in linear light.
+/// Immutable grade settings. Defaults are all zero (identity).
 ///
-/// JPEG pixels are display-referred sRGB. Each stage below is its own
-/// function. Sliders at 0 leave the pixel unchanged. Processing order is
-/// fixed: white balance, exposure, contrast, whites and blacks, then local
-/// shadows and highlights. Gamma is applied only when encoding the result.
-/// `shaders/photo_grade.frag` repeats this math.
+/// Non-exposure sliders are stored as UI units −100…100. Exposure is stops
+/// (−5…5). Call [eased] before feeding values into shaders / [gradeLinearRgb].
 class PhotoAdjustments {
   const PhotoAdjustments({
-    this.exposure = 0,
-    this.contrast = 0,
-    this.shadows = 0,
-    this.highlights = 0,
-    this.whites = 0,
-    this.blacks = 0,
     this.temperature = 0,
     this.tint = 0,
+    this.exposure = 0,
+    this.contrast = 0,
+    this.highlights = 0,
+    this.shadows = 0,
+    this.whites = 0,
+    this.blacks = 0,
+    this.vibrance = 0,
+    this.saturation = 0,
   });
 
   static const neutral = PhotoAdjustments();
 
-  /// Stops, −5…5. Linear multiply by 2^EV, then a highlight shoulder.
-  final double exposure;
-
-  /// −1…1, shown as −100…100. Luminance S-curve around 18% gray.
-  final double contrast;
-
-  /// −1…1. Local shadow lift. Pure black stays black.
-  final double shadows;
-
-  /// −1…1. Local highlight recovery. Pure white stays white.
-  final double highlights;
-
-  /// −1…1. Moves the white end of the tone curve.
-  final double whites;
-
-  /// −1…1. Moves the black end of the tone curve.
-  final double blacks;
-
-  /// −1…1. Negative is cooler (toward 50000K), positive is warmer (toward 2000K).
+  /// UI −100…100. Positive = warmer.
   final double temperature;
 
-  /// −1…1, shown as −100…100. Negative is green, positive is magenta.
+  /// UI −100…100. Positive = magenta (less green).
   final double tint;
 
+  /// Stops −5…5. Linear; not eased.
+  final double exposure;
+
+  /// UI −100…100.
+  final double contrast;
+
+  /// UI −100…100. Negative darkens bright regions.
+  final double highlights;
+
+  /// UI −100…100. Positive lifts dark regions.
+  final double shadows;
+
+  /// UI −100…100.
+  final double whites;
+
+  /// UI −100…100.
+  final double blacks;
+
+  /// UI −100…100. Prefers less-saturated pixels; protects skin hues.
+  final double vibrance;
+
+  /// UI −100…100. Uniform saturation mix.
+  final double saturation;
+
+  /// Eased −1…1 parameters ready for the shader / CPU grade.
+  PhotoGradeParams get eased => PhotoGradeParams.fromUi(this);
+
   bool get needsLocalTone =>
-      shadows.abs() >= 0.0005 || highlights.abs() >= 0.0005;
+      shadows.abs() >= 0.05 || highlights.abs() >= 0.05;
 
   bool get affectsToneBase =>
+      temperature.abs() >= 0.05 ||
+      tint.abs() >= 0.05 ||
       exposure.abs() >= 0.0005 ||
-      contrast.abs() >= 0.0005 ||
-      whites.abs() >= 0.0005 ||
-      blacks.abs() >= 0.0005 ||
-      temperature.abs() >= 0.0005 ||
-      tint.abs() >= 0.0005 ||
+      contrast.abs() >= 0.05 ||
+      whites.abs() >= 0.05 ||
+      blacks.abs() >= 0.05 ||
+      vibrance.abs() >= 0.05 ||
+      saturation.abs() >= 0.05 ||
       needsLocalTone;
 
   bool get isNeutral => !affectsToneBase;
 
+  /// Prefix stages that affect the local-tone mask (everything before H/S).
+  bool get affectsMaskPrefix =>
+      temperature.abs() >= 0.05 ||
+      tint.abs() >= 0.05 ||
+      exposure.abs() >= 0.0005 ||
+      contrast.abs() >= 0.05;
+
   PhotoAdjustments copyWith({
-    double? exposure,
-    double? contrast,
-    double? shadows,
-    double? highlights,
-    double? whites,
-    double? blacks,
     double? temperature,
     double? tint,
+    double? exposure,
+    double? contrast,
+    double? highlights,
+    double? shadows,
+    double? whites,
+    double? blacks,
+    double? vibrance,
+    double? saturation,
   }) {
     return PhotoAdjustments(
-      exposure: exposure ?? this.exposure,
-      contrast: contrast ?? this.contrast,
-      shadows: shadows ?? this.shadows,
-      highlights: highlights ?? this.highlights,
-      whites: whites ?? this.whites,
-      blacks: blacks ?? this.blacks,
       temperature: temperature ?? this.temperature,
       tint: tint ?? this.tint,
+      exposure: exposure ?? this.exposure,
+      contrast: contrast ?? this.contrast,
+      highlights: highlights ?? this.highlights,
+      shadows: shadows ?? this.shadows,
+      whites: whites ?? this.whites,
+      blacks: blacks ?? this.blacks,
+      vibrance: vibrance ?? this.vibrance,
+      saturation: saturation ?? this.saturation,
     );
+  }
+
+  Map<String, double> toPresetJson() => {
+        'temperature': temperature,
+        'tint': tint,
+        'exposure': exposure,
+        'contrast': contrast,
+        'highlights': highlights,
+        'shadows': shadows,
+        'whites': whites,
+        'blacks': blacks,
+        'vibrance': vibrance,
+        'saturation': saturation,
+      };
+
+  factory PhotoAdjustments.fromPresetJson(Map<String, dynamic> json) {
+    double read(String key) => (json[key] as num?)?.toDouble() ?? 0;
+    return PhotoAdjustments(
+      temperature: read('temperature'),
+      tint: read('tint'),
+      exposure: read('exposure'),
+      contrast: read('contrast'),
+      highlights: read('highlights'),
+      shadows: read('shadows'),
+      whites: read('whites'),
+      blacks: read('blacks'),
+      vibrance: read('vibrance'),
+      saturation: read('saturation'),
+    );
+  }
+}
+
+/// Eased −1…1 (exposure still in stops) for the grade math.
+class PhotoGradeParams {
+  const PhotoGradeParams({
+    required this.temperature,
+    required this.tint,
+    required this.exposure,
+    required this.contrast,
+    required this.highlights,
+    required this.shadows,
+    required this.whites,
+    required this.blacks,
+    required this.vibrance,
+    required this.saturation,
+  });
+
+  final double temperature;
+  final double tint;
+  final double exposure;
+  final double contrast;
+  final double highlights;
+  final double shadows;
+  final double whites;
+  final double blacks;
+  final double vibrance;
+  final double saturation;
+
+  factory PhotoGradeParams.fromUi(PhotoAdjustments ui) {
+    return PhotoGradeParams(
+      temperature: easeUi(ui.temperature),
+      tint: easeUi(ui.tint),
+      exposure: ui.exposure.clamp(
+        PhotoAdjustConfig.exposureStopsMin,
+        PhotoAdjustConfig.exposureStopsMax,
+      ),
+      contrast: easeUi(ui.contrast),
+      highlights: easeUi(ui.highlights),
+      shadows: easeUi(ui.shadows),
+      whites: easeUi(ui.whites),
+      blacks: easeUi(ui.blacks),
+      vibrance: easeUi(ui.vibrance),
+      saturation: easeUi(ui.saturation),
+    );
+  }
+
+  /// Normalize UI −100…100 → −1…1, then pow ease.
+  static double easeUi(double ui) {
+    final v = (ui / 100.0).clamp(-1.0, 1.0);
+    if (v.abs() < 1e-12) return 0;
+    return v.sign *
+        math.pow(v.abs(), PhotoAdjustConfig.sliderEasePower).toDouble();
   }
 }
 
@@ -96,6 +200,7 @@ class GradeRgb {
 }
 
 double srgbToLinear(double c) {
+  // Piecewise sRGB EOTF (not a plain 2.2 power).
   if (c <= 0.04045) return c / 12.92;
   return math.pow((c + 0.055) / 1.055, 2.4).toDouble();
 }
@@ -113,214 +218,73 @@ double gradeSmoothstep(double edge0, double edge1, double x) {
   return t * t * (3 - 2 * t);
 }
 
-/// Slider −1…1 to kelvin. 0 is 6500K. The curve is flatter around the middle
-/// so daylight sits on a finer part of the slider than the extremes.
-double temperatureKelvin(double slider) {
-  final t = slider.clamp(-1.0, 1.0);
-  if (t.abs() < 0.0005) return 6500;
-  final curved = t.sign * math.pow(t.abs(), 1.6).toDouble();
-  if (curved >= 0) {
-    return 6500 * math.pow(2000 / 6500, curved).toDouble();
-  }
-  return 6500 * math.pow(50000 / 6500, -curved).toDouble();
-}
+double _luma(double r, double g, double b) =>
+    PhotoAdjustConfig.lumaR * r +
+    PhotoAdjustConfig.lumaG * g +
+    PhotoAdjustConfig.lumaB * b;
 
-/// Tanner Helland blackbody RGB, divided by 255 so channels are 0…1.
-(double, double, double) kelvinToRgb(double kelvin) {
-  final k = kelvin.clamp(1000.0, 50000.0) / 100.0;
-  final r = k <= 66
-      ? 1.0
-      : (1.2929361860620923 * math.pow(k - 60, -0.1332047592))
-          .toDouble()
-          .clamp(0.0, 1.0);
-  final g = (k <= 66
-          ? 0.3900815787690196 * math.log(k) - 0.6318414437886275
-          : 1.129890860895294 * math.pow(k - 60, -0.0755148492))
-      .toDouble()
-      .clamp(0.0, 1.0);
-  final b = k >= 66
-      ? 1.0
-      : k <= 19
-          ? 0.0
-          : (0.543206789110196 * math.log(k - 10) - 1.19625408914)
-              .toDouble()
-              .clamp(0.0, 1.0);
-  return (r, g, b);
-}
-
-(double, double, double) _linearSrgbToXyz(double r, double g, double b) {
-  return (
-    0.4124564 * r + 0.3575761 * g + 0.1804375 * b,
-    0.2126729 * r + 0.7151522 * g + 0.0721750 * b,
-    0.0193339 * r + 0.1191920 * g + 0.9503041 * b,
-  );
-}
-
-(double, double, double) _xyzToLinearSrgb(double x, double y, double z) {
-  return (
-    3.2404542 * x + -1.5371385 * y + -0.4985314 * z,
-    -0.9692660 * x + 1.8760108 * y + 0.0415560 * z,
-    0.0556434 * x + -0.2040259 * y + 1.0572252 * z,
-  );
-}
-
-/// White-balance gains in linear light. Temperature follows the blackbody
-/// locus. Tint shifts CIE y, the green–magenta axis, then both are converted
-/// back to per-channel gains and normalized so a gray does not change exposure.
+/// Per-channel WB gains, renormalized so overall luminance is preserved.
 (double, double, double) whiteBalanceGain(double temperature, double tint) {
-  if (temperature.abs() < 0.0005 && tint.abs() < 0.0005) return (1, 1, 1);
-  var r = 1.0;
-  var g = 1.0;
-  var b = 1.0;
-  if (temperature.abs() >= 0.0005) {
-    final ill = kelvinToRgb(temperatureKelvin(temperature));
-    final d65 = kelvinToRgb(6500);
-    r = ill.$1 / d65.$1;
-    g = ill.$2 / d65.$2;
-    b = ill.$3 / d65.$3;
-  }
-  if (tint.abs() >= 0.0005) {
-    final xyz = _linearSrgbToXyz(r, g, b);
-    final sum = xyz.$1 + xyz.$2 + xyz.$3;
-    if (sum > 1e-8) {
-      final chromaX = xyz.$1 / sum;
-      final chromaY =
-          (xyz.$2 / sum - tint * 0.045).clamp(0.04, 0.75);
-      const y = 1.0;
-      final bigX = chromaX * y / chromaY;
-      final bigZ = (1 - chromaX - chromaY) * y / chromaY;
-      final rgb = _xyzToLinearSrgb(bigX, y, bigZ);
-      r = rgb.$1;
-      g = rgb.$2;
-      b = rgb.$3;
-    }
-  }
+  if (temperature.abs() < 1e-8 && tint.abs() < 1e-8) return (1, 1, 1);
+  var r = 1 + PhotoAdjustConfig.tempStrength * temperature;
+  var g = 1 - PhotoAdjustConfig.tintStrength * tint;
+  var b = 1 - PhotoAdjustConfig.tempStrength * temperature;
+  r = math.max(r, 1e-4);
+  g = math.max(g, 1e-4);
+  b = math.max(b, 1e-4);
   final y = _luma(r, g, b);
   if (y.abs() < 1e-8) return (1, 1, 1);
   return (r / y, g / y, b / y);
 }
 
-/// 2^EV. Positive exposure rolls highlights into the range below 1.
-/// Zero exposure, and any value that stays at or below 1, is a plain multiply.
-double exposeLinear(double x, double ev) {
-  if (ev.abs() < 0.0005) return x;
-  final gained = x * math.pow(2, ev).toDouble();
-  if (ev < 0 || gained <= 0.80) return gained;
-  const knee = 0.80;
-  const room = 1 - knee;
-  final over = gained - knee;
-  return knee + room * (over / (over + room));
-}
-
-/// S-curve on linear luminance. The pivot is 18% gray. Strength fades in the
-/// deep shadows and highlights so the curve is an S, not a pure power.
-double _tanh(double x) {
-  final c = x.clamp(-8.0, 8.0);
-  final e = math.exp(2 * c);
-  return (e - 1) / (e + 1);
-}
-
+/// Contrast in log2 space about [PhotoAdjustConfig.contrastPivot].
 double contrastCurve(double y, double amount) {
-  if (amount.abs() < 0.0005 || y <= 0) return y;
-  const pivot = 0.18;
-  final stops = math.log(y / pivot) / math.ln2;
-  final shaped = stops + amount * 1.15 * _tanh(stops);
-  return math.max(0.0, pivot * math.pow(2, shaped).toDouble());
+  if (amount.abs() < 1e-8 || y <= 0) return y;
+  final stops = math.log(y / PhotoAdjustConfig.contrastPivot) / math.ln2;
+  final shaped = stops * (1 + PhotoAdjustConfig.contrastStrength * amount);
+  return math.max(
+    0.0,
+    PhotoAdjustConfig.contrastPivot * math.pow(2, shaped).toDouble(),
+  );
 }
 
-/// Soft knees on the darkest and brightest few percent of linear light.
-/// Middle gray is outside both knees.
+/// Soft endpoint push. No hard clamp.
 double whitesBlacksCurve(double y, double whites, double blacks) {
-  if (whites.abs() < 0.0005 && blacks.abs() < 0.0005) return y;
+  if (whites.abs() < 1e-8 && blacks.abs() < 1e-8) return y;
   var x = y;
-  if (blacks.abs() >= 0.0005) {
-    const toeEnd = 0.02;
-    final knee = 1 - gradeSmoothstep(0, toeEnd, x);
+  if (blacks.abs() >= 1e-8) {
+    // Smooth toe mostly below blacksEnd.
+    final knee = 1 - gradeSmoothstep(0, PhotoAdjustConfig.blacksEnd, x);
     if (blacks > 0) {
-      x = x + blacks * 0.045 * knee;
+      x = x + blacks * PhotoAdjustConfig.blacksAmount * knee;
     } else {
       x = x * (1 + blacks * knee);
     }
   }
-  if (whites.abs() >= 0.0005) {
-    const start = 0.55;
-    final knee = gradeSmoothstep(start, 1, x);
-    x = x + whites * 0.40 * knee;
+  if (whites.abs() >= 1e-8) {
+    final knee = gradeSmoothstep(PhotoAdjustConfig.whitesStart, 1.0, x);
+    x = x + whites * PhotoAdjustConfig.whitesAmount * knee;
   }
   return x < 0 ? 0 : x;
 }
 
-double _luma(double r, double g, double b) =>
-    0.2126729 * r + 0.7151522 * g + 0.0721750 * b;
-
-/// Regional mask from the blurred base. 1 in a dark area, 0 by mid gray.
-double _shadowMask(double linearBase) {
-  final display = linearToSrgb(linearBase.clamp(0.0, 1.0));
-  final weight = 1 - gradeSmoothstep(0.05, 0.62, display);
-  return math.pow(weight.clamp(0.0, 1.0), 1.05).toDouble();
+double softShoulderChannel(double x) {
+  const knee = PhotoAdjustConfig.shoulderKnee;
+  const room = PhotoAdjustConfig.shoulderRoom;
+  if (x <= knee) return x;
+  final over = x - knee;
+  return knee + over / (1 + over / room);
 }
 
-/// Soft toe. Black stays black, and the lift fades out before mid gray.
-double _shadowTone(double linearY, double amount) {
-  final display = linearToSrgb(linearY.clamp(0.0, 1.0));
-  final weight = math
-      .pow(1 - gradeSmoothstep(0.0, 0.58, display), 1.15)
-      .toDouble();
-  final next = amount >= 0
-      ? display + amount * 0.34 * weight * (1 - display)
-      : display * (1 + amount * 0.75 * weight);
-  return srgbToLinear(next.clamp(0.0, 1.0));
-}
-
-double _highlightMask(double linearBase) {
-  if (linearBase > 1) return math.exp(-(linearBase - 1));
-  final display = linearToSrgb(linearBase.clamp(0.0, 1.0));
-  final rise = gradeSmoothstep(0.55, 0.82, display);
-  final hold = 1 - gradeSmoothstep(0.94, 1.0, display);
-  return rise * hold;
-}
-
-double _highlightTone(double linearY, double amount) {
-  final display = linearToSrgb(linearY.clamp(0.0, 1.0));
-  if (amount >= 0) {
-    final weight = gradeSmoothstep(0.45, 0.90, display);
-    final next = display + amount * 0.25 * weight * (1 - display);
-    return srgbToLinear(next.clamp(0.0, 1.0));
+/// Hue-preserving soft clip via the max channel.
+GradeRgb softShoulderRgb(double r, double g, double b) {
+  final m = math.max(r, math.max(g, b));
+  if (m <= PhotoAdjustConfig.shoulderKnee || m < 1e-8) {
+    return GradeRgb(r, g, b);
   }
-  final weight = gradeSmoothstep(0.50, 0.88, display) *
-      (1 - gradeSmoothstep(0.96, 1.0, display));
-  final next = display + amount * 0.28 * weight;
-  return srgbToLinear(next.clamp(0.0, 1.0));
-}
-
-/// Local shadows and highlights, in the Camera Raw sense.
-///
-/// The guided-filter [baseLuma] only decides which region is dark or bright.
-/// The toe itself runs on this pixel, so texture is not rebuilt from a
-/// low-resolution residual. When [baseLuma] is omitted the pixel is its own
-/// base, which is exact on a flat field.
-GradeRgb applyShadowsHighlights(
-  double r,
-  double g,
-  double b,
-  PhotoAdjustments a, {
-  double? baseLuma,
-}) {
-  if (!a.needsLocalTone) return GradeRgb(r, g, b);
-  final y = _luma(r, g, b);
-  if (y < 1e-8) return GradeRgb(r, g, b);
-  final base = baseLuma ?? y;
-  var tone = y;
-  if (a.shadows.abs() >= 0.0005) {
-    final curved = _shadowTone(tone, a.shadows);
-    tone += (curved - tone) * _shadowMask(base);
-  }
-  if (a.highlights.abs() >= 0.0005) {
-    final curved = _highlightTone(tone, a.highlights);
-    tone += (curved - tone) * _highlightMask(base);
-  }
-  final scale = (tone / y).clamp(0.05, 8.0);
-  return GradeRgb(r * scale, g * scale, b * scale);
+  final m2 = softShoulderChannel(m);
+  final s = m2 / m;
+  return GradeRgb(r * s, g * s, b * s);
 }
 
 GradeRgb _scaleToLuma(double r, double g, double b, double newY) {
@@ -330,42 +294,197 @@ GradeRgb _scaleToLuma(double r, double g, double b, double newY) {
   return GradeRgb(r * scale, g * scale, b * scale);
 }
 
-/// Linear-light grade. Channels are linear. Gamma is not applied here.
+/// Local H/S gain in log space. [mask01] is perceptual 0…1.
+GradeRgb applyShadowsHighlights(
+  double r,
+  double g,
+  double b,
+  PhotoGradeParams a, {
+  required double mask01,
+}) {
+  if (a.shadows.abs() < 1e-8 && a.highlights.abs() < 1e-8) {
+    return GradeRgb(r, g, b);
+  }
+  final hiW = gradeSmoothstep(
+    PhotoAdjustConfig.highlightMaskLo,
+    PhotoAdjustConfig.highlightMaskHi,
+    mask01,
+  );
+  final shW = 1 -
+      gradeSmoothstep(
+        PhotoAdjustConfig.shadowMaskLo,
+        PhotoAdjustConfig.shadowMaskHi,
+        mask01,
+      );
+  final stops = hiW * a.highlights * PhotoAdjustConfig.localToneStrength +
+      shW * a.shadows * PhotoAdjustConfig.localToneStrength;
+  if (stops.abs() < 1e-8) return GradeRgb(r, g, b);
+  final gain = math.pow(2, stops).toDouble();
+  return GradeRgb(r * gain, g * gain, b * gain);
+}
+
+double _saturate(double x) => x.clamp(0.0, 1.0);
+
+/// Approximate hue in degrees from linear RGB (HSV hue).
+double _hueDegrees(double r, double g, double b) {
+  final maxC = math.max(r, math.max(g, b));
+  final minC = math.min(r, math.min(g, b));
+  final d = maxC - minC;
+  if (d < 1e-8) return 0;
+  double h;
+  if (maxC == r) {
+    h = ((g - b) / d) % 6;
+  } else if (maxC == g) {
+    h = (b - r) / d + 2;
+  } else {
+    h = (r - g) / d + 4;
+  }
+  h *= 60;
+  if (h < 0) h += 360;
+  return h;
+}
+
+double _chroma(double r, double g, double b) {
+  final y = _luma(r, g, b);
+  final dr = r - y;
+  final dg = g - y;
+  final db = b - y;
+  return math.sqrt(dr * dr + dg * dg + db * db);
+}
+
+GradeRgb applyVibranceSaturation(
+  double r,
+  double g,
+  double b,
+  PhotoGradeParams a,
+) {
+  if (a.vibrance.abs() < 1e-8 && a.saturation.abs() < 1e-8) {
+    return GradeRgb(r, g, b);
+  }
+  final y = _luma(r, g, b);
+  var outR = r;
+  var outG = g;
+  var outB = b;
+
+  if (a.vibrance.abs() >= 1e-8) {
+    final sat = _chroma(r, g, b);
+    // Less-saturated pixels get more boost.
+    final lowSatWeight = 1 - _saturate(sat * 2.5);
+    final hue = _hueDegrees(r, g, b);
+    final skinDist =
+        (hue - PhotoAdjustConfig.skinHueCenter).abs().clamp(0.0, 180.0);
+    final skin = 1 -
+        gradeSmoothstep(
+          0,
+          PhotoAdjustConfig.skinHueWidth,
+          skinDist,
+        );
+    final skinScale = math.pow(
+      PhotoAdjustConfig.skinVibranceScale,
+      skin,
+    ).toDouble();
+    final amount = a.vibrance *
+        PhotoAdjustConfig.vibranceAmount *
+        lowSatWeight *
+        skinScale;
+    outR = y + (outR - y) * (1 + amount);
+    outG = y + (outG - y) * (1 + amount);
+    outB = y + (outB - y) * (1 + amount);
+  }
+
+  if (a.saturation.abs() >= 1e-8) {
+    final amount = a.saturation * PhotoAdjustConfig.saturationAmount;
+    // amount −1 → full desat toward luma; +1 → push away from luma.
+    final mix = 1 + amount;
+    outR = y + (outR - y) * mix;
+    outG = y + (outG - y) * mix;
+    outB = y + (outB - y) * mix;
+  }
+  return GradeRgb(outR, outG, outB);
+}
+
+/// Ordered Bayer 4×4 dither in −0.5…0.5, scaled by [PhotoAdjustConfig.ditherAmplitude].
+double orderedDither(int x, int y) {
+  const bayer = <int>[
+    0, 8, 2, 10,
+    12, 4, 14, 6,
+    3, 11, 1, 9,
+    15, 7, 13, 5,
+  ];
+  final v = bayer[(y & 3) * 4 + (x & 3)] / 16.0 - 0.5;
+  return v * 2; // −1…1 before amplitude
+}
+
+/// Linear-light grade. [mask01] is required when H/S are active.
 GradeRgb gradeLinearRgb(
   double r,
   double g,
   double b,
-  PhotoAdjustments a, {
-  double? baseLuma,
+  PhotoAdjustments ui, {
+  double? mask01,
 }) {
-  if (a.isNeutral) return GradeRgb(r, g, b);
+  if (ui.isNeutral) return GradeRgb(r, g, b);
+  final a = ui.eased;
   final wb = whiteBalanceGain(a.temperature, a.tint);
-  var lr = exposeLinear(r * wb.$1, a.exposure);
-  var lg = exposeLinear(g * wb.$2, a.exposure);
-  var lb = exposeLinear(b * wb.$3, a.exposure);
-  final y = whitesBlacksCurve(
-    contrastCurve(_luma(lr, lg, lb), a.contrast),
-    a.whites,
-    a.blacks,
-  );
-  final toned = _scaleToLuma(lr, lg, lb, y);
-  return applyShadowsHighlights(
-    toned.r,
-    toned.g,
-    toned.b,
-    a,
-    baseLuma: baseLuma,
-  );
+  var lr = r * wb.$1;
+  var lg = g * wb.$2;
+  var lb = b * wb.$3;
+
+  // Exposure: plain stop multiply (shoulder comes later).
+  if (a.exposure.abs() >= 1e-8) {
+    final gain = math.pow(2, a.exposure).toDouble();
+    lr *= gain;
+    lg *= gain;
+    lb *= gain;
+  }
+
+  // Contrast: hue-preserving luminance S-curve in log2.
+  if (a.contrast.abs() >= 1e-8) {
+    final y = _luma(lr, lg, lb);
+    final y2 = contrastCurve(y, a.contrast);
+    final toned = _scaleToLuma(lr, lg, lb, y2);
+    lr = toned.r;
+    lg = toned.g;
+    lb = toned.b;
+  }
+
+  // Highlights / Shadows (local).
+  if (a.shadows.abs() >= 1e-8 || a.highlights.abs() >= 1e-8) {
+    final m = mask01 ?? linearToSrgb(_luma(lr, lg, lb).clamp(0.0, 1.0));
+    final local = applyShadowsHighlights(lr, lg, lb, a, mask01: m);
+    lr = local.r;
+    lg = local.g;
+    lb = local.b;
+  }
+
+  // Whites / Blacks.
+  if (a.whites.abs() >= 1e-8 || a.blacks.abs() >= 1e-8) {
+    final y = whitesBlacksCurve(_luma(lr, lg, lb), a.whites, a.blacks);
+    final toned = _scaleToLuma(lr, lg, lb, y);
+    lr = toned.r;
+    lg = toned.g;
+    lb = toned.b;
+  }
+
+  // Vibrance / Saturation.
+  final sat = applyVibranceSaturation(lr, lg, lb, a);
+  lr = sat.r;
+  lg = sat.g;
+  lb = sat.b;
+
+  // Soft highlight shoulder.
+  return softShoulderRgb(lr, lg, lb);
 }
 
-/// Grades one sRGB pixel. Channels are 0…1. Pass [baseLuma] when shadows or
-/// highlights are active so the local base matches [lumaBaseForDisplayRgb].
+/// Grades one display-referred sRGB pixel (channels 0…1).
 GradeRgb gradeDisplayRgb(
   double r,
   double g,
   double b,
   PhotoAdjustments a, {
-  double? baseLuma,
+  double? mask01,
+  int? ditherX,
+  int? ditherY,
 }) {
   if (a.isNeutral) return GradeRgb(r, g, b);
   final linear = gradeLinearRgb(
@@ -373,36 +492,98 @@ GradeRgb gradeDisplayRgb(
     srgbToLinear(g),
     srgbToLinear(b),
     a,
-    baseLuma: baseLuma,
+    mask01: mask01,
   );
-  return GradeRgb(
-    linearToSrgb(linear.r).clamp(0.0, 1.0),
-    linearToSrgb(linear.g).clamp(0.0, 1.0),
-    linearToSrgb(linear.b).clamp(0.0, 1.0),
-  );
+  var sr = linearToSrgb(linear.r);
+  var sg = linearToSrgb(linear.g);
+  var sb = linearToSrgb(linear.b);
+  if (ditherX != null && ditherY != null) {
+    final d = orderedDither(ditherX, ditherY) * PhotoAdjustConfig.ditherAmplitude;
+    sr += d;
+    sg += d;
+    sb += d;
+  }
+  return GradeRgb(sr.clamp(0.0, 1.0), sg.clamp(0.0, 1.0), sb.clamp(0.0, 1.0));
 }
 
-/// Guided-filter luma of [rgb] (tight sRGB bytes) after every stage except
-/// the local shadow and highlight mix.
-Float32List lumaBaseForDisplayRgb(
+/// Perceptual 0…1 mask from linear luma (for CPU histogram / tests).
+double perceptualMask01(double linearY) {
+  return linearToSrgb(linearY.clamp(0.0, 1.0));
+}
+
+/// Build the blended guided-filter mask (perceptual 0…1) for [rgb] sRGB bytes.
+///
+/// Mask source is log-luminance after WB / exposure / contrast only.
+Float32List lumaMaskForDisplayRgb(
   Uint8List rgb,
   int width,
   int height,
   PhotoAdjustments adjustments,
 ) {
   final n = width * height;
-  final luma = Float32List(n);
-  final prefix = adjustments.copyWith(shadows: 0, highlights: 0);
+  final logLuma = Float32List(n);
+  final prefix = adjustments.copyWith(
+    highlights: 0,
+    shadows: 0,
+    whites: 0,
+    blacks: 0,
+    vibrance: 0,
+    saturation: 0,
+  );
+  final a = prefix.eased;
+  final wb = whiteBalanceGain(a.temperature, a.tint);
+  final expGain =
+      a.exposure.abs() < 1e-8 ? 1.0 : math.pow(2, a.exposure).toDouble();
+
   for (var i = 0; i < n; i++) {
     final o = i * 3;
     if (o + 2 >= rgb.length) break;
-    final linear = gradeLinearRgb(
-      srgbToLinear(rgb[o] / 255.0),
-      srgbToLinear(rgb[o + 1] / 255.0),
-      srgbToLinear(rgb[o + 2] / 255.0),
-      prefix,
-    );
-    luma[i] = linear.luma;
+    var lr = srgbToLinear(rgb[o] / 255.0) * wb.$1 * expGain;
+    var lg = srgbToLinear(rgb[o + 1] / 255.0) * wb.$2 * expGain;
+    var lb = srgbToLinear(rgb[o + 2] / 255.0) * wb.$3 * expGain;
+    if (a.contrast.abs() >= 1e-8) {
+      final y = _luma(lr, lg, lb);
+      final y2 = contrastCurve(y, a.contrast);
+      if (y > 1e-8) {
+        final s = y2 / y;
+        lr *= s;
+        lg *= s;
+        lb *= s;
+      }
+    }
+    final y = math.max(_luma(lr, lg, lb), 0.0);
+    logLuma[i] = math.log(y + 1e-4) / math.ln2;
   }
-  return guidedLumaBase(luma, width, height);
+
+  final radius = math.max(
+    1,
+    (width * PhotoAdjustConfig.guidedRadiusWidthFraction).round(),
+  );
+  final filtered = guidedFilterScalar(
+    logLuma,
+    width,
+    height,
+    radius: radius,
+    eps: PhotoAdjustConfig.guidedEps,
+  );
+
+  const blend = PhotoAdjustConfig.maskFilterBlend;
+  final out = Float32List(n);
+  for (var i = 0; i < n; i++) {
+    final sharpLin = math.pow(2, logLuma[i]).toDouble() - 1e-4;
+    final filtLin = math.pow(2, filtered[i]).toDouble() - 1e-4;
+    final sharp = perceptualMask01(sharpLin);
+    final filt = perceptualMask01(filtLin);
+    out[i] = blend * filt + (1 - blend) * sharp;
+  }
+  return out;
 }
+
+/// Backward-compatible name used by histogram / older call sites.
+Float32List lumaBaseForDisplayRgb(
+  Uint8List rgb,
+  int width,
+  int height,
+  PhotoAdjustments adjustments,
+) =>
+    lumaMaskForDisplayRgb(rgb, width, height, adjustments);

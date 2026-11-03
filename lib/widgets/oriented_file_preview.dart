@@ -19,6 +19,8 @@ class OrientedFilePreview extends StatefulWidget {
     this.onLoaded,
     this.adjustments,
     this.viewCrop,
+    this.compareOriginal = false,
+    this.debugMask = false,
   });
 
   final String path;
@@ -35,6 +37,12 @@ class OrientedFilePreview extends StatefulWidget {
 
   /// Region of the oriented frame to show. Null is the full photo.
   final PhotoCrop? viewCrop;
+
+  /// Hold-to-compare: show the ungraded original.
+  final bool compareOriginal;
+
+  /// Debug: show the local-tone luminance mask.
+  final bool debugMask;
 
   @override
   State<OrientedFilePreview> createState() => _OrientedFilePreviewState();
@@ -118,13 +126,18 @@ class _OrientedFilePreviewState extends State<OrientedFilePreview> {
     }
     final grade = widget.adjustments;
     final crop = widget.viewCrop ?? PhotoCrop.full;
-    if ((grade != null && !grade.isNeutral) || !crop.isFull) {
+    if ((grade != null && !grade.isNeutral) ||
+        !crop.isFull ||
+        widget.debugMask) {
       return GradedMemoryImage(
         bytes: _bytes!,
         adjustments: grade ?? PhotoAdjustments.neutral,
         crop: crop,
         fit: widget.fit,
         filterQuality: widget.filterQuality,
+        compareOriginal: widget.compareOriginal,
+        debugMask: widget.debugMask,
+        displayLongEdge: widget.cacheWidth,
       );
     }
     return Image.memory(

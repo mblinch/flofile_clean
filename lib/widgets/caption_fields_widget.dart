@@ -11,7 +11,10 @@ import '../services/mlb_inning_from_timestamp_service.dart';
 import '../services/api_manager.dart';
 import '../services/roster_history_service.dart';
 import '../services/ftp_complete_sound.dart';
+import '../services/ftp_rename_template.dart';
 import '../services/ftpclient_service.dart';
+import '../services/number_sequence_service.dart';
+import '../services/iptc_template_import_service.dart';
 import '../services/camera_serial_service.dart';
 import 'unknown_serial_dialog.dart';
 import 'older_roster_dialog.dart';
@@ -489,9 +492,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   bool _disableFtp = false; // Default to false (FTP enabled)
   bool _isFtpDisabled = false; // Track FTP button disable state
-  final int _ftpPictureNumber =
-      1; // Counter for FTP picture number, starting at 001
-
   // FTP Settings
   String _ftpHost = 'ftp.photoshelter.com';
   String _ftpUsername = 'mb1';
@@ -18105,6 +18105,89 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     _updateCaption();
   }
 
+  /// Expands `{date}` / `{teams}` / `{n}` / … using IPTC when available.
+  Future<String> _resolveFtpFileName(String imagePath) async {
+    final prefs = await PreferencesService.getInstance();
+    if (!await prefs.getFileRenamingEnabled()) {
+      return ftpTransferFileName(imagePath, '');
+    }
+    final template = FtpRenameTemplate.ensureSequenceToken(_ftpRenameAs);
+    if (!template.contains('{')) {
+      return ftpTransferFileName(imagePath, template);
+    }
+
+    Map<String, String> iptc = const {};
+    try {
+      final meta = await IptcTemplateImportService.readMetadata(imagePath);
+      if (meta != null) {
+        iptc = IptcTemplateImportService.panelValuesFromExiftool(meta);
+      }
+    } catch (_) {}
+
+    final seqSvc = NumberSequenceService.instance;
+    await seqSvc.ensureLoaded();
+    final width = await seqSvc.digits();
+    final fromIptc = FtpRenameTemplate.sequenceFromIptc(iptc);
+    final int sequence;
+    if (fromIptc != null) {
+      sequence = fromIptc;
+      await seqSvc.ensureNextAtLeast(fromIptc + 1);
+    } else {
+      sequence = await seqSvc.consumeValue();
+    }
+
+    final away = selectedAwayTeam ?? widget.awayTeam ?? '';
+    final home = selectedHomeTeam ?? widget.homeTeam ?? '';
+    final awayAbbr =
+        away.isEmpty ? '' : _getTeamAbbreviation(away);
+    final homeAbbr =
+        home.isEmpty ? '' : _getTeamAbbreviation(home);
+
+    String iptcVal(String key) {
+      final direct = iptc[key]?.trim() ?? '';
+      if (direct.isNotEmpty) return direct;
+      final lower = key.toLowerCase();
+      for (final e in iptc.entries) {
+        if (e.key.toLowerCase() == lower && e.value.trim().isNotEmpty) {
+          return e.value.trim();
+        }
+      }
+      return '';
+    }
+
+    final photo = (_bylinePhotographerOverride ?? '').trim().isNotEmpty
+        ? (_bylinePhotographerOverride ?? '').trim()
+        : (iptcVal('Creator').isNotEmpty
+            ? iptcVal('Creator')
+            : iptcVal('By-line'));
+
+    // Permanent rename initials if set; otherwise {initials} uses Creator letters.
+    final initials = await prefs.getRenameInitials();
+    final profiles = await prefs.getFtpProfiles();
+    final profileName = await prefs.getCurrentFtpProfile();
+    final profile = profileName != null ? profiles[profileName] : null;
+    final letterCase = FtpRenameCaseFormats.normalize(
+      profile?['renameLetterCase']?.toString(),
+    );
+
+    return ftpTransferFileName(
+      imagePath,
+      template,
+      context: FtpRenameContext(
+        sourcePath: imagePath,
+        date: DateTime.now(),
+        awayTeam: awayAbbr,
+        homeTeam: homeAbbr,
+        photographer: photo,
+        initials: initials,
+        sequence: sequence,
+        sequenceWidth: width,
+        iptc: iptc,
+        letterCase: letterCase,
+      ),
+    );
+  }
+
   // Public method to upload any image via FTP (called from thumbnail grid)
   Future<void> uploadImageViaFtp(String imagePath) async {
     // Check if FTP settings are configured
@@ -18112,7 +18195,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       throw Exception('Please configure FTP settings first!');
     }
 
-    final remoteFileName = ftpTransferFileName(imagePath, _ftpRenameAs);
+    final remoteFileName = await _resolveFtpFileName(imagePath);
     await copyFtpDuplicate(
       sourcePath: imagePath,
       folder: _ftpDuplicateFolder,
@@ -18295,7 +18378,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
 
     final remoteFileName =
-        ftpTransferFileName(widget.currentImagePath!, _ftpRenameAs);
+        await _resolveFtpFileName(widget.currentImagePath!);
     await copyFtpDuplicate(
       sourcePath: widget.currentImagePath!,
       folder: _ftpDuplicateFolder,
@@ -20986,21 +21069,27 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   void _showFtpSettings() {
-    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     showDialog(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.55),
       builder: (context) => Dialog(
         backgroundColor: Colors.transparent,
         child: Container(
-          width: 480,
-          constraints: const BoxConstraints(maxHeight: 640),
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+          width: 820,
+          height: 580,
           decoration: BoxDecoration(
-            color: t.surface,
-            borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
-            border: Border.all(color: t.divider),
+            color: FfTokens.sessionPanel,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: FfTokens.sessionLn),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x8C000000),
+                blurRadius: 60,
+                offset: Offset(0, 24),
+              ),
+            ],
           ),
+          clipBehavior: Clip.antiAlias,
           child: FtpSettingsPanel(
             embedded: false,
             onClose: () {

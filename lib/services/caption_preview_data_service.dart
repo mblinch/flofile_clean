@@ -66,19 +66,7 @@ class CaptionPreviewDataService {
   }
 
   static String _actionForSport(String sport) {
-    final phrase = CaptionFormulaRenderer.previewTimePhraseForSport(sport);
-    switch (sport) {
-      case 'hockey':
-        return 'scores a goal against the {opp} $phrase';
-      case 'basketball':
-      case 'wnba':
-        return 'dunks against the {opp} $phrase';
-      case 'soccer':
-        return 'scores a goal against the {opp} $phrase';
-      case 'baseball':
-      default:
-        return 'hits a home run against the {opp} $phrase';
-    }
+    return CaptionFormulaRenderer.defaultPreviewActionForSport(sport);
   }
 
   static CaptionPreviewSnapshot load({required String sport}) {

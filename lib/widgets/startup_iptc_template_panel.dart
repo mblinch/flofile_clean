@@ -55,6 +55,7 @@ class StartupIptcTemplatePanel extends StatelessWidget {
     this.selectedTemplateId,
     this.onTemplateSelected,
     this.sessionStyle = false,
+    this.highlightStorageKey,
   });
 
   final WireStyle selectedWire;
@@ -65,6 +66,9 @@ class StartupIptcTemplatePanel extends StatelessWidget {
   final bool sessionStyle;
   final Map<String, String> values;
   final Set<String> foundInFilesKeys;
+
+  /// When set, that IPTC row is accent-highlighted (structure chip source).
+  final String? highlightStorageKey;
   final void Function(String storageKey, String value)? onValueChanged;
   final ValueChanged<WireStyle>? onWireSelected;
   final bool isLoading;
@@ -133,6 +137,15 @@ class StartupIptcTemplatePanel extends StatelessWidget {
     final presetKey = IptcTemplateApplyService.toPresetKey(storageKey);
     return foundKeys.contains(presetKey) ||
         foundKeys.contains(IptcTemplateApplyService.toPanelKey(presetKey));
+  }
+
+  bool _isHighlighted(String storageKey) {
+    final want = highlightStorageKey?.trim() ?? '';
+    if (want.isEmpty) return false;
+    if (storageKey == want) return true;
+    final presetKey = IptcTemplateApplyService.toPresetKey(storageKey);
+    return want == presetKey ||
+        want == IptcTemplateApplyService.toPanelKey(presetKey);
   }
 
   static String? _displayValueForField({
@@ -231,11 +244,11 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const _IptcApplyModeHelpButton(),
+                    const IptcApplyModeHelpButton(),
                     const SizedBox(width: 4),
                     SizedBox(
-                      width: 240,
-                      child: _IptcApplyModeSelector(
+                      width: 200,
+                      child: IptcApplyModeSelector(
                         mode: iptcApplyMode,
                         onChanged: onIptcApplyModeChanged,
                       ),
@@ -281,6 +294,7 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                       spec: captionSpec,
                       valueMaxLines: 2,
                       enabled: !_fieldsInactive,
+                      highlighted: _isHighlighted(captionSpec.storageKey),
                       value: _displayValueForField(
                         label: captionSpec.label,
                         storedValue: IptcTemplateApplyService.lookupValue(
@@ -308,6 +322,7 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                       key: ValueKey(_fieldKey(headlineSpec.storageKey)),
                       spec: headlineSpec,
                       enabled: !_fieldsInactive,
+                      highlighted: _isHighlighted(headlineSpec.storageKey),
                       value: IptcTemplateApplyService.lookupValue(
                         _displayValues,
                         headlineSpec.storageKey,
@@ -329,6 +344,7 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                       spec: keywordsSpec,
                       valueMaxLines: 2,
                       enabled: !_fieldsInactive,
+                      highlighted: _isHighlighted(keywordsSpec.storageKey),
                       value: IptcTemplateApplyService.lookupValue(
                         _displayValues,
                         keywordsSpec.storageKey,
@@ -351,6 +367,8 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                       spec: specialInstructionsSpec,
                       valueMaxLines: 2,
                       enabled: !_fieldsInactive,
+                      highlighted:
+                          _isHighlighted(specialInstructionsSpec.storageKey),
                       value: IptcTemplateApplyService.lookupValue(
                         _displayValues,
                         specialInstructionsSpec.storageKey,
@@ -372,6 +390,7 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                         specs: left,
                         values: _displayValues,
                         foundInFilesKeys: _displayFoundInFilesKeys,
+                        highlightStorageKey: highlightStorageKey,
                         templateRevision: templateRevision,
                         fieldsEnabled: !_fieldsInactive,
                         onValueChanged: onValueChanged,
@@ -383,6 +402,7 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                         specs: right,
                         values: _displayValues,
                         foundInFilesKeys: _displayFoundInFilesKeys,
+                        highlightStorageKey: highlightStorageKey,
                         templateRevision: templateRevision,
                         fieldsEnabled: !_fieldsInactive,
                         onValueChanged: onValueChanged,
@@ -566,7 +586,10 @@ class StartupIptcTemplatePanel extends StatelessWidget {
     for (final spec in specs) {
       if (spec.label == _captionLabel && caption == null) {
         caption = spec;
-      } else if (spec.label == 'Camera time') {
+      } else if (spec.label == 'Camera time' &&
+          highlightStorageKey != 'Camera time') {
+        // Hide camera time in the dense session grid unless a structure
+        // date chip opened this panel to show that source.
         continue;
       } else if (spec.label == _keywordsLabel && keywords == null) {
         keywords = spec;
@@ -621,6 +644,7 @@ class StartupIptcTemplatePanel extends StatelessWidget {
       spec: spec,
       valueMaxLines: lines,
       enabled: !_fieldsInactive,
+      highlighted: _isHighlighted(spec.storageKey),
       value: _displayValueForField(
         label: spec.label,
         storedValue: IptcTemplateApplyService.lookupValue(
@@ -641,8 +665,8 @@ class StartupIptcTemplatePanel extends StatelessWidget {
   }
 }
 
-class _IptcApplyModeHelpButton extends StatelessWidget {
-  const _IptcApplyModeHelpButton();
+class IptcApplyModeHelpButton extends StatelessWidget {
+  const IptcApplyModeHelpButton();
 
   static const TextStyle _titleStyle = TextStyle(
     fontFamily: 'Inter',
@@ -685,21 +709,21 @@ class _IptcApplyModeHelpButton extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: const [
               _HelpOptionBlock(
-                title: 'Off',
+                title: 'Apply on load',
                 body:
-                    'The template is for reference only. Nothing is written to your image files automatically.',
+                    'When you open a folder, existing IPTC on each photo is cleared, then the template is written.',
               ),
               SizedBox(height: 10),
               _HelpOptionBlock(
-                title: 'On import',
+                title: 'Apply on save',
                 body:
-                    'When you open a folder, existing IPTC on each photo is cleared, then the template is written, including Caption and Personality.',
+                    'When Apply on load is off: write template fields when you save IPTC metadata.',
               ),
               SizedBox(height: 10),
               _HelpOptionBlock(
-                title: 'On save',
+                title: 'Apply on FTP',
                 body:
-                    'Nothing is written when you open a folder. Template fields are written only when you save IPTC metadata. Caption and Personality are written too — from what you build in the app, not from this template panel.',
+                    'When Apply on load is off: write template fields when you FTP a photo.',
               ),
             ],
           ),
@@ -762,127 +786,160 @@ class _HelpOptionBlock extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: _IptcApplyModeHelpButton._titleStyle),
+        Text(title, style: IptcApplyModeHelpButton._titleStyle),
         const SizedBox(height: 2),
-        Text(body, style: _IptcApplyModeHelpButton._bodyStyle),
+        Text(body, style: IptcApplyModeHelpButton._bodyStyle),
       ],
     );
   }
 }
 
-class _IptcApplyModeSelector extends StatelessWidget {
-  const _IptcApplyModeSelector({
+class IptcApplyModeSelector extends StatelessWidget {
+  const IptcApplyModeSelector({
+    super.key,
     required this.mode,
     this.onChanged,
+    this.forceSessionStyle,
   });
 
   final IptcApplyMode mode;
   final ValueChanged<IptcApplyMode>? onChanged;
 
+  /// When set, overrides [IptcPanelStyle] (e.g. Caption V2 IPTC dialog).
+  final bool? forceSessionStyle;
+
   @override
   Widget build(BuildContext context) {
-    final session = IptcPanelStyle.sessionOf(context);
-    final modes = <(String, IptcApplyMode)>[
-      ('Off', IptcApplyMode.none),
-      ('On import', IptcApplyMode.onImport),
-      ('On save', IptcApplyMode.onSave),
-    ];
-    return Container(
-      decoration: session
-          ? null
-          : BoxDecoration(
-              color: const Color(0xFFE8E8E8),
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: const Color(0xFFD0D0D0), width: 0.7),
-            ),
-      child: Row(
-        children: [
-          for (var i = 0; i < modes.length; i++) ...[
-            if (!session && i > 0)
-              Container(width: 0.7, height: 22, color: const Color(0xFFD0D0D0)),
-            Expanded(
-              child: _segment(
-                label: modes[i].$1,
-                selected: mode == modes[i].$2,
-                onTap: () => _select(modes[i].$2),
-                session: session,
-                index: i,
-                count: modes.length,
+    final session = forceSessionStyle ?? IptcPanelStyle.sessionOf(context);
+    final onLoad = mode.appliesOnLoad;
+    final onSave = mode.appliesOnSave;
+    final onFtp = mode.appliesOnFtp;
+    final labelColor = session ? FfTokens.sessionTx : const Color(0xFF333333);
+    final muted = session ? FfTokens.sessionT2 : const Color(0xFF666666);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _flagRow(
+          label: 'Apply on load',
+          value: onLoad,
+          enabled: onChanged != null,
+          session: session,
+          labelColor: labelColor,
+          onChanged: (v) {
+            if (onChanged == null) return;
+            onChanged!(
+              IptcApplyMode.fromFlags(
+                onLoad: v,
+                onSave: v ? false : onSave,
+                onFtp: v ? false : onFtp,
+              ),
+            );
+          },
+        ),
+        if (!onLoad) ...[
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.only(left: 2),
+            child: Text(
+              'Or apply later',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: session ? 11 : 9,
+                fontVariations: const [FontVariation('wght', 500)],
+                color: muted,
               ),
             ),
-          ],
+          ),
+          const SizedBox(height: 2),
+          _flagRow(
+            label: 'Apply on save',
+            value: onSave,
+            enabled: onChanged != null,
+            session: session,
+            labelColor: labelColor,
+            onChanged: (v) {
+              if (onChanged == null) return;
+              onChanged!(
+                IptcApplyMode.fromFlags(
+                  onLoad: false,
+                  onSave: v,
+                  onFtp: onFtp,
+                ),
+              );
+            },
+          ),
+          _flagRow(
+            label: 'Apply on FTP',
+            value: onFtp,
+            enabled: onChanged != null,
+            session: session,
+            labelColor: labelColor,
+            onChanged: (v) {
+              if (onChanged == null) return;
+              onChanged!(
+                IptcApplyMode.fromFlags(
+                  onLoad: false,
+                  onSave: onSave,
+                  onFtp: v,
+                ),
+              );
+            },
+          ),
         ],
-      ),
+      ],
     );
   }
 
-  void _select(IptcApplyMode target) {
-    if (onChanged == null) return;
-    onChanged!(target);
-  }
-
-  Widget _segment({
+  Widget _flagRow({
     required String label,
-    required bool selected,
-    required VoidCallback onTap,
+    required bool value,
+    required bool enabled,
     required bool session,
-    required int index,
-    required int count,
+    required Color labelColor,
+    required ValueChanged<bool> onChanged,
   }) {
-    final radius = session
-        ? BorderRadius.horizontal(
-            left: index == 0 ? const Radius.circular(10) : Radius.zero,
-            right: index == count - 1 ? const Radius.circular(10) : Radius.zero,
-          )
-        : BorderRadius.circular(3);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onChanged == null ? null : onTap,
-        borderRadius: radius,
-        child: Container(
-          height: session ? 32 : null,
-          padding: EdgeInsets.symmetric(horizontal: session ? 8 : 5, vertical: session ? 0 : 3),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: session
-                ? (selected ? FfTokens.nocturneHv : FfTokens.nocturneSunken)
-                : (selected ? Colors.white : Colors.transparent),
-            borderRadius: radius,
-            border: session && selected
-                ? Border.all(color: FfTokens.nocturneLn2)
-                : null,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (session && selected) ...[
-                const PhosphorIcon(PhosphorIconsBold.check, size: 12),
-                const SizedBox(width: 4),
-              ],
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: session ? 12 : 9,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                    color: session
-                        ? (selected ? FfTokens.sessionTx : FfTokens.sessionT2)
-                        : (selected
-                            ? const Color(0xFF333333)
-                            : const Color(0xFF888888)),
-                  ),
+    return InkWell(
+      onTap: enabled ? () => onChanged(!value) : null,
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          children: [
+            SizedBox(
+              width: session ? 18 : 16,
+              height: session ? 18 : 16,
+              child: Checkbox(
+                value: value,
+                onChanged: enabled
+                    ? (v) => onChanged(v ?? false)
+                    : null,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+                side: BorderSide(
+                  color: session ? FfTokens.sessionLn2 : const Color(0xFFB0B0B0),
+                ),
+                activeColor: session ? FfTokens.sessionOn : const Color(0xFF4A7A96),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: session ? 12 : 10,
+                  fontVariations: const [FontVariation('wght', 600)],
+                  color: labelColor,
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
+
 }
 
 class _FieldColumn extends StatelessWidget {
@@ -891,6 +948,7 @@ class _FieldColumn extends StatelessWidget {
     required this.values,
     required this.foundInFilesKeys,
     required this.templateRevision,
+    this.highlightStorageKey,
     this.fieldsEnabled = true,
     this.onValueChanged,
   });
@@ -898,9 +956,19 @@ class _FieldColumn extends StatelessWidget {
   final List<WireIptcFieldSpec> specs;
   final Map<String, String> values;
   final Set<String> foundInFilesKeys;
+  final String? highlightStorageKey;
   final int templateRevision;
   final bool fieldsEnabled;
   final void Function(String storageKey, String value)? onValueChanged;
+
+  bool _highlighted(String storageKey) {
+    final want = highlightStorageKey?.trim() ?? '';
+    if (want.isEmpty) return false;
+    if (storageKey == want) return true;
+    final presetKey = IptcTemplateApplyService.toPresetKey(storageKey);
+    return want == presetKey ||
+        want == IptcTemplateApplyService.toPanelKey(presetKey);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -916,6 +984,7 @@ class _FieldColumn extends StatelessWidget {
               key: ValueKey('${specs[i].storageKey}-$templateRevision'),
               spec: specs[i],
               enabled: fieldsEnabled,
+              highlighted: _highlighted(specs[i].storageKey),
               value: StartupIptcTemplatePanel._displayValueForField(
                 label: specs[i].label,
                 storedValue: IptcTemplateApplyService.lookupValue(
@@ -946,6 +1015,7 @@ class _EditableFieldRow extends StatefulWidget {
     required this.spec,
     this.value,
     this.showFoundInFiles = false,
+    this.highlighted = false,
     this.valueMaxLines = 1,
     this.enabled = true,
     this.onValueChanged,
@@ -954,6 +1024,7 @@ class _EditableFieldRow extends StatefulWidget {
   final WireIptcFieldSpec spec;
   final String? value;
   final bool showFoundInFiles;
+  final bool highlighted;
   final int valueMaxLines;
   final bool enabled;
   final void Function(String storageKey, String value)? onValueChanged;
@@ -973,6 +1044,18 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
     _controller = TextEditingController(text: widget.value?.trim() ?? '');
     _focusNode = FocusNode();
     _focusNode.addListener(_onFocusChange);
+    if (widget.highlighted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Scrollable.ensureVisible(
+          context,
+          alignment: 0.2,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+        );
+        if (widget.enabled) _focusNode.requestFocus();
+      });
+    }
   }
 
   @override
@@ -1046,35 +1129,35 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
     final session = IptcPanelStyle.sessionOf(context);
     if (session) {
       return BoxDecoration(
-        color: widget.enabled ? FfTokens.nocturneSunken : FfTokens.nocturneEl,
+        color: widget.highlighted
+            ? FfTokens.nocturneAccentDeep
+            : (widget.enabled ? FfTokens.nocturneSunken : FfTokens.nocturneEl),
         border: Border.all(
-          color: widget.enabled
-              ? (_focused ? FfTokens.nocturneAc : FfTokens.sessionLn2)
-              : Colors.transparent,
+          color: widget.highlighted
+              ? FfTokens.accentHover
+              : (widget.enabled
+                  ? (_focused ? FfTokens.nocturneAc : FfTokens.sessionLn2)
+                  : Colors.transparent),
+          width: widget.highlighted ? 1.5 : 1,
         ),
         borderRadius: BorderRadius.circular(8),
       );
     }
     return BoxDecoration(
-      color: widget.enabled
-          ? Colors.white
-          : StartupIptcTemplatePanel._fieldDisabledFill,
+      color: widget.highlighted
+          ? const Color(0xFFE8F4FA)
+          : (widget.enabled
+              ? Colors.white
+              : StartupIptcTemplatePanel._fieldDisabledFill),
       border: Border.all(
-        color: widget.enabled
-            ? (_focused ? const Color(0xFF4A7A96) : const Color(0xFFD0D0D0))
-            : StartupIptcTemplatePanel._fieldDisabledBorder,
-        width: widget.enabled && _focused ? 1.0 : 0.7,
+        color: widget.highlighted
+            ? FfTokens.nocturneAc
+            : (widget.enabled
+                ? (_focused ? FfTokens.nocturneAc : const Color(0xFFD0D0D0))
+                : const Color(0xFFE0E0E0)),
+        width: widget.highlighted ? 1.5 : 1,
       ),
       borderRadius: BorderRadius.circular(4),
-      boxShadow: widget.enabled
-          ? [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 1,
-                offset: const Offset(0, 0.5),
-              ),
-            ]
-          : const [],
     );
   }
 

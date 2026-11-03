@@ -30,11 +30,15 @@ class CaptionV2IptcSummary {
     final wire = templateLabel.trim().isEmpty ? 'template' : templateLabel;
     switch (mode) {
       case IptcApplyMode.none:
-        return "Don't write IPTC";
+        return 'Off';
       case IptcApplyMode.onImport:
-        return 'Write IPTC on import · $wire';
+        return 'On load · $wire';
       case IptcApplyMode.onSave:
-        return 'Write IPTC on save · $wire';
+        return 'On save · $wire';
+      case IptcApplyMode.onFtp:
+        return 'On FTP · $wire';
+      case IptcApplyMode.onSaveAndFtp:
+        return 'On save & FTP · $wire';
     }
   }
 }
@@ -44,6 +48,7 @@ Future<CaptionV2IptcSummary?> showCaptionV2IptcDialog(
   BuildContext context, {
   String? folderPath,
   bool enableWriting = false,
+  bool populateFromFolder = false,
 }) {
   return showDialog<CaptionV2IptcSummary>(
     context: context,
@@ -51,6 +56,7 @@ Future<CaptionV2IptcSummary?> showCaptionV2IptcDialog(
     builder: (_) => CaptionV2IptcDialog(
       folderPath: folderPath,
       enableWriting: enableWriting,
+      populateFromFolder: populateFromFolder,
     ),
   );
 }
@@ -60,6 +66,7 @@ class CaptionV2IptcDialog extends StatefulWidget {
     super.key,
     this.folderPath,
     this.enableWriting = false,
+    this.populateFromFolder = false,
   });
 
   final String? folderPath;
@@ -67,6 +74,10 @@ class CaptionV2IptcDialog extends StatefulWidget {
   /// Opened from the start-menu Write IPTC switch. Fields stay editable, and
   /// writing is saved only when the user finishes the dialog.
   final bool enableWriting;
+
+  /// When true (folder just chosen), fill the panel from image IPTC and show
+  /// what is already populated vs still missing.
+  final bool populateFromFolder;
 
   @override
   State<CaptionV2IptcDialog> createState() => _CaptionV2IptcDialogState();
@@ -77,7 +88,7 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
 
   IptcApplyMode _mode = IptcApplyMode.none;
   WireStyle _wire = WireStyle.getty;
-  String _selectedTemplateId = 'getty';
+  String _selectedTemplateId = '';
   List<IptcTemplateCatalogEntry> _visibleTemplates = const [];
   final Map<WireStyle, String> _wireLabels = {};
   Map<String, String> _values = const {'Urgency': '5'};
@@ -101,28 +112,26 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
     await AppDefaultsFirestoreService.fetchAndCacheAppDefaults();
     var mode = await _prefs.getIptcApplyMode();
     if (widget.enableWriting) mode = IptcApplyMode.onImport;
-    final hidden = await _prefs.getHiddenIptcTemplateIds();
-    final visible = await AppDefaultsFirestoreService.getVisibleIptcTemplates(
-      hiddenIds: hidden,
-    );
-    final local = await _prefs.getLocalIptcTemplates();
     final captionTemplate = await _prefs.getCaptionTemplate();
+    final locals = await _prefs.getLocalIptcTemplates();
     await _loadWireLabels();
 
     if (!mounted) return;
     setState(() {
       _mode = mode;
-      _visibleTemplates = [
-        ...local,
-        for (final t in visible)
-          if (!local.any((saved) => saved.id == t.id)) t,
-      ];
+      // User-created templates only — no built-in wire list.
+      _visibleTemplates = locals;
+      // Start unselected — dropdown shows "Choose" until the user picks one.
       _selectedTemplateId = '';
-      _wire = WireStyle.getty;
+      _wire = captionTemplate.wireStyle;
       _captionTemplate = captionTemplate;
       _values = const {};
       _loading = false;
     });
+
+    if (widget.populateFromFolder) {
+      await _loadOriginalFromFolder();
+    }
   }
 
   List<String> get _missingCaptionIptc =>
@@ -228,7 +237,7 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
   Future<void> _saveNamedTemplate() async {
     var currentName = '';
     for (final t in _visibleTemplates) {
-      if (t.id == _selectedTemplateId && t.id.startsWith('local:')) {
+      if (t.id == _selectedTemplateId) {
         currentName = t.displayName;
         break;
       }
@@ -265,15 +274,18 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
     await _prefs.saveLocalIptcTemplates(next);
     if (!mounted) return;
     setState(() {
-      _visibleTemplates = [
-        ...next,
-        for (final t in _visibleTemplates)
-          if (!t.id.startsWith('local:')) t,
-      ];
+      _visibleTemplates = next;
       _selectedTemplateId = id;
       _clearedFields = entry.clearedFields.toSet();
     });
     await _persist();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Saved “$trimmed”'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   Future<String?> _askTemplateName(String initial) {
@@ -399,7 +411,7 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
       _revision++;
     });
     await _prefs.saveIptcApplyMode(mode);
-    if (mode == IptcApplyMode.onImport) {
+    if (mode.appliesOnLoad) {
       final folder = widget.folderPath;
       if (folder != null && folder.isNotEmpty) {
         await _loadOriginalFromFolder();
@@ -462,21 +474,41 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
           mergedRaw.putIfAbsent(k, () => v);
         });
       }
+      // Show fields from the photos. Caption is omitted from the pad — it is
+      // never written on load and stays on each photo until the session.
       final merged = IptcTemplateApplyService.panelValuesFromImportedTemplate(
         mergedRaw,
         _wire,
       );
+      mergedRaw.forEach((k, v) {
+        final trimmed = v.trim();
+        if (trimmed.isEmpty) return;
+        if (IptcTemplateApplyService.toPresetKey(k) == 'Caption' ||
+            k == 'Caption') {
+          return;
+        }
+        merged.putIfAbsent(k, () => trimmed);
+      });
+      merged.removeWhere(
+        (k, _) =>
+            IptcTemplateApplyService.toPresetKey(k) == 'Caption' ||
+            k == 'Caption',
+      );
+      final foundInFiles = <String>{};
+      for (final e in merged.entries) {
+        if (e.value.trim().isEmpty) continue;
+        foundInFiles.add(e.key);
+      }
       if (!mounted) return;
       setState(() {
         _values = _withDefaultUrgency(merged);
         _keysFoundInFiles
           ..clear()
-          ..addAll(merged.keys.where(
-            (key) => !IptcTemplateApplyService.isInAppGeneratedFieldKey(key),
-          ));
+          ..addAll(foundInFiles);
         _revision++;
       });
-      await _persist();
+      // Don't persist folder read-through into the saved template yet — just
+      // show it. Saving still happens via Save template / Done.
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -548,7 +580,16 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
   }
 
   Set<String> _computeClearedFields() {
-    const neverClear = {'Time and Date', 'Date', 'Time'};
+    // Caption / Personality / Keywords stay on the photos — never treat blank
+    // template slots as “clear this field” on load, save, or FTP.
+    const neverClear = {
+      'Time and Date',
+      'Date',
+      'Time',
+      'Caption',
+      'Personality',
+      'Keywords',
+    };
     return WireIptcSpecs.fieldsForPanel(_wire)
         .map((s) => s.storageKey)
         .where((k) => !neverClear.contains(k))
@@ -587,20 +628,21 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
   }
 
   Future<void> _done() async {
-    if (widget.enableWriting) {
-      final missing =
-          IptcTemplateApplyService.missingRequiredLabels(_wire, _values);
-      if (missing.isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Fill in IPTC before writing: ${missing.join(', ')}'),
-          ),
-        );
-        return;
-      }
-    }
+    final missing =
+        IptcTemplateApplyService.missingRequiredLabels(_wire, _values);
     await _persist();
     if (!mounted) return;
+    if (missing.isNotEmpty) {
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.showSnackBar(
+        SnackBar(
+          content: Text(
+            'IPTC missing: ${missing.join(', ')}. You can fill these later.',
+          ),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
     Navigator.of(context).pop(
       CaptionV2IptcSummary(mode: _mode, templateLabel: _templateLabel),
     );
@@ -609,7 +651,8 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
-    final fieldsOff = _mode == IptcApplyMode.none;
+    // Keep fields editable so folder IPTC can be reviewed and adjusted.
+    const fieldsEnabled = true;
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       backgroundColor: FfTokens.sessionPanel,
@@ -621,33 +664,40 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
       child: SizedBox(
         width: (size.width - 32).clamp(0.0, 1240.0),
         height: size.height - 32,
-        child: _loading
-            ? const Center(
-                child: SizedBox(
-                  width: 28,
-                  height: 28,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+        child: Material(
+          type: MaterialType.transparency,
+          child: _loading
+              ? const Center(
+                  child: SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              : IptcTemplateEditor(
+                  key: ValueKey('iptc-editor-$_revision-$_wire'),
+                  wire: _wire,
+                  templates: _visibleTemplates,
+                  selectedTemplateId: _selectedTemplateId,
+                  values: _values,
+                  foundInFilesKeys: _keysFoundInFiles,
+                  revision: _revision,
+                  fieldsEnabled: fieldsEnabled,
+                  onTemplateSelected: _onTemplateSelected,
+                  onValueChanged: _onValueChanged,
+                  onLoadTemplate: _loadExternalTemplate,
+                  onClearTemplate: _clearTemplate,
+                  onSaveTemplate: _saveNamedTemplate,
+                  loadEnabled: !_loadingExternal && !_loadingFromFiles,
+                  clearEnabled: !_loadingExternal,
+                  loadingTemplate: _loadingExternal,
+                  applyMode: _mode,
+                  onApplyModeChanged: (mode) =>
+                      unawaited(_onModeChanged(mode)),
+                  onCancel: () => Navigator.of(context).pop(),
+                  onDone: _done,
                 ),
-              )
-            : IptcTemplateEditor(
-                wire: _wire,
-                templates: _visibleTemplates,
-                selectedTemplateId: _selectedTemplateId,
-                values: _values,
-                foundInFilesKeys: _keysFoundInFiles,
-                revision: _revision,
-                fieldsEnabled: !fieldsOff,
-                onTemplateSelected: _onTemplateSelected,
-                onValueChanged: _onValueChanged,
-                onLoadTemplate: _loadExternalTemplate,
-                onClearTemplate: _clearTemplate,
-                onSaveTemplate: _saveNamedTemplate,
-                loadEnabled: !_loadingExternal && !_loadingFromFiles && !fieldsOff,
-                clearEnabled: !_loadingExternal && !fieldsOff,
-                loadingTemplate: _loadingExternal,
-                onCancel: () => Navigator.of(context).pop(),
-                onDone: _done,
-              ),
+        ),
       ),
     );
   }

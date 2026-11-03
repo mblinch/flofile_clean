@@ -41,8 +41,9 @@ class WireIptcSpecs {
   static String factoryWireLabel(WireStyle wire) {
     switch (wire) {
       case WireStyle.getty:
+        return 'Getty USA';
       case WireStyle.gettyInternational:
-        return 'Getty';
+        return 'Getty International';
       case WireStyle.imagn:
         return 'Imagn';
       case WireStyle.ap:

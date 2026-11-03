@@ -123,6 +123,16 @@ class PreferencesService {
       'favorite_teams_baseball'; // Sport-specific team favorites
   static const String _keyFtpProfiles = 'ftp_profiles';
   static const String _keyCurrentFtpProfile = 'current_ftp_profile';
+  /// App-wide `{n}` sequence: zero-pad width (1–8) and next value.
+  static const String _keyNumberSequenceDigits = 'number_sequence_digits';
+  static const String _keyNumberSequenceNext = 'number_sequence_next';
+  static const int numberSequenceDigitsDefault = 4;
+  static const int numberSequenceDigitsMin = 1;
+  static const int numberSequenceDigitsMax = 8;
+  /// Default `{initials}` when serial-number bylines is off. Empty → Creator.
+  static const String _keyRenameInitials = 'rename_initials';
+  /// Photographer / byline name for previews (syncs to Firebase with prefs).
+  static const String _keyPhotographerName = 'photographer_name';
   static const String _keyPlaceFirebarOnRight = 'place_firebar_on_right';
   static const String _keyLastSavedMetadata = 'last_saved_metadata';
   // Custom verb wordings (per sport)
@@ -155,6 +165,11 @@ class PreferencesService {
   static const String _keyVerbMultiOpen = 'verb_multi_open';
   static const String _keyVerbCascadeLimit = 'verb_cascade_limit';
   static const String _keyVerbFontStep = 'verb_font_step';
+  /// Caption box / startup preview body text size (points).
+  static const String _keyCaptionTextSize = 'caption_text_size';
+  static const double captionTextSizeDefault = 15;
+  static const double captionTextSizeMin = 13;
+  static const double captionTextSizeMax = 26;
   /// Verb panel layout: false is category cascade, true is one A–Z list.
   static const String _keyVerbListAll = 'verb_list_all';
   /// Per-sport map of verb key → usage count (synced via user Firebase prefs).
@@ -193,6 +208,8 @@ class PreferencesService {
   static const String _keyJerseyOcrEnabled = 'jersey_ocr_enabled';
   /// When false, caption V2 hides FTP buttons/shortcuts for the session.
   static const String _keyFtpModeEnabled = 'ftp_mode_enabled';
+  /// When true (default), FTP uploads use the profile rename template.
+  static const String _keyFileRenamingEnabled = 'file_renaming_enabled';
   static const String _keyFtpCompleteSoundPath = 'ftp_complete_sound_path';
   static const String _keyHideFirebar = 'hide_firebar';
   static const String _keyAutoAdvanceTabs = 'auto_advance_tabs';
@@ -203,6 +220,8 @@ class PreferencesService {
   static const String _keyStartupLastAwayPrefix = 'startup_last_away_';
   /// `none` | `on_import` | `on_save` — when startup IPTC template is applied.
   static const String _keyIptcApplyMode = 'iptc_apply_mode';
+  /// `merge` | `overwrite` — Personality / Keywords on session load.
+  static const String _keyIptcOnLoadListMode = 'iptc_on_load_list_mode';
   static const String _keyApplyIptcOnImport = 'apply_iptc_on_import';
   static const String _keyApplyIptcOnSave = 'apply_iptc_on_save';
   static const String _legacyApplyPresetToAllImages =
@@ -437,6 +456,19 @@ class PreferencesService {
     _afterLocalPreferencesChanged();
   }
 
+  /// When true (default), FTP uploads apply the profile’s rename template.
+  Future<bool> getFileRenamingEnabled() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keyFileRenamingEnabled) ?? true;
+  }
+
+  Future<void> saveFileRenamingEnabled(bool enabled) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keyFileRenamingEnabled, enabled);
+    applicationModesRevision.value = applicationModesRevision.value + 1;
+    _afterLocalPreferencesChanged();
+  }
+
   /// Local copy played when an FTP batch finishes. Empty uses the built-in chime.
   Future<String?> getFtpCompleteSoundPath() async {
     final prefs = await _getPrefs();
@@ -553,6 +585,18 @@ class PreferencesService {
   Future<void> saveIptcApplyMode(IptcApplyMode mode) async {
     final prefs = await _getPrefs();
     await prefs.setString(_keyIptcApplyMode, mode.storageValue);
+  }
+
+  Future<IptcOnLoadListMode> getIptcOnLoadListMode() async {
+    final prefs = await _getPrefs();
+    return IptcOnLoadListMode.fromStorage(
+      prefs.getString(_keyIptcOnLoadListMode),
+    );
+  }
+
+  Future<void> saveIptcOnLoadListMode(IptcOnLoadListMode mode) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(_keyIptcOnLoadListMode, mode.storageValue);
   }
 
   /// Last [package_info_plus] build number the user saw update notes for (0 = never).
@@ -1125,6 +1169,73 @@ class PreferencesService {
     }
     _afterLocalPreferencesChanged();
     ftpProfilesRevision.value++;
+  }
+
+  /// Zero-pad width for the app-wide `{n}` number sequence (1–8).
+  Future<int> getNumberSequenceDigits() async {
+    final prefs = await _getPrefs();
+    final raw = prefs.getInt(_keyNumberSequenceDigits);
+    if (raw == null) return numberSequenceDigitsDefault;
+    return raw.clamp(numberSequenceDigitsMin, numberSequenceDigitsMax);
+  }
+
+  Future<void> saveNumberSequenceDigits(int digits) async {
+    final prefs = await _getPrefs();
+    final clamped =
+        digits.clamp(numberSequenceDigitsMin, numberSequenceDigitsMax);
+    await prefs.setInt(_keyNumberSequenceDigits, clamped);
+    _afterLocalPreferencesChanged();
+  }
+
+  /// Next integer used when `{n}` is resolved without IPTC digits.
+  /// Starts at 1 for a new session (`0001` with default digit width).
+  Future<int> getNumberSequenceNext() async {
+    final prefs = await _getPrefs();
+    final raw = prefs.getInt(_keyNumberSequenceNext);
+    if (raw == null || raw < 1) return 1;
+    return raw;
+  }
+
+  Future<void> saveNumberSequenceNext(int next) async {
+    final prefs = await _getPrefs();
+    final safe = next < 1 ? 1 : next;
+    await prefs.setInt(_keyNumberSequenceNext, safe);
+    _afterLocalPreferencesChanged();
+  }
+
+  /// Preferred `{initials}` when serial-number bylines is off.
+  /// Empty means derive from Creator (first letter of each name).
+  Future<String> getRenameInitials() async {
+    final prefs = await _getPrefs();
+    return prefs.getString(_keyRenameInitials)?.trim() ?? '';
+  }
+
+  Future<void> saveRenameInitials(String initials) async {
+    final prefs = await _getPrefs();
+    final trimmed = initials.trim();
+    if (trimmed.isEmpty) {
+      await prefs.remove(_keyRenameInitials);
+    } else {
+      await prefs.setString(_keyRenameInitials, trimmed);
+    }
+    _afterLocalPreferencesChanged();
+  }
+
+  /// Photographer name for caption preview / bylines.
+  Future<String> getPhotographerName() async {
+    final prefs = await _getPrefs();
+    return prefs.getString(_keyPhotographerName)?.trim() ?? '';
+  }
+
+  Future<void> savePhotographerName(String name) async {
+    final prefs = await _getPrefs();
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      await prefs.remove(_keyPhotographerName);
+    } else {
+      await prefs.setString(_keyPhotographerName, trimmed);
+    }
+    _afterLocalPreferencesChanged();
   }
 
   // Firebar Position Preference
@@ -1892,6 +2003,22 @@ class PreferencesService {
     _afterLocalPreferencesChanged();
   }
 
+  Future<double> getCaptionTextSize() async {
+    final prefs = await _getPrefs();
+    final raw = prefs.getDouble(_keyCaptionTextSize);
+    return (raw ?? captionTextSizeDefault).clamp(
+      captionTextSizeMin,
+      captionTextSizeMax,
+    );
+  }
+
+  Future<void> saveCaptionTextSize(double size) async {
+    final prefs = await _getPrefs();
+    final clamped = size.clamp(captionTextSizeMin, captionTextSizeMax);
+    await prefs.setDouble(_keyCaptionTextSize, clamped);
+    _afterLocalPreferencesChanged();
+  }
+
   Future<bool> getVerbListAll() async {
     final prefs = await _getPrefs();
     return prefs.getBool(_keyVerbListAll) ?? false;
@@ -2270,6 +2397,9 @@ class PreferencesService {
       'burstDetectionEnabled': await getBurstDetectionEnabled(),
       'serialNumberBylines': await getSerialNumberBylines(),
       'ftpModeEnabled': await getFtpModeEnabled(),
+      'fileRenamingEnabled': await getFileRenamingEnabled(),
+      'renameInitials': await getRenameInitials(),
+      'photographerName': await getPhotographerName(),
       'ftpCompleteSoundPath': await getFtpCompleteSoundPath(),
       'hideFirebar': await getHideFirebar(),
       'jerseyOcrEnabled': await getJerseyOcrEnabled(),
@@ -2519,6 +2649,18 @@ class PreferencesService {
     }
     if (preferences.containsKey('ftpModeEnabled')) {
       await saveFtpModeEnabled(preferences['ftpModeEnabled'] as bool);
+    }
+    if (preferences.containsKey('fileRenamingEnabled')) {
+      await saveFileRenamingEnabled(
+          preferences['fileRenamingEnabled'] as bool);
+    }
+    if (preferences.containsKey('renameInitials')) {
+      final raw = preferences['renameInitials'];
+      await saveRenameInitials(raw is String ? raw : '');
+    }
+    if (preferences.containsKey('photographerName')) {
+      final raw = preferences['photographerName'];
+      await savePhotographerName(raw is String ? raw : '');
     }
     if (preferences.containsKey('ftpCompleteSoundPath')) {
       final raw = preferences['ftpCompleteSoundPath'];

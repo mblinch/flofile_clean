@@ -864,9 +864,13 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   static String _iptcApplyModeLabel(IptcApplyMode mode) {
     switch (mode) {
       case IptcApplyMode.onImport:
-        return 'On import';
+        return 'On load';
       case IptcApplyMode.onSave:
         return 'On save';
+      case IptcApplyMode.onFtp:
+        return 'On FTP';
+      case IptcApplyMode.onSaveAndFtp:
+        return 'On save & FTP';
       case IptcApplyMode.none:
         return 'Off';
     }
@@ -1028,7 +1032,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     if (_lockedPaths.contains(imagePath)) return;
     try {
       final prefsService = await PreferencesService.getInstance();
-      if (await prefsService.getIptcApplyMode() != IptcApplyMode.onSave) return;
+      if (!(await prefsService.getIptcApplyMode()).appliesOnSave) return;
       final preset = await _loadSelectedIptcPreset() ?? <String, String>{};
       final clearedFields = await _loadIptcClearedFields();
       if (preset.isEmpty && clearedFields.isEmpty) return;
@@ -1049,7 +1053,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     try {
       final prefsService = await PreferencesService.getInstance();
       final mode = await prefsService.getIptcApplyMode();
-      if (mode != IptcApplyMode.onImport) {
+      if (!mode.appliesOnLoad) {
         _startupIptcPresetForImport = null;
         await _reportSessionLoading(
           progress: 0.92,
@@ -1151,7 +1155,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   Future<void> _applyStartupIptcToImageIfEnabled(String imagePath) async {
     try {
       final prefsService = await PreferencesService.getInstance();
-      if (await prefsService.getIptcApplyMode() != IptcApplyMode.onImport) {
+      if (!(await prefsService.getIptcApplyMode()).appliesOnLoad) {
         return;
       }
       if (_lockedPaths.contains(imagePath)) return;

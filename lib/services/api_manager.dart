@@ -353,16 +353,41 @@ class ApiManager {
 
   bool get isConnected => true;
 
-  /// Venue info — MLB official API only; other sports return null.
+  /// Home stadium / arena for [teamName].
+  ///
+  /// Prefers `sports_tank01` team docs (league-API venues written by Tank01
+  /// sync). Falls back to live league APIs when available.
   Future<String?> fetchVenueForTeam(String teamName) async {
-    if (_currentSport != 'baseball') return null;
-    final team = await _mlbService.findTeamByName(teamName);
-    return team?.venueName;
+    try {
+      if (await _useTank01Firebase()) {
+        final teams = await RosterFirestoreService.listTeams(
+          sportId: _currentSport,
+          rootCollection: RosterFirestoreService.tank01RootCollection,
+        );
+        final hit = _matchTeam(teams, teamName);
+        final venue = hit?.venueName?.trim();
+        if (venue != null && venue.isNotEmpty) return venue;
+      }
+      final team = await findTeamByName(teamName);
+      final venue = team?.venueName?.trim();
+      if (venue != null && venue.isNotEmpty) return venue;
+    } catch (e) {
+      print('API Manager: fetchVenueForTeam failed: $e');
+    }
+    return null;
   }
 
   /// Returns [TeamInfo] (id, name, locationName, venueName) for [teamName].
   Future<TeamInfo?> findTeamByName(String teamName) async {
     try {
+      if (await _useTank01Firebase()) {
+        final teams = await RosterFirestoreService.listTeams(
+          sportId: _currentSport,
+          rootCollection: RosterFirestoreService.tank01RootCollection,
+        );
+        final hit = _matchTeam(teams, teamName);
+        if (hit != null) return hit;
+      }
       switch (_currentSport) {
         case 'baseball':
           return await _mlbService.findTeamByName(teamName);
@@ -381,6 +406,21 @@ class ApiManager {
       print('API Manager: findTeamByName failed: $e');
       return null;
     }
+  }
+
+  TeamInfo? _matchTeam(List<TeamInfo> teams, String teamName) {
+    final q = teamName.toLowerCase().trim();
+    if (q.isEmpty) return null;
+    for (final t in teams) {
+      final name = t.name.toLowerCase().trim();
+      final id = t.id.toLowerCase().trim();
+      if (name == q || id == q) return t;
+    }
+    for (final t in teams) {
+      final name = t.name.toLowerCase().trim();
+      if (q.contains(name) || name.contains(q)) return t;
+    }
+    return null;
   }
 
   Future<String?> fetchVenueForGame(

@@ -53,9 +53,9 @@ RgbHistogram rgbHistogram({
       ? 1
       : math.max(1, (pixels / _maxHistogramSamples).ceil());
   final neutral = adjustments.isNeutral;
-  final base = neutral || !adjustments.needsLocalTone
+  final mask = neutral || !adjustments.needsLocalTone
       ? null
-      : lumaBaseForDisplayRgb(rgb, width, height, adjustments);
+      : lumaMaskForDisplayRgb(rgb, width, height, adjustments);
   final last = bins - 1;
 
   void add(List<int> channel, double unit) {
@@ -83,7 +83,9 @@ RgbHistogram rgbHistogram({
           g,
           b,
           adjustments,
-          baseLuma: base == null ? null : base[y * width + x],
+          mask01: mask == null ? null : mask[y * width + x],
+          ditherX: x,
+          ditherY: y,
         );
         add(red, graded.r);
         add(green, graded.g);

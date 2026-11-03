@@ -14,6 +14,7 @@ import 'app_styled_dialogs.dart';
 import '../services/camera_serial_service.dart';
 import '../theme/app_tokens.dart';
 import 'app_compact_checkbox.dart';
+import 'admin_mode_toggle.dart';
 import 'flo_chrome_header.dart';
 import 'admin_screen.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
@@ -400,6 +401,10 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
           ),
           const SizedBox(width: 8),
           _topbarBadge('Beta'),
+          if (AdminService.isActuallyAdminSync()) ...[
+            const SizedBox(width: 6),
+            const AdminModeToggle(compact: true, onDarkChrome: true),
+          ],
           if (AdminService.isCurrentUserAdminSync()) ...[
             const SizedBox(width: 6),
             AdminBadgeButton(

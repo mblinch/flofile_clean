@@ -27,7 +27,11 @@ void main() {
       segmentOrder: const [
         CaptionSegment.caption,
         CaptionSegment.punctuation,
-        CaptionSegment.date,
+        CaptionSegment.month,
+        CaptionSegment.punctuation,
+        CaptionSegment.day,
+        CaptionSegment.punctuation,
+        CaptionSegment.year,
       ],
     );
     await prefs.saveCaptionTemplateWireDefault(WireStyle.getty, edited);
@@ -51,7 +55,11 @@ void main() {
     expect(raw.segmentOrder, [
       CaptionSegment.caption,
       CaptionSegment.punctuation,
-      CaptionSegment.date,
+      CaptionSegment.month,
+      CaptionSegment.punctuation,
+      CaptionSegment.day,
+      CaptionSegment.punctuation,
+      CaptionSegment.year,
     ]);
 
     final loaded = await prefs.getCaptionTemplate();

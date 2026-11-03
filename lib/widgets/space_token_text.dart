@@ -24,7 +24,17 @@ class GrowingTextBoxSize {
     final painter = TextPainter(
       text: TextSpan(text: visible, style: style),
       textDirection: TextDirection.ltr,
-    )..layout(maxWidth: innerMax);
+    )..layout(maxWidth: double.infinity);
+    // Prefer the natural one-line width so short phrases don't claim the
+    // full column and shove neighbors onto their own Wrap runs.
+    final oneLine = painter.width;
+    if (oneLine <= innerMax) {
+      return GrowingTextBoxSize(
+        (oneLine + horizontalPad).clamp(minWidth, maxWidth),
+        math.max(minHeight, painter.height + verticalPad),
+      );
+    }
+    painter.layout(maxWidth: innerMax);
     final width = (painter.width + horizontalPad).clamp(minWidth, maxWidth);
     final height = math.max(minHeight, painter.height + verticalPad);
     return GrowingTextBoxSize(width, height);

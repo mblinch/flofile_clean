@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../theme/ff_tokens.dart';
+import 'photographer_profile_dialog.dart';
 import 'sign_in_screen.dart';
 
 /// Top-level auth gate: [StreamBuilder] on [FirebaseAuth.instance.authStateChanges].
@@ -23,7 +24,7 @@ class _AppAuthShellState extends State<AppAuthShell> {
   @override
   Widget build(BuildContext context) {
     if (Firebase.apps.isEmpty) {
-      return widget.child;
+      return PhotographerProfileGate(child: widget.child);
     }
 
     final skipped = AuthService.instance.signInSkipped;
@@ -62,7 +63,7 @@ class _AppAuthShellState extends State<AppAuthShell> {
           );
         }
 
-        return widget.child;
+        return PhotographerProfileGate(child: widget.child);
       },
     );
   }

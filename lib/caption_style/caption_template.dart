@@ -21,7 +21,10 @@ enum LocationFormat {
 }
 
 /// One draggable token in the location line (place field or punctuation / spacing).
-enum LocationChipKind { city, region, country, literal }
+///
+/// [countryCode] is used by Structure `{country_code}` for independent caps
+/// storage; location-line editors still offer City / State / Country only.
+enum LocationChipKind { city, region, country, countryCode, literal }
 
 /// For [LocationChipKind.country] only: full name vs ISO code from [GameInfo].
 enum LocationCountryVariant {
@@ -221,7 +224,7 @@ class LocationLineOptions {
                 : List<LocationChip>.from(this.intlChips!)),
       );
 
-  /// Deep copy for per–geo-chip templates (duplicate Geographical segments).
+  /// Deep copy for per–geo-chip templates (duplicate City/State/Country groups).
   LocationLineOptions clone() => LocationLineOptions(
         uppercase: uppercase,
         chips: chips.map((c) => c.copyWith()).toList(),
@@ -460,8 +463,10 @@ class LocationLineOptions {
         LocationChip(id: 'g2_ctr', kind: LocationChipKind.country),
       ]);
 
+  /// Imagn writes city + province + country when present (no US↔intl blanking).
   static LocationLineOptions imagnDefault() => LocationLineOptions(
         uppercase: false,
+        autoAdaptUsIntl: false,
         chips: [
           const LocationChip(id: 'i_city', kind: LocationChipKind.city),
           const LocationChip(
@@ -764,6 +769,15 @@ class BylineOptions {
 /// from [BylineFieldKind.custom] entries; when present in [segmentOrder],
 /// [CaptionFormulaRenderer] renders those customs in-place and omits them
 /// from the [credit] segment so they are not duplicated.
+///
+/// [location] is legacy: saved templates still decode it, then
+/// [CaptionTemplate.expandLocationSegments] rewrites each occurrence into
+/// [city] / [state] / [country] (plus [punctuation] for in-line separators).
+///
+/// [date] is legacy: saved templates still decode it, then
+/// [CaptionTemplate.expandDateSegments] rewrites each occurrence into
+/// [month] / [day] / [year] (and [weekday] when present), plus [punctuation]
+/// for in-formula separators.
 enum CaptionSegment {
   location,
   date,
@@ -779,6 +793,26 @@ enum CaptionSegment {
   freeText,
   venue,
   credit,
+  /// Photographer name from IPTC Creator ([GameInfo.photographerName]).
+  creator,
+  /// Agency / credit from IPTC Credit ([GameInfo.agencyName]).
+  agency,
+  /// City from game / IPTC location.
+  city,
+  /// State or province from game / IPTC location.
+  state,
+  /// Country (full name) from game / IPTC location.
+  country,
+  /// ISO country code from [GameInfo.resolvedCountryCode].
+  countryCode,
+  /// Month part of the caption date (from photo EXIF or game date).
+  month,
+  /// Day-of-month part of the caption date.
+  day,
+  /// Year part of the caption date.
+  year,
+  /// Optional weekday part (migrated from structured [DateFormula] only).
+  weekday,
 }
 
 /// Sentinel to distinguish "not passed" from "explicitly null" in copyWith.
@@ -797,6 +831,7 @@ class CaptionTemplate {
     required this.numberFormat,
     required this.captionTeamOrder,
     this.includePlayerPosition = true,
+    this.useTeamPossessive = false,
     this.americanEnglish = true,
     this.removeDiacritics = true,
     this.showPersonalityField = true,
@@ -809,7 +844,7 @@ class CaptionTemplate {
     required this.segmentOrder,
     this.gameIdentifierText = '',
     this.captionPrefix = '',
-    this.captionSuffix = ' ',
+    this.captionSuffix = '',
     this.gameIdentifierPrefix = '',
     this.gameIdentifierSuffix = ' ',
     this.customSeparators,
@@ -821,6 +856,10 @@ class CaptionTemplate {
     this.venueSuffix = '',
     this.locationOptionsByOccurrence,
     this.dateFormulasByOccurrence,
+    this.monthTokensByOccurrence,
+    this.dayTokensByOccurrence,
+    this.yearTokensByOccurrence,
+    this.weekdayTokensByOccurrence,
     this.layoutPrefix = '',
     this.layoutSuffix = '',
     this.basketballUserNote = '',
@@ -856,6 +895,13 @@ class CaptionTemplate {
   /// Whether the player's position label (e.g. `forward`, `guard`) appears in
   /// the dynamic caption segment.
   final bool includePlayerPosition;
+
+  /// When true and [captionTeamOrder] is [CaptionTeamOrder.teamBefore], the
+  /// team name is possessive (`Maple Leafs' Auston Matthews`).
+  ///
+  /// Nullable so instances that survive a hot reload (when this field was
+  /// first added) do not throw on read; treat null as false.
+  final bool? useTeamPossessive;
 
   /// Getty wire captions never include roster positions (abbreviated or expanded).
   bool get effectiveIncludePlayerPosition {
@@ -942,24 +988,51 @@ class CaptionTemplate {
   final String venuePrefix;
   final String venueSuffix;
 
-  /// One [LocationLineOptions] per [CaptionSegment.location] in [segmentOrder]
-  /// (left-to-right). When null, every location segment uses [locationOptions].
+  /// Format options for geo field segments ([CaptionSegment.city] /
+  /// [CaptionSegment.state] / [CaptionSegment.country] /
+  /// [CaptionSegment.countryCode]). Indexed by occurrence of that field kind
+  /// (left-to-right). Also used when migrating legacy
+  /// [CaptionSegment.location] chips. When null, every geo field uses
+  /// [locationOptions].
   final List<LocationLineOptions>? locationOptionsByOccurrence;
 
-  /// One [DateFormula] per [CaptionSegment.date] in [segmentOrder] (left-to-right).
-  /// When null, every date segment uses [dateFormula].
+  /// One [DateFormula] per legacy [CaptionSegment.date] in [segmentOrder]
+  /// (left-to-right). When null, every date segment uses [dateFormula].
+  /// After [expandDateSegments], date chips are gone and per-part token lists
+  /// below drive formatting instead.
   final List<DateFormula>? dateFormulasByOccurrence;
+
+  /// Format options per [CaptionSegment.month] occurrence (left-to-right).
+  /// When null or short, falls back to the month field in [dateFormula].
+  final List<DateFieldToken>? monthTokensByOccurrence;
+
+  /// Format options per [CaptionSegment.day] occurrence (left-to-right).
+  final List<DateFieldToken>? dayTokensByOccurrence;
+
+  /// Format options per [CaptionSegment.year] occurrence (left-to-right).
+  final List<DateFieldToken>? yearTokensByOccurrence;
+
+  /// Format options per [CaptionSegment.weekday] occurrence (left-to-right).
+  final List<DateFieldToken>? weekdayTokensByOccurrence;
 
   /// Matches [CaptionTemplate.getty] / [CaptionTemplate.gettyInternational]
   /// snippet layout (Custom literal chips + optional narrative + separator before venue).
   static const List<CaptionSegment> defaultSegmentOrder = [
-    CaptionSegment.location,
+    CaptionSegment.city,
     CaptionSegment.punctuation,
-    CaptionSegment.date,
+    CaptionSegment.state,
+    CaptionSegment.punctuation,
+    CaptionSegment.country,
+    CaptionSegment.punctuation,
+    CaptionSegment.month,
+    CaptionSegment.punctuation,
+    CaptionSegment.day,
+    CaptionSegment.punctuation,
+    CaptionSegment.year,
     CaptionSegment.punctuation,
     CaptionSegment.caption,
     CaptionSegment.punctuation,
-    CaptionSegment.customText,
+    CaptionSegment.freeText,
     CaptionSegment.separator,
     CaptionSegment.venue,
     CaptionSegment.punctuation,
@@ -982,28 +1055,61 @@ class CaptionTemplate {
         separator: ' - ',
         creditFormat: CreditFormat.photo_by,
         bylineOptions: BylineOptions.getty(),
-        // LOC - DATE: CAPTION GAMEID at VENUE on DATE in LOC. (Photo…)
+        // CITY, STATE - MONTH DAY: CAPTION GAMEID at VENUE on MONTH DAY, YEAR in CITY, STATE.
+        // Country is included so auto-adapt can swap State↔Country by territory.
         segmentOrder: const [
-          CaptionSegment.location,
+          CaptionSegment.city,
           CaptionSegment.punctuation,
-          CaptionSegment.date,
+          CaptionSegment.state,
+          CaptionSegment.punctuation,
+          CaptionSegment.country,
+          CaptionSegment.punctuation,
+          CaptionSegment.month,
+          CaptionSegment.punctuation,
+          CaptionSegment.day,
           CaptionSegment.punctuation,
           CaptionSegment.caption,
           CaptionSegment.punctuation,
-          CaptionSegment.customText,
+          CaptionSegment.freeText,
           CaptionSegment.separator,
           CaptionSegment.venue,
           CaptionSegment.separator,
-          CaptionSegment.date,
-          CaptionSegment.location,
+          CaptionSegment.month,
+          CaptionSegment.punctuation,
+          CaptionSegment.day,
+          CaptionSegment.punctuation,
+          CaptionSegment.year,
+          CaptionSegment.punctuation,
+          CaptionSegment.city,
+          CaptionSegment.punctuation,
+          CaptionSegment.state,
+          CaptionSegment.punctuation,
+          CaptionSegment.country,
           CaptionSegment.punctuation,
           CaptionSegment.credit,
         ],
         customSeparators: const [
           '', '', '', '', '', '', '', '', '', '', '', '', '',
+          '', '', '', '', '', '', '', '', '', '', '', '', '', '', '',
         ],
         separatorSnippets: const [' at ', ' on '],
-        punctuationSnippets: const [' - ', ': ', ' ', '. '],
+        punctuationSnippets: const [
+          ', ',
+          ', ',
+          ' - ',
+          ' ',
+          ': ',
+          ' ',
+          ' ',
+          ', ',
+          'in ',
+          ', ',
+          ', ',
+          '. ',
+        ],
+        // Filled per sport via [applyGameIdentifierText] ("in their NHL game", …).
+        freeTextSnippets: const [''],
+        freeTextSuffixes: const [''],
         locationOptionsByOccurrence: [
           LocationLineOptions.gettyDefault(),
           LocationLineOptions.gettyDefaultSentenceCase(),
@@ -1012,14 +1118,32 @@ class CaptionTemplate {
           DateFormula.gettyOpening(),
           DateFormula.gettyClosing(),
         ],
+        monthTokensByOccurrence: [
+          DateFieldToken(kind: DateFieldKind.month, optionIndex: 0, caps: true),
+          DateFieldToken(kind: DateFieldKind.month, optionIndex: 0),
+        ],
+        dayTokensByOccurrence: [
+          DateFieldToken(kind: DateFieldKind.day, optionIndex: 0),
+          DateFieldToken(kind: DateFieldKind.day, optionIndex: 0),
+        ],
+        yearTokensByOccurrence: [
+          DateFieldToken(kind: DateFieldKind.year, optionIndex: 0),
+        ],
       );
 
+  /// Imagn joiners live only in Structure (punctuation / separator snippets).
+  /// Same layout for every sport — position / period wording lives in
+  /// `{caption}`. Country uses the ISO code (`USA` / `CAN`), matching wire copy:
+  /// `{month} {day}, {year}; {city}, {state}, {country_code}; {caption} at {location}. {byline}`
+  /// Wired gaps stay empty so the renderer never stacks a second `; `, `, `, etc.
+  /// (`Mandatory Credit: …` stays in [BylineOptions.imagn] prefix, not Structure).
   factory CaptionTemplate.imagn() => CaptionTemplate(
         id: 'preset_imagn',
         name: 'Imagn',
         wireStyle: WireStyle.imagn,
         dateFormat: 'MMM d, yyyy',
         dateExpression: '',
+        dateFormula: DateFormula.imagn(),
         locationOptions: LocationLineOptions.fromLegacyFormat(
             LocationFormat.city_region_country),
         numberFormat: NumberFormatStyle.parens,
@@ -1027,13 +1151,22 @@ class CaptionTemplate {
         includePlayerPosition: true,
         americanEnglish: true,
         removeDiacritics: true,
-        separator: '; ',
+        // Structure owns `; ` / `, ` / ` at ` / `. ` — not this fallback.
+        separator: '',
         creditFormat: CreditFormat.mandatory_credit,
         bylineOptions: BylineOptions.imagn(),
         segmentOrder: const [
-          CaptionSegment.date,
+          CaptionSegment.month,
           CaptionSegment.punctuation,
-          CaptionSegment.location,
+          CaptionSegment.day,
+          CaptionSegment.punctuation,
+          CaptionSegment.year,
+          CaptionSegment.punctuation,
+          CaptionSegment.city,
+          CaptionSegment.punctuation,
+          CaptionSegment.state,
+          CaptionSegment.punctuation,
+          CaptionSegment.countryCode,
           CaptionSegment.punctuation,
           CaptionSegment.caption,
           CaptionSegment.separator,
@@ -1041,11 +1174,22 @@ class CaptionTemplate {
           CaptionSegment.punctuation,
           CaptionSegment.credit,
         ],
-        customSeparators: const ['', '', '', '', '', '', '', ''],
+        customSeparators: const [
+          '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '',
+        ],
         separatorSnippets: const [' at '],
-        punctuationSnippets: const ['; ', '; ', '. '],
+        punctuationSnippets: const [' ', ', ', '; ', ', ', ', ', '; ', '. '],
         locationOptionsByOccurrence: null,
         dateFormulasByOccurrence: null,
+        monthTokensByOccurrence: [
+          DateFieldToken(kind: DateFieldKind.month, optionIndex: 1),
+        ],
+        dayTokensByOccurrence: [
+          DateFieldToken(kind: DateFieldKind.day, optionIndex: 0),
+        ],
+        yearTokensByOccurrence: [
+          DateFieldToken(kind: DateFieldKind.year, optionIndex: 0),
+        ],
       );
 
   /// Same formula as [CaptionTemplate.getty] with Getty International wire id.
@@ -1066,6 +1210,7 @@ class CaptionTemplate {
         wireStyle: WireStyle.ap,
         dateFormat: 'MMM d, yyyy',
         dateExpression: '',
+        dateFormula: DateFormula.imagn(),
         locationOptions:
             LocationLineOptions.fromLegacyFormat(LocationFormat.city_region),
         numberFormat: NumberFormatStyle.parens,
@@ -1077,9 +1222,15 @@ class CaptionTemplate {
         creditFormat: CreditFormat.photo_by,
         bylineOptions: BylineOptions.ap(),
         segmentOrder: const [
-          CaptionSegment.location,
+          CaptionSegment.city,
           CaptionSegment.punctuation,
-          CaptionSegment.date,
+          CaptionSegment.state,
+          CaptionSegment.punctuation,
+          CaptionSegment.month,
+          CaptionSegment.punctuation,
+          CaptionSegment.day,
+          CaptionSegment.punctuation,
+          CaptionSegment.year,
           CaptionSegment.punctuation,
           CaptionSegment.caption,
           CaptionSegment.separator,
@@ -1087,11 +1238,22 @@ class CaptionTemplate {
           CaptionSegment.punctuation,
           CaptionSegment.credit,
         ],
-        customSeparators: const ['', '', '', '', '', '', '', ''],
+        customSeparators: const [
+          '', '', '', '', '', '', '', '', '', '', '', '', '',
+        ],
         separatorSnippets: const [' at '],
-        punctuationSnippets: const [' (', ') — ', '. '],
+        punctuationSnippets: const [', ', ' (', ' ', ', ', ') — ', '. '],
         locationOptionsByOccurrence: null,
         dateFormulasByOccurrence: null,
+        monthTokensByOccurrence: [
+          DateFieldToken(kind: DateFieldKind.month, optionIndex: 1),
+        ],
+        dayTokensByOccurrence: [
+          DateFieldToken(kind: DateFieldKind.day, optionIndex: 0),
+        ],
+        yearTokensByOccurrence: [
+          DateFieldToken(kind: DateFieldKind.year, optionIndex: 0),
+        ],
       );
 
   factory CaptionTemplate.cp() => CaptionTemplate(
@@ -1100,20 +1262,31 @@ class CaptionTemplate {
         wireStyle: WireStyle.cp,
         dateFormat: 'MMM d, yyyy',
         dateExpression: '',
-        locationOptions:
-            LocationLineOptions.fromLegacyFormat(LocationFormat.city_region),
+        dateFormula: DateFormula.imagn(),
+        // City + province with CP Style (standalone cities omit province).
+        locationOptions: LocationLineOptions.apDefault(),
         numberFormat: NumberFormatStyle.parens,
         captionTeamOrder: CaptionTeamOrder.teamBefore,
-        includePlayerPosition: true,
+        includePlayerPosition: false,
+        useTeamPossessive: true,
         americanEnglish: true,
         removeDiacritics: true,
         separator: ' — ',
         creditFormat: CreditFormat.photo_by,
         bylineOptions: BylineOptions.ap(),
+        // Dateline: City[, Prov.,] Month Day, Year — Caption …
+        // Trailing ", " after province yields "Que., on …" when Structure
+        // continues; empty province drops the comma (standalone cities).
         segmentOrder: const [
-          CaptionSegment.location,
+          CaptionSegment.city,
           CaptionSegment.punctuation,
-          CaptionSegment.date,
+          CaptionSegment.state,
+          CaptionSegment.punctuation,
+          CaptionSegment.month,
+          CaptionSegment.punctuation,
+          CaptionSegment.day,
+          CaptionSegment.punctuation,
+          CaptionSegment.year,
           CaptionSegment.punctuation,
           CaptionSegment.caption,
           CaptionSegment.separator,
@@ -1121,11 +1294,22 @@ class CaptionTemplate {
           CaptionSegment.punctuation,
           CaptionSegment.credit,
         ],
-        customSeparators: const ['', '', '', '', '', '', '', ''],
+        customSeparators: const [
+          '', '', '', '', '', '', '', '', '', '', '', '', '',
+        ],
         separatorSnippets: const [' at '],
-        punctuationSnippets: const [' (', ') — ', '. '],
+        punctuationSnippets: const [', ', ', ', ' ', ', ', ' — ', '. '],
         locationOptionsByOccurrence: null,
         dateFormulasByOccurrence: null,
+        monthTokensByOccurrence: [
+          DateFieldToken(kind: DateFieldKind.month, optionIndex: 1),
+        ],
+        dayTokensByOccurrence: [
+          DateFieldToken(kind: DateFieldKind.day, optionIndex: 0),
+        ],
+        yearTokensByOccurrence: [
+          DateFieldToken(kind: DateFieldKind.year, optionIndex: 0),
+        ],
       );
 
   factory CaptionTemplate.custom({
@@ -1137,6 +1321,7 @@ class CaptionTemplate {
     NumberFormatStyle numberFormat = NumberFormatStyle.parens,
     CaptionTeamOrder captionTeamOrder = CaptionTeamOrder.teamBefore,
     bool includePlayerPosition = true,
+    bool useTeamPossessive = false,
     bool americanEnglish = true,
     bool removeDiacritics = true,
     bool showPersonalityField = true,
@@ -1153,7 +1338,7 @@ class CaptionTemplate {
     List<String>? freeTextSnippets,
     List<String>? freeTextSuffixes,
     String captionPrefix = '',
-    String captionSuffix = ' ',
+    String captionSuffix = '',
     String gameIdentifierText = '',
     String gameIdentifierPrefix = '',
     String gameIdentifierSuffix = ' ',
@@ -1162,6 +1347,10 @@ class CaptionTemplate {
     DateFormula? dateFormula,
     List<DateFormula>? dateFormulasByOccurrence,
     List<LocationLineOptions>? locationOptionsByOccurrence,
+    List<DateFieldToken>? monthTokensByOccurrence,
+    List<DateFieldToken>? dayTokensByOccurrence,
+    List<DateFieldToken>? yearTokensByOccurrence,
+    List<DateFieldToken>? weekdayTokensByOccurrence,
   }) {
     final resolvedOrder =
         segmentOrder ?? List<CaptionSegment>.from(defaultSegmentOrder);
@@ -1173,9 +1362,11 @@ class CaptionTemplate {
             : null);
     final resolvedSepSnippets = separatorSnippets ??
         (useFactorySnippetDefaults ? <String>[separator] : null);
+    final punctCount =
+        resolvedOrder.where((s) => s == CaptionSegment.punctuation).length;
     final resolvedPunSnippets = punctuationSnippets ??
         (useFactorySnippetDefaults
-            ? <String>[separator, separator, separator, separator]
+            ? List<String>.filled(punctCount, separator)
             : null);
     return CaptionTemplate(
       id: id,
@@ -1190,6 +1381,7 @@ class CaptionTemplate {
       numberFormat: numberFormat,
       captionTeamOrder: captionTeamOrder,
       includePlayerPosition: includePlayerPosition,
+      useTeamPossessive: useTeamPossessive,
       americanEnglish: americanEnglish,
       removeDiacritics: removeDiacritics,
       showPersonalityField: showPersonalityField,
@@ -1215,6 +1407,10 @@ class CaptionTemplate {
       venueSuffix: venueSuffix,
       locationOptionsByOccurrence: locationOptionsByOccurrence,
       dateFormulasByOccurrence: dateFormulasByOccurrence,
+      monthTokensByOccurrence: monthTokensByOccurrence,
+      dayTokensByOccurrence: dayTokensByOccurrence,
+      yearTokensByOccurrence: yearTokensByOccurrence,
+      weekdayTokensByOccurrence: weekdayTokensByOccurrence,
     ).normalizePerOccurrenceLists();
   }
 
@@ -1230,6 +1426,7 @@ class CaptionTemplate {
     NumberFormatStyle? numberFormat,
     CaptionTeamOrder? captionTeamOrder,
     bool? includePlayerPosition,
+    bool? useTeamPossessive,
     bool? americanEnglish,
     bool? removeDiacritics,
     bool? showPersonalityField,
@@ -1254,6 +1451,10 @@ class CaptionTemplate {
     String? venueSuffix,
     Object? locationOptionsByOccurrence = _unset,
     Object? dateFormulasByOccurrence = _unset,
+    Object? monthTokensByOccurrence = _unset,
+    Object? dayTokensByOccurrence = _unset,
+    Object? yearTokensByOccurrence = _unset,
+    Object? weekdayTokensByOccurrence = _unset,
     String? layoutPrefix,
     String? layoutSuffix,
     String? basketballUserNote,
@@ -1271,7 +1472,10 @@ class CaptionTemplate {
         locationOptions: locationOptions ?? this.locationOptions,
         numberFormat: numberFormat ?? this.numberFormat,
         captionTeamOrder: captionTeamOrder ?? this.captionTeamOrder,
-        includePlayerPosition: includePlayerPosition ?? this.includePlayerPosition,
+        includePlayerPosition:
+            includePlayerPosition ?? this.includePlayerPosition,
+        useTeamPossessive:
+            useTeamPossessive ?? this.useTeamPossessive ?? false,
         americanEnglish: americanEnglish ?? this.americanEnglish,
         removeDiacritics: removeDiacritics ?? this.removeDiacritics,
         showPersonalityField:
@@ -1310,22 +1514,39 @@ class CaptionTemplate {
         dateFormulasByOccurrence: identical(dateFormulasByOccurrence, _unset)
             ? this.dateFormulasByOccurrence
             : dateFormulasByOccurrence as List<DateFormula>?,
+        monthTokensByOccurrence: identical(monthTokensByOccurrence, _unset)
+            ? this.monthTokensByOccurrence
+            : monthTokensByOccurrence as List<DateFieldToken>?,
+        dayTokensByOccurrence: identical(dayTokensByOccurrence, _unset)
+            ? this.dayTokensByOccurrence
+            : dayTokensByOccurrence as List<DateFieldToken>?,
+        yearTokensByOccurrence: identical(yearTokensByOccurrence, _unset)
+            ? this.yearTokensByOccurrence
+            : yearTokensByOccurrence as List<DateFieldToken>?,
+        weekdayTokensByOccurrence: identical(weekdayTokensByOccurrence, _unset)
+            ? this.weekdayTokensByOccurrence
+            : weekdayTokensByOccurrence as List<DateFieldToken>?,
         layoutPrefix: layoutPrefix ?? this.layoutPrefix,
         layoutSuffix: layoutSuffix ?? this.layoutSuffix,
         basketballUserNote: basketballUserNote ?? this.basketballUserNote,
       );
 
   /// Older Getty prefs only had one date + one location (ending `at VENUE.`).
-  /// Current Getty needs `at VENUE on DATE in LOC. (Photo…)`.
+  /// Current Getty needs `at VENUE on MONTH DAY, YEAR in CITY…. (Photo…)`.
   static CaptionTemplate migrateGettyClosingFormulaIfNeeded(CaptionTemplate t) {
     if (t.wireStyle != WireStyle.getty &&
         t.wireStyle != WireStyle.gettyInternational) {
       return t;
     }
     final dates = t.segmentOrder.where((s) => s == CaptionSegment.date).length;
+    final months = t.segmentOrder.where((s) => s == CaptionSegment.month).length;
+    final cities = t.segmentOrder.where((s) => s == CaptionSegment.city).length;
     final locs =
         t.segmentOrder.where((s) => s == CaptionSegment.location).length;
-    if (dates >= 2 && locs >= 2) return t;
+    // Two city groups (or two legacy location chips) plus two date/month
+    // groups means the closing formula is already present.
+    final dateGroups = dates >= 2 || months >= 2;
+    if (dateGroups && (cities >= 2 || locs >= 2)) return t;
 
     final factory = t.wireStyle == WireStyle.gettyInternational
         ? CaptionTemplate.gettyInternational()
@@ -1349,26 +1570,394 @@ class CaptionTemplate {
           dateFormula: factory.dateFormula?.clone(),
           dateFormulasByOccurrence:
               factory.dateFormulasByOccurrence?.map((e) => e.clone()).toList(),
+          monthTokensByOccurrence: factory.monthTokensByOccurrence
+              ?.map((e) => e.copy())
+              .toList(),
+          dayTokensByOccurrence:
+              factory.dayTokensByOccurrence?.map((e) => e.copy()).toList(),
+          yearTokensByOccurrence:
+              factory.yearTokensByOccurrence?.map((e) => e.copy()).toList(),
+          weekdayTokensByOccurrence: factory.weekdayTokensByOccurrence
+              ?.map((e) => e.copy())
+              .toList(),
         )
         .normalizePerOccurrenceLists();
   }
 
-  /// Ensures [locationOptionsByOccurrence] / [dateFormulasByOccurrence] have one
-  /// entry per [CaptionSegment.location] / [CaptionSegment.date] when duplicates
-  /// exist. Otherwise the renderer falls back to [locationOptions] / [dateFormula]
-  /// for every occurrence and in-place editor edits are shared across chips.
+  /// Rewrites each legacy [CaptionSegment.location] into city / state / country
+  /// tokens (plus [CaptionSegment.punctuation] for chip literals), preserving
+  /// separators from [LocationLineOptions.chips].
+  ///
+  /// No-op when [segmentOrder] has no [CaptionSegment.location].
+  CaptionTemplate expandLocationSegments() {
+    if (!segmentOrder.contains(CaptionSegment.location)) return this;
+
+    final newOrder = <CaptionSegment>[];
+    final newPuncts = <String>[];
+    final newSeps = <String>[];
+    final newGaps = <String>[];
+
+    final oldPuncts = punctuationSnippets;
+    final oldSeps = separatorSnippets;
+    final oldGaps = customSeparators;
+    var punctOcc = 0;
+    var sepOcc = 0;
+    var locOcc = 0;
+
+    String nextOldPunct() {
+      if (oldPuncts != null && punctOcc < oldPuncts.length) {
+        return oldPuncts[punctOcc++];
+      }
+      punctOcc++;
+      return '';
+    }
+
+    String nextOldSep() {
+      if (oldSeps != null && sepOcc < oldSeps.length) {
+        return oldSeps[sepOcc++];
+      }
+      sepOcc++;
+      return ' ';
+    }
+
+    for (var i = 0; i < segmentOrder.length; i++) {
+      final s = segmentOrder[i];
+      if (s != CaptionSegment.location) {
+        if (newOrder.isNotEmpty) {
+          final oldGapIdx = i - 1;
+          if (oldGaps != null &&
+              oldGapIdx >= 0 &&
+              oldGapIdx < oldGaps.length &&
+              // Only reuse the old gap when the previous original segment was
+              // not expanded (single→many would mis-align indices).
+              segmentOrder[i - 1] != CaptionSegment.location) {
+            newGaps.add(oldGaps[oldGapIdx]);
+          } else {
+            newGaps.add('');
+          }
+        }
+        newOrder.add(s);
+        if (s == CaptionSegment.punctuation) {
+          newPuncts.add(nextOldPunct());
+        } else if (s == CaptionSegment.separator) {
+          newSeps.add(nextOldSep());
+        }
+        continue;
+      }
+
+      final by = locationOptionsByOccurrence;
+      final opts = (by != null && locOcc < by.length)
+          ? by[locOcc]
+          : locationOptions;
+      locOcc++;
+
+      // Auto-adapt templates keep city+state+country so territory can hide one.
+      // Other templates drop disabled chips (and their trailing literals).
+      final chips = opts.autoAdaptUsIntl
+          ? List<LocationChip>.from(opts.chips)
+          : _activeChipsForExpansion(opts.chips);
+
+      for (final c in chips) {
+        late final CaptionSegment seg;
+        String? punct;
+        switch (c.kind) {
+          case LocationChipKind.city:
+            seg = CaptionSegment.city;
+            break;
+          case LocationChipKind.region:
+            seg = CaptionSegment.state;
+            break;
+          case LocationChipKind.country:
+            seg = CaptionSegment.country;
+            break;
+          case LocationChipKind.countryCode:
+            seg = CaptionSegment.countryCode;
+            break;
+          case LocationChipKind.literal:
+            seg = CaptionSegment.punctuation;
+            punct = c.literal;
+            break;
+        }
+        if (newOrder.isNotEmpty) newGaps.add('');
+        newOrder.add(seg);
+        if (seg == CaptionSegment.punctuation) {
+          newPuncts.add(punct ?? '');
+        }
+      }
+    }
+
+    // Consume the gap after a trailing expanded location (between location and
+    // whatever followed it in the original order).
+    // Already handled in the non-location branch via the "previous was location"
+    // empty-gap path when the next segment is added.
+
+    return copyWith(
+      segmentOrder: newOrder,
+      punctuationSnippets: newPuncts.isEmpty ? null : newPuncts,
+      separatorSnippets: newSeps.isEmpty && oldSeps == null ? null : newSeps,
+      customSeparators: newGaps.isEmpty ? null : newGaps,
+    );
+  }
+
+  static List<LocationChip> _activeChipsForExpansion(List<LocationChip> chips) {
+    final out = <LocationChip>[];
+    var skipNextLiteral = false;
+    for (final c in chips) {
+      if (c.kind != LocationChipKind.literal && !c.enabled) {
+        skipNextLiteral = true;
+        continue;
+      }
+      if (c.kind == LocationChipKind.literal && skipNextLiteral) {
+        skipNextLiteral = false;
+        continue;
+      }
+      skipNextLiteral = false;
+      out.add(c);
+    }
+    while (out.isNotEmpty && out.first.kind == LocationChipKind.literal) {
+      out.removeAt(0);
+    }
+    while (out.isNotEmpty && out.last.kind == LocationChipKind.literal) {
+      out.removeLast();
+    }
+    return out;
+  }
+
+  /// True for month / day / year / weekday structure tokens.
+  static bool isDatePartSegment(CaptionSegment s) =>
+      s == CaptionSegment.month ||
+      s == CaptionSegment.day ||
+      s == CaptionSegment.year ||
+      s == CaptionSegment.weekday;
+
+  /// Builds a [DateFormula] that mirrors common ICU [dateFormat] patterns when
+  /// no structured formula was saved (older Imagn / AP / CP prefs).
+  static DateFormula dateFormulaFromLegacyPattern(String pattern) {
+    final p = pattern.trim();
+    if (p == 'MMMM d, yyyy' || p == 'MMMM d, y') {
+      return DateFormula(
+        fields: [
+          DateFieldToken(kind: DateFieldKind.month, optionIndex: 0),
+          DateFieldToken(kind: DateFieldKind.day, optionIndex: 0),
+          DateFieldToken(kind: DateFieldKind.year, optionIndex: 0),
+        ],
+        separators: const ['', ' ', ', ', ''],
+      );
+    }
+    if (p == 'MMM d, yyyy' || p == 'MMM d, y') {
+      return DateFormula.imagn();
+    }
+    if (p == 'M/d/yy' || p == 'M/d/yyyy' || p == 'MM/dd/yy' || p == 'MM/dd/yyyy') {
+      final padMonth = p.startsWith('MM');
+      final padDay = p.contains('/dd');
+      final twoYear = p.endsWith('yy') && !p.endsWith('yyyy');
+      return DateFormula(
+        fields: [
+          DateFieldToken(
+              kind: DateFieldKind.month, optionIndex: padMonth ? 3 : 2),
+          DateFieldToken(kind: DateFieldKind.day, optionIndex: padDay ? 1 : 0),
+          DateFieldToken(
+              kind: DateFieldKind.year, optionIndex: twoYear ? 1 : 0),
+        ],
+        separators: const ['', '/', '/', ''],
+      );
+    }
+    return DateFormula.ap();
+  }
+
+  DateFormula _formulaForDateOccurrence(int occ) {
+    final by = dateFormulasByOccurrence;
+    if (by != null && occ >= 0 && occ < by.length) return by[occ];
+    if (dateFormula != null && dateFormula!.fields.isNotEmpty) {
+      return dateFormula!;
+    }
+    return dateFormulaFromLegacyPattern(dateFormat);
+  }
+
+  static CaptionSegment _segmentForDateFieldKind(DateFieldKind kind) {
+    switch (kind) {
+      case DateFieldKind.weekday:
+        return CaptionSegment.weekday;
+      case DateFieldKind.month:
+        return CaptionSegment.month;
+      case DateFieldKind.day:
+        return CaptionSegment.day;
+      case DateFieldKind.year:
+        return CaptionSegment.year;
+    }
+  }
+
+  /// Rewrites each legacy [CaptionSegment.date] into month / day / year
+  /// (and weekday when present) plus [CaptionSegment.punctuation] for the
+  /// separators that lived inside the structured [DateFormula].
+  ///
+  /// Disabled formula fields are dropped (and the separator that followed
+  /// them). Leading / trailing empty formula separators are omitted.
+  ///
+  /// No-op when [segmentOrder] has no [CaptionSegment.date].
+  CaptionTemplate expandDateSegments() {
+    if (!segmentOrder.contains(CaptionSegment.date)) return this;
+
+    final newOrder = <CaptionSegment>[];
+    final newPuncts = <String>[];
+    final newSeps = <String>[];
+    final newGaps = <String>[];
+    final months = <DateFieldToken>[];
+    final days = <DateFieldToken>[];
+    final years = <DateFieldToken>[];
+    final weekdays = <DateFieldToken>[];
+
+    final oldPuncts = punctuationSnippets;
+    final oldSeps = separatorSnippets;
+    final oldGaps = customSeparators;
+    var punctOcc = 0;
+    var sepOcc = 0;
+    var dateOcc = 0;
+
+    String nextOldPunct() {
+      if (oldPuncts != null && punctOcc < oldPuncts.length) {
+        return oldPuncts[punctOcc++];
+      }
+      punctOcc++;
+      return '';
+    }
+
+    String nextOldSep() {
+      if (oldSeps != null && sepOcc < oldSeps.length) {
+        return oldSeps[sepOcc++];
+      }
+      sepOcc++;
+      return ' ';
+    }
+
+    for (var i = 0; i < segmentOrder.length; i++) {
+      final s = segmentOrder[i];
+      if (s != CaptionSegment.date) {
+        if (newOrder.isNotEmpty) {
+          final oldGapIdx = i - 1;
+          if (oldGaps != null &&
+              oldGapIdx >= 0 &&
+              oldGapIdx < oldGaps.length &&
+              segmentOrder[i - 1] != CaptionSegment.date) {
+            newGaps.add(oldGaps[oldGapIdx]);
+          } else {
+            newGaps.add('');
+          }
+        }
+        newOrder.add(s);
+        if (s == CaptionSegment.punctuation) {
+          newPuncts.add(nextOldPunct());
+        } else if (s == CaptionSegment.separator) {
+          newSeps.add(nextOldSep());
+        }
+        continue;
+      }
+
+      final formula = _formulaForDateOccurrence(dateOcc);
+      dateOcc++;
+
+      final kept = <({DateFieldToken token, int origIdx})>[];
+      for (var fi = 0; fi < formula.fields.length; fi++) {
+        final f = formula.fields[fi];
+        if (!f.enabled) continue;
+        kept.add((token: f.copy(), origIdx: fi));
+      }
+
+      for (var k = 0; k < kept.length; k++) {
+        final entry = kept[k];
+        final token = entry.token;
+        final seg = _segmentForDateFieldKind(token.kind);
+
+        // Separator between kept fields (skip empty leading / trailing).
+        if (k > 0) {
+          final sepIdx = kept[k - 1].origIdx + 1;
+          final sep = sepIdx < formula.separators.length
+              ? formula.separators[sepIdx]
+              : ' ';
+          final punctText = sep.isEmpty ? ' ' : sep;
+          if (newOrder.isNotEmpty) newGaps.add('');
+          newOrder.add(CaptionSegment.punctuation);
+          newPuncts.add(punctText);
+        }
+
+        if (newOrder.isNotEmpty) newGaps.add('');
+        newOrder.add(seg);
+        switch (token.kind) {
+          case DateFieldKind.month:
+            months.add(token);
+            break;
+          case DateFieldKind.day:
+            days.add(token);
+            break;
+          case DateFieldKind.year:
+            years.add(token);
+            break;
+          case DateFieldKind.weekday:
+            weekdays.add(token);
+            break;
+        }
+      }
+    }
+
+    // Preserve any existing per-part tokens that already lived alongside
+    // legacy date chips (unusual, but keep them ahead of migrated ones).
+    List<DateFieldToken>? mergeTokens(
+      List<DateFieldToken>? existing,
+      List<DateFieldToken> migrated,
+    ) {
+      if (migrated.isEmpty && (existing == null || existing.isEmpty)) {
+        return existing;
+      }
+      if (existing == null || existing.isEmpty) {
+        return migrated.isEmpty ? null : migrated;
+      }
+      return [...existing, ...migrated];
+    }
+
+    return copyWith(
+      segmentOrder: newOrder,
+      punctuationSnippets: newPuncts.isEmpty ? null : newPuncts,
+      separatorSnippets: newSeps.isEmpty && oldSeps == null ? null : newSeps,
+      customSeparators: newGaps.isEmpty ? null : newGaps,
+      monthTokensByOccurrence:
+          mergeTokens(monthTokensByOccurrence, months),
+      dayTokensByOccurrence: mergeTokens(dayTokensByOccurrence, days),
+      yearTokensByOccurrence: mergeTokens(yearTokensByOccurrence, years),
+      weekdayTokensByOccurrence:
+          mergeTokens(weekdayTokensByOccurrence, weekdays),
+    );
+  }
+
+  /// Ensures [locationOptionsByOccurrence] / [dateFormulasByOccurrence] /
+  /// date-part token lists have one entry per occurrence when duplicates exist.
+  /// Otherwise the renderer falls back to shared defaults and in-place editor
+  /// edits are shared across chips.
   CaptionTemplate normalizePerOccurrenceLists() {
-    final locCount =
-        segmentOrder.where((s) => s == CaptionSegment.location).length;
-    final dateCount = segmentOrder.where((s) => s == CaptionSegment.date).length;
+    var r = migrateGameIdentifierToFreeText();
 
-    var r = this;
+    final geoOcc = [
+      r.segmentOrder.where((s) => s == CaptionSegment.city).length,
+      r.segmentOrder.where((s) => s == CaptionSegment.state).length,
+      r.segmentOrder.where((s) => s == CaptionSegment.country).length,
+      r.segmentOrder.where((s) => s == CaptionSegment.countryCode).length,
+      r.segmentOrder.where((s) => s == CaptionSegment.location).length,
+    ].fold<int>(0, (a, b) => a > b ? a : b);
+    final dateCount =
+        r.segmentOrder.where((s) => s == CaptionSegment.date).length;
+    final monthCount =
+        r.segmentOrder.where((s) => s == CaptionSegment.month).length;
+    final dayCount =
+        r.segmentOrder.where((s) => s == CaptionSegment.day).length;
+    final yearCount =
+        r.segmentOrder.where((s) => s == CaptionSegment.year).length;
+    final weekdayCount =
+        r.segmentOrder.where((s) => s == CaptionSegment.weekday).length;
 
-    if (locCount > 1) {
+    if (geoOcc > 1) {
       final by = r.locationOptionsByOccurrence;
-      if (by == null || by.length < locCount) {
+      if (by == null || by.length < geoOcc) {
         final list = <LocationLineOptions>[];
-        for (var i = 0; i < locCount; i++) {
+        for (var i = 0; i < geoOcc; i++) {
           if (by != null && i < by.length) {
             list.add(by[i]);
           } else if (list.isEmpty) {
@@ -1406,6 +1995,56 @@ class CaptionTemplate {
           );
         }
       }
+    }
+
+    DateFieldToken seedToken(DateFieldKind kind) {
+      final formula = r.dateFormula ??
+          dateFormulaFromLegacyPattern(r.dateFormat);
+      for (final f in formula.fields) {
+        if (f.kind == kind) return f.copy();
+      }
+      return DateFieldToken(kind: kind);
+    }
+
+    List<DateFieldToken>? normalizeKind(
+      int count,
+      List<DateFieldToken>? by,
+      DateFieldKind kind,
+    ) {
+      if (count <= 0) return by;
+      if (by != null && by.length >= count) return by;
+      final list = <DateFieldToken>[];
+      for (var i = 0; i < count; i++) {
+        if (by != null && i < by.length) {
+          list.add(by[i].copy());
+        } else if (list.isEmpty) {
+          list.add(seedToken(kind));
+        } else {
+          list.add(list.last.copy());
+        }
+      }
+      return list;
+    }
+
+    final nextMonths =
+        normalizeKind(monthCount, r.monthTokensByOccurrence, DateFieldKind.month);
+    final nextDays =
+        normalizeKind(dayCount, r.dayTokensByOccurrence, DateFieldKind.day);
+    final nextYears =
+        normalizeKind(yearCount, r.yearTokensByOccurrence, DateFieldKind.year);
+    final nextWeekdays = normalizeKind(
+        weekdayCount, r.weekdayTokensByOccurrence, DateFieldKind.weekday);
+
+    if (!identical(nextMonths, r.monthTokensByOccurrence) ||
+        !identical(nextDays, r.dayTokensByOccurrence) ||
+        !identical(nextYears, r.yearTokensByOccurrence) ||
+        !identical(nextWeekdays, r.weekdayTokensByOccurrence)) {
+      r = r.copyWith(
+        monthTokensByOccurrence: nextMonths,
+        dayTokensByOccurrence: nextDays,
+        yearTokensByOccurrence: nextYears,
+        weekdayTokensByOccurrence: nextWeekdays,
+      );
     }
 
     final sepCount =
@@ -1499,6 +2138,42 @@ class CaptionTemplate {
     return r;
   }
 
+  /// Turns legacy [CaptionSegment.customText] ("Game identifier") slots into
+  /// typed [CaptionSegment.freeText] with [gameIdentifierText] filled in.
+  CaptionTemplate migrateGameIdentifierToFreeText() {
+    if (!segmentOrder.contains(CaptionSegment.customText)) return this;
+
+    final order = List<CaptionSegment>.from(segmentOrder);
+    final snippets = List<String>.from(freeTextSnippets ?? const <String>[]);
+    final suffixes = List<String>.from(freeTextSuffixes ?? const <String>[]);
+    final gid = gameIdentifierText.trim();
+
+    var freeOcc = 0;
+    for (var i = 0; i < order.length; i++) {
+      if (order[i] == CaptionSegment.freeText) {
+        freeOcc++;
+        continue;
+      }
+      if (order[i] != CaptionSegment.customText) continue;
+      order[i] = CaptionSegment.freeText;
+      while (snippets.length < freeOcc) {
+        snippets.add('');
+      }
+      while (suffixes.length < freeOcc) {
+        suffixes.add('');
+      }
+      snippets.insert(freeOcc, gid);
+      suffixes.insert(freeOcc, '');
+      freeOcc++;
+    }
+
+    return copyWith(
+      segmentOrder: order,
+      freeTextSnippets: snippets,
+      freeTextSuffixes: suffixes,
+    );
+  }
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
@@ -1511,6 +2186,7 @@ class CaptionTemplate {
         'numberFormat': numberFormat.name,
         'captionTeamOrder': captionTeamOrder.name,
         if (!includePlayerPosition) 'includePlayerPosition': false,
+        if (useTeamPossessive == true) 'useTeamPossessive': true,
         if (!americanEnglish) 'americanEnglish': false,
         if (!removeDiacritics) 'removeDiacritics': false,
         'showPersonalityField': showPersonalityField,
@@ -1523,7 +2199,7 @@ class CaptionTemplate {
         'segmentOrder': segmentOrder.map((e) => e.name).toList(),
         if (gameIdentifierText.isNotEmpty) 'gameIdentifierText': gameIdentifierText,
         if (captionPrefix.isNotEmpty) 'captionPrefix': captionPrefix,
-        if (captionSuffix != ' ') 'captionSuffix': captionSuffix,
+        if (captionSuffix.isNotEmpty) 'captionSuffix': captionSuffix,
         if (gameIdentifierPrefix.isNotEmpty)
           'gameIdentifierPrefix': gameIdentifierPrefix,
         if (gameIdentifierSuffix != ' ')
@@ -1547,6 +2223,18 @@ class CaptionTemplate {
           'dateFormulasByOccurrence': dateFormulasByOccurrence!
               .map((e) => e.toJson())
               .toList(),
+        if (monthTokensByOccurrence != null)
+          'monthTokensByOccurrence':
+              monthTokensByOccurrence!.map((e) => e.toJson()).toList(),
+        if (dayTokensByOccurrence != null)
+          'dayTokensByOccurrence':
+              dayTokensByOccurrence!.map((e) => e.toJson()).toList(),
+        if (yearTokensByOccurrence != null)
+          'yearTokensByOccurrence':
+              yearTokensByOccurrence!.map((e) => e.toJson()).toList(),
+        if (weekdayTokensByOccurrence != null)
+          'weekdayTokensByOccurrence':
+              weekdayTokensByOccurrence!.map((e) => e.toJson()).toList(),
       };
 
   static CaptionTeamOrder _parseCaptionTeamOrder(Map<String, dynamic> json) {
@@ -1593,6 +2281,8 @@ class CaptionTemplate {
       ),
       captionTeamOrder: _parseCaptionTeamOrder(json),
       includePlayerPosition: json['includePlayerPosition'] as bool? ?? true,
+      useTeamPossessive: json['useTeamPossessive'] as bool? ??
+          (json['wireStyle']?.toString() == 'cp'),
       americanEnglish: json['americanEnglish'] as bool? ?? true,
       removeDiacritics: json['removeDiacritics'] as bool? ?? true,
       showPersonalityField: json['showPersonalityField'] as bool? ?? true,
@@ -1616,7 +2306,12 @@ class CaptionTemplate {
       segmentOrder: _parseSegmentOrder(json['segmentOrder']),
       gameIdentifierText: json['gameIdentifierText'] as String? ?? '',
       captionPrefix: json['captionPrefix'] as String? ?? '',
-      captionSuffix: json['captionSuffix'] as String? ?? ' ',
+      // Legacy default was a single trailing space; treat missing / ' ' as none.
+      captionSuffix: () {
+        final raw = json['captionSuffix'] as String?;
+        if (raw == null || raw == ' ') return '';
+        return raw;
+      }(),
       gameIdentifierPrefix: json['gameIdentifierPrefix'] as String? ?? '',
       gameIdentifierSuffix: json['gameIdentifierSuffix'] as String? ?? ' ',
       customSeparators: (json['customSeparators'] as List<dynamic>?)
@@ -1648,7 +2343,59 @@ class CaptionTemplate {
           ?.map((e) => DateFormula.fromJson(
               Map<String, dynamic>.from(e as Map)))
           .toList(),
-    ).normalizePerOccurrenceLists();
+      monthTokensByOccurrence: (json['monthTokensByOccurrence'] as List<dynamic>?)
+          ?.map((e) =>
+              DateFieldToken.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+      dayTokensByOccurrence: (json['dayTokensByOccurrence'] as List<dynamic>?)
+          ?.map((e) =>
+              DateFieldToken.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+      yearTokensByOccurrence: (json['yearTokensByOccurrence'] as List<dynamic>?)
+          ?.map((e) =>
+              DateFieldToken.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+      weekdayTokensByOccurrence:
+          (json['weekdayTokensByOccurrence'] as List<dynamic>?)
+              ?.map((e) =>
+                  DateFieldToken.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList(),
+    )
+        .expandLocationSegments()
+        .expandDateSegments()
+        .normalizePerOccurrenceLists();
+  }
+
+  /// Resolves the [DateFieldToken] for a date-part occurrence.
+  DateFieldToken datePartTokenFor({
+    required DateFieldKind kind,
+    required int occurrenceIndex,
+  }) {
+    List<DateFieldToken>? by;
+    switch (kind) {
+      case DateFieldKind.month:
+        by = monthTokensByOccurrence;
+        break;
+      case DateFieldKind.day:
+        by = dayTokensByOccurrence;
+        break;
+      case DateFieldKind.year:
+        by = yearTokensByOccurrence;
+        break;
+      case DateFieldKind.weekday:
+        by = weekdayTokensByOccurrence;
+        break;
+    }
+    if (by != null &&
+        occurrenceIndex >= 0 &&
+        occurrenceIndex < by.length) {
+      return by[occurrenceIndex];
+    }
+    final formula = dateFormula ?? dateFormulaFromLegacyPattern(dateFormat);
+    for (final f in formula.fields) {
+      if (f.kind == kind) return f;
+    }
+    return DateFieldToken(kind: kind);
   }
 
   static LocationLineOptions _parseLocationOptions(Map<String, dynamic> json) {
@@ -1710,8 +2457,8 @@ class CaptionTemplate {
       id.startsWith('saved_') ||
       id.startsWith('saved:');
 
-  /// Fills [gameIdentifierText] from [defaultGameIdentifierText] when empty, or
-  /// when [replaceKnownDefaults] and the current text is another sport’s default.
+  /// Fills game-id typed free text from [defaultGameIdentifierText] when empty,
+  /// or when [replaceKnownDefaults] and the current text is another sport’s default.
   static CaptionTemplate withSportGameIdentifierDefault(
     CaptionTemplate template,
     String? sport, {
@@ -1719,26 +2466,88 @@ class CaptionTemplate {
   }) {
     final next = defaultGameIdentifierText(sport);
     if (next.isEmpty) return template;
-    final current = template.gameIdentifierText.trim();
+    final t = template.migrateGameIdentifierToFreeText();
+    final current = t.gameIdentifierText.trim();
+    final snippets = t.freeTextSnippets ?? const <String>[];
+    final hasReplaceableFree = snippets.any((s) {
+      final cur = s.trim();
+      return cur.isEmpty || kKnownGameIdentifierDefaults.contains(cur);
+    });
     final shouldSet = current.isEmpty ||
-        (replaceKnownDefaults && kKnownGameIdentifierDefaults.contains(current));
-    if (!shouldSet) return template;
-    return template.copyWith(gameIdentifierText: next);
+        (replaceKnownDefaults &&
+            kKnownGameIdentifierDefaults.contains(current)) ||
+        (replaceKnownDefaults && hasReplaceableFree);
+    if (!shouldSet) return t;
+    return applyGameIdentifierText(t, next);
   }
 
-  /// Applies an explicit per-wire-per-sport game identifier (catalog or local overlay).
+  /// Applies an explicit per-wire-per-sport game identifier into typed free text
+  /// (and keeps [gameIdentifierText] in sync for older readers).
   static CaptionTemplate applyGameIdentifierText(
     CaptionTemplate template,
     String gameIdentifierText,
   ) {
     final trimmed = gameIdentifierText.trim();
     if (trimmed.isEmpty) return template;
-    return template.copyWith(gameIdentifierText: trimmed);
+    var t = template.migrateGameIdentifierToFreeText();
+    t = t.copyWith(gameIdentifierText: trimmed);
+
+    final freeCount =
+        t.segmentOrder.where((s) => s == CaptionSegment.freeText).length;
+    if (freeCount <= 0) return t;
+
+    final snippets = List<String>.from(
+      t.freeTextSnippets ?? List<String>.filled(freeCount, ''),
+    );
+    while (snippets.length < freeCount) {
+      snippets.add('');
+    }
+
+    var replaced = false;
+    for (var i = 0; i < snippets.length; i++) {
+      final cur = snippets[i].trim();
+      if (cur.isEmpty || kKnownGameIdentifierDefaults.contains(cur)) {
+        snippets[i] = trimmed;
+        replaced = true;
+      }
+    }
+
+    if (!replaced) {
+      // Prefer the free-text slot right after Caption (typical game-id place).
+      final order = t.segmentOrder;
+      var freeOcc = 0;
+      var target = -1;
+      for (var i = 0; i < order.length; i++) {
+        if (order[i] != CaptionSegment.freeText) continue;
+        final prev = i > 0 ? order[i - 1] : null;
+        final prev2 = i > 1 ? order[i - 2] : null;
+        if (prev == CaptionSegment.caption ||
+            (prev == CaptionSegment.punctuation &&
+                prev2 == CaptionSegment.caption)) {
+          target = freeOcc;
+          break;
+        }
+        freeOcc++;
+      }
+      if (target >= 0 && target < snippets.length) {
+        snippets[target] = trimmed;
+      }
+    }
+
+    return t.copyWith(freeTextSnippets: snippets);
   }
 
   /// Wire layout masters should not store sport-specific game ID text.
-  CaptionTemplate stripGameIdentifierForWireMaster() =>
-      copyWith(gameIdentifierText: '');
+  CaptionTemplate stripGameIdentifierForWireMaster() {
+    var t = copyWith(gameIdentifierText: '');
+    final snippets = t.freeTextSnippets;
+    if (snippets == null || snippets.isEmpty) return t;
+    final next = <String>[
+      for (final s in snippets)
+        kKnownGameIdentifierDefaults.contains(s.trim()) ? '' : s,
+    ];
+    return t.copyWith(freeTextSnippets: next);
+  }
 
   static Map<String, dynamic> wireMasterJsonFromTemplate(CaptionTemplate t) =>
       t.copyWith(wireStyle: t.wireStyle).stripGameIdentifierForWireMaster().toJson();
@@ -1749,23 +2558,16 @@ class CaptionTemplate {
     String flavor,
   ) {
     final segments = _parseSegmentOrder(legacyIds);
-    if (flavor == 'imagn') {
-      return CaptionTemplate.imagn()
-          .copyWith(
-            segmentOrder: segments,
-            customSeparators: null,
-            separatorSnippets: null,
-            punctuationSnippets: null,
-          )
-          .normalizePerOccurrenceLists();
-    }
-    return CaptionTemplate.getty()
+    final base = flavor == 'imagn' ? CaptionTemplate.imagn() : CaptionTemplate.getty();
+    return base
         .copyWith(
           segmentOrder: segments,
           customSeparators: null,
           separatorSnippets: null,
           punctuationSnippets: null,
         )
+        .expandLocationSegments()
+        .expandDateSegments()
         .normalizePerOccurrenceLists();
   }
 }
