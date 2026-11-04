@@ -119,9 +119,15 @@ class _LegendFocusScope extends InheritedWidget {
 }
 
 class _LegendFocusHost extends StatefulWidget {
-  const _LegendFocusHost({required this.child});
+  const _LegendFocusHost({
+    required this.child,
+    this.initialFocusField,
+  });
 
   final Widget child;
+
+  /// IPTC panel storage key / tab id to focus once fields register.
+  final String? initialFocusField;
 
   @override
   State<_LegendFocusHost> createState() => _LegendFocusHostState();
@@ -130,6 +136,7 @@ class _LegendFocusHost extends StatefulWidget {
 class _LegendFocusHostState extends State<_LegendFocusHost> {
   _LegendFocus _focus = _LegendFocus.none;
   final List<_IptcTabField> _tabFields = [];
+  bool _didInitialFocus = false;
 
   void _toggle(_LegendFocus target) {
     final next = _focus == target ? _LegendFocus.none : target;
@@ -158,6 +165,14 @@ class _LegendFocusHostState extends State<_LegendFocusHost> {
   void _registerTabField(_IptcTabField field) {
     _tabFields.removeWhere((e) => e.node == field.node || e.id == field.id);
     _tabFields.add(field);
+    final target = widget.initialFocusField?.trim();
+    if (_didInitialFocus || target == null || target.isEmpty) return;
+    if (field.id != target) return;
+    _didInitialFocus = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      field.node.requestFocus();
+    });
   }
 
   void _unregisterTabField(FocusNode node) {
@@ -304,6 +319,7 @@ class IptcTemplateEditor extends StatelessWidget {
     this.captionTemplate,
     this.captionStyleLabel,
     this.wireLabels = const {},
+    this.initialFocusField,
   });
 
   final WireStyle wire;
@@ -336,6 +352,9 @@ class IptcTemplateEditor extends StatelessWidget {
 
   /// Optional left column, used for the photo in Edit IPTC.
   final Widget? leading;
+
+  /// IPTC panel field id to focus when the editor first builds (e.g. City).
+  final String? initialFocusField;
 
   /// When set, shows Apply on load / save / FTP under the header.
   final IptcApplyMode? applyMode;
@@ -371,6 +390,7 @@ class IptcTemplateEditor extends StatelessWidget {
     return IptcEditorPalette(
       colors: colors,
       child: _LegendFocusHost(
+        initialFocusField: initialFocusField,
         child: LayoutBuilder(
         builder: (context, constraints) {
           // Match IPTC Editor v2.html breakpoints.

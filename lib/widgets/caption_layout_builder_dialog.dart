@@ -58,6 +58,7 @@ class CaptionLayoutBuilderDialog extends StatefulWidget {
     this.onRegisterSetAllDefaults,
     this.onAdminSaveAsDefault,
     this.onAdminDiscard,
+    this.onSessionStructureChipTap,
   });
 
   /// When true, renders without [Dialog] chrome (for embedding in admin).
@@ -98,6 +99,12 @@ class CaptionLayoutBuilderDialog extends StatefulWidget {
 
   /// Admin host restores catalog baselines and rebuilds the editor.
   final VoidCallback? onAdminDiscard;
+
+  /// New-session embed only: structure chip tap opens the 4-quadrant IPTC
+  /// screen via this callback instead of [showStructureIptcSourceDialog].
+  /// Argument is the IPTC panel storage key to focus, or null when the chip
+  /// has no matching editable quadrant field.
+  final ValueChanged<String?>? onSessionStructureChipTap;
 
   /// Returns the applied [CaptionTemplate] when Done succeeds; `null` on Cancel.
   static Future<CaptionTemplate?> show(
@@ -7885,6 +7892,17 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
   }
 
   void _onStructureChipTap(String key) {
+    if (_isSessionStartupEmbed && widget.onSessionStructureChipTap != null) {
+      final panel = StructureFormulaKeys.iptcPanelKey(key);
+      // Caption / Camera time are not editable rows in the 4-quadrant editor.
+      final focus = (panel != null &&
+              panel != 'Caption' &&
+              panel != 'Camera time')
+          ? panel
+          : null;
+      widget.onSessionStructureChipTap!(focus);
+      return;
+    }
     unawaited(
       showStructureIptcSourceDialog(
         context,

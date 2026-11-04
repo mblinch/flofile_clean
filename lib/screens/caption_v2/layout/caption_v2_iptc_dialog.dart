@@ -52,6 +52,7 @@ Future<CaptionV2IptcSummary?> showCaptionV2IptcDialog(
   bool enableWriting = false,
   bool populateFromFolder = false,
   CaptionTemplate? captionTemplate,
+  String? initialFocusField,
 }) {
   return showDialog<CaptionV2IptcSummary>(
     context: context,
@@ -61,6 +62,7 @@ Future<CaptionV2IptcSummary?> showCaptionV2IptcDialog(
       enableWriting: enableWriting,
       populateFromFolder: populateFromFolder,
       captionTemplate: captionTemplate,
+      initialFocusField: initialFocusField,
     ),
   );
 }
@@ -72,6 +74,7 @@ class CaptionV2IptcDialog extends StatefulWidget {
     this.enableWriting = false,
     this.populateFromFolder = false,
     this.captionTemplate,
+    this.initialFocusField,
   });
 
   final String? folderPath;
@@ -86,6 +89,9 @@ class CaptionV2IptcDialog extends StatefulWidget {
 
   /// Caption style from New Session — drives which IPTC fields are marked red.
   final CaptionTemplate? captionTemplate;
+
+  /// IPTC panel storage key to focus after open (e.g. City, Credit).
+  final String? initialFocusField;
 
   @override
   State<CaptionV2IptcDialog> createState() => _CaptionV2IptcDialogState();
@@ -838,6 +844,7 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
                   captionTemplate: _captionTemplate,
                   captionStyleLabel: _captionStyleLabel,
                   wireLabels: Map<WireStyle, String>.from(_wireLabels),
+                  initialFocusField: widget.initialFocusField,
                   onCancel: () => Navigator.of(context).pop(),
                   onDone: _done,
                 ),

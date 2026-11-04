@@ -912,6 +912,19 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     await _refreshIptcCaptionWarning();
   }
 
+  /// Startup strip toggle: write the IPTC template when the session opens.
+  Future<void> _setApplyIptcOnIngest(bool enabled) async {
+    if (enabled == _iptcMode.appliesOnLoad) return;
+    final mode = enabled ? IptcApplyMode.onImport : IptcApplyMode.none;
+    await _prefs?.saveIptcApplyMode(mode);
+    if (!mounted) return;
+    setState(() {
+      _iptcMode = mode;
+      _iptcStatus = enabled ? 'On load' : 'Off';
+    });
+    await _refreshIptcCaptionWarning();
+  }
+
   Future<void> _refreshIptcCaptionWarning() async {
     final prefs = _prefs;
     final gen = ++_iptcScanGen;
@@ -1176,6 +1189,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   Future<void> _openIptc({
     bool populateFromFolder = false,
     bool enableWriting = false,
+    String? focusField,
   }) async {
     final summary = await showCaptionV2IptcDialog(
       context,
@@ -1184,6 +1198,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       // Always fill the pad from folder IPTC when a folder is set.
       populateFromFolder: _folderChosen || populateFromFolder,
       captionTemplate: _captionTemplate,
+      initialFocusField: focusField,
     );
     if (!mounted || summary == null) return;
     await _prefs?.saveIptcApplyMode(summary.mode);
@@ -1747,9 +1762,10 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(child: _buildV4ImagesField()),
+                      Expanded(flex: 3, child: _buildV4ImagesField()),
                       _v4FieldDivider(),
                       Expanded(
+                        flex: 2,
                         child: _setupGate(
                           unlocked: _leagueUnlocked,
                           child: _buildV4LeagueField(),
@@ -1769,10 +1785,10 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(flex: 10, child: _buildV4ImagesField()),
+                  Expanded(flex: 14, child: _buildV4ImagesField()),
                   _v4FieldDivider(),
                   Expanded(
-                    flex: 10,
+                    flex: 7,
                     child: _setupGate(
                       unlocked: _leagueUnlocked,
                       child: _buildV4LeagueField(),
@@ -1780,7 +1796,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                   ),
                   _v4FieldDivider(),
                   Expanded(
-                    flex: 22,
+                    flex: 21,
                     child: _setupGate(
                       unlocked: _teamsUnlocked,
                       child: _buildV4TeamsField(stack: false),
@@ -1856,6 +1872,11 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     final subtitle = chosen
         ? (_imageCount == 1 ? '1 photo' : '$_imageCount photos')
         : 'Choose a folder';
+    const captionWarn = FfTokens.danger;
+    const filingWarn = Color(0xFFE8B547);
+    final showIptcTip = chosen && !_pickingFolder && !_scanningIptc;
+    final iptcNeedsAdd = showIptcTip && _hasIptcFieldWarnings;
+    final iptcComplete = showIptcTip && _iptcComplete;
     return DropTarget(
       onDragEntered: (_) => setState(() => _folderDragOver = true),
       onDragExited: (_) => setState(() => _folderDragOver = false),
@@ -1903,6 +1924,50 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                     ),
                   ),
                 ),
+                if (iptcNeedsAdd) ...[
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      'Missing fields',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 12,
+                        height: 1.1,
+                        fontWeight: FontWeight.w500,
+                        color: _missingCaptionIptc.isNotEmpty
+                            ? captionWarn
+                            : filingWarn,
+                      ),
+                    ),
+                  ),
+                ] else if (iptcComplete) ...[
+                  const SizedBox(width: 8),
+                  const Flexible(
+                    child: Text(
+                      'Enough existing IPTC',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 12,
+                        height: 1.1,
+                        color: FfTokens.sessionOk,
+                      ),
+                    ),
+                  ),
+                ] else if (chosen && _scanningIptc) ...[
+                  const SizedBox(width: 8),
+                  const SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(strokeWidth: 1.5),
+                  ),
+                ],
+                const SizedBox(width: 8),
                 Text(
                   _pickingFolder ? 'Opening…' : subtitle,
                   style: const TextStyle(
@@ -1989,41 +2054,29 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                 color: FfTokens.sessionTx,
               ),
             ),
-            if (needsAdd) ...[
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Missing fields',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 12,
-                    height: 1.1,
-                    fontWeight: FontWeight.w500,
-                    color: _missingCaptionIptc.isNotEmpty
-                        ? captionWarn
-                        : filingWarn,
-                  ),
-                ),
+            const Spacer(),
+            Text(
+              'Apply on ingest',
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: enabled ? FfTokens.sessionT2 : FfTokens.sessionT3,
               ),
-            ] else if (complete) ...[
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'Enough existing IPTC',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 12,
-                    height: 1.1,
-                    color: FfTokens.sessionOk,
-                  ),
-                ),
+            ),
+            const SizedBox(width: 6),
+            Tooltip(
+              message:
+                  'Write the IPTC template onto photos when the session opens',
+              waitDuration: const Duration(milliseconds: 350),
+              child: _SessionSwitch(
+                value: _iptcMode.appliesOnLoad,
+                onChanged: enabled
+                    ? (next) => unawaited(_setApplyIptcOnIngest(next))
+                    : null,
               ),
-            ] else
-              const Spacer(),
+            ),
+            const SizedBox(width: 8),
             _SessionOptionAction(
               label: 'Edit',
               icon: PhosphorIconsRegular.pencilSimple,
@@ -2879,6 +2932,15 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
           if (!mounted) return;
           setState(() => _selectedStyleToken = _tokenForWire(wire));
           unawaited(_maybeOpenIptcAfterWirePick());
+        },
+        onSessionStructureChipTap: (focusField) {
+          unawaited(
+            _openIptc(
+              populateFromFolder: true,
+              enableWriting: true,
+              focusField: focusField,
+            ),
+          );
         },
       ),
     );
