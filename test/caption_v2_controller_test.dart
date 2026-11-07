@@ -488,33 +488,192 @@ void main() {
     expect(controller.timingCaptionClause, 'during the third quarter');
   });
 
-  test('pre folds into in-their game identifier instead of stacking', () {
+  test('pre writes before the game even when style has in-their game id', () {
     final controller = CaptionV2Controller()
       ..sport = 'wnba'
       ..homeTeam = 'New York Liberty'
       ..awayTeam = 'Las Vegas Aces'
-      ..captionTemplate = CaptionTemplate.getty().copyWith(
-        gameIdentifierText: 'in their WNBA game',
+      ..captionTemplate = CaptionTemplate.applyGameIdentifierText(
+        CaptionTemplate.getty(),
+        'in their WNBA game',
       );
 
     controller.selectPlayer(player('Breanna Stewart', '30'), isHome: true);
     controller.selectVerb('Celebrates');
     controller.setPre(true);
 
-    expect(controller.timingCaptionClause, isEmpty);
-    expect(controller.buildCaptionBody(), isNot(contains('before the game')));
+    expect(controller.timingCaptionClause, 'before the game');
+    expect(controller.buildCaptionBody(), contains('before the game'));
     expect(
       controller.buildCaptionSentence(),
-      contains('ahead of their WNBA game'),
+      contains('before the game'),
     );
     expect(
       controller.buildCaptionSentence(),
-      isNot(contains('before the game')),
+      contains('in their WNBA game'),
     );
     expect(
       controller.buildCaptionSentence(),
-      isNot(contains('in their WNBA game')),
+      isNot(contains('ahead of their WNBA game')),
     );
+  });
+
+  test('pre writes before the game on Imagn with no free-text game id slot', () {
+    final controller = CaptionV2Controller()
+      ..sport = 'hockey'
+      ..homeTeam = 'Toronto Maple Leafs'
+      ..awayTeam = 'Ottawa Senators'
+      ..captionTemplate = CaptionTemplate.imagn().copyWith(
+        gameIdentifierText: 'in their NHL game',
+      );
+
+    controller.selectPlayer(player('Auston Matthews', '34'), isHome: true);
+    controller.selectVerb('Skates');
+    controller.setPre(true);
+
+    expect(controller.timingCaptionClause, 'before the game');
+    expect(controller.buildCaptionBody(), contains('before the game'));
+    expect(controller.buildCaptionSentence(), contains('before the game'));
+  });
+
+  test('pre writes before the game when style has no in-their game id', () {
+    final controller = CaptionV2Controller()
+      ..sport = 'hockey'
+      ..homeTeam = 'Toronto Maple Leafs'
+      ..awayTeam = 'Ottawa Senators'
+      ..captionTemplate = CaptionTemplate.getty().copyWith(
+        gameIdentifierText: '',
+        freeTextSnippets: const [''],
+      );
+
+    controller.selectPlayer(player('Auston Matthews', '34'), isHome: true);
+    controller.selectVerb('Skates');
+    controller.setPre(true);
+
+    expect(controller.timingCaptionClause, 'before the game');
+    expect(controller.buildCaptionBody(), contains('before the game'));
+    expect(controller.buildCaptionSentence(), contains('before the game'));
+  });
+
+  test('pre + verb + opponent uses before the game against once', () {
+    final controller = CaptionV2Controller()
+      ..sport = 'hockey'
+      ..homeTeam = 'Toronto Maple Leafs'
+      ..awayTeam = 'Utah Mammoth'
+      ..captionTemplate = CaptionTemplate.getty().copyWith(
+        gameIdentifierText: '',
+        freeTextSnippets: const [''],
+      );
+
+    controller.selectPlayer(player('Auston Matthews', '34'), isHome: true);
+    controller.selectVerb('Skates');
+    controller.setPre(true);
+
+    final body = controller.buildCaptionBody();
+    expect(
+      body,
+      contains('before the game against the Utah Mammoth'),
+    );
+    expect(body, isNot(contains('against the Utah Mammoth before the game')));
+    expect('before the game'.allMatches(body).length, 1);
+  });
+
+  test('pre + both-team players uses before the game without against', () {
+    final controller = CaptionV2Controller()
+      ..sport = 'hockey'
+      ..homeTeam = 'Toronto Maple Leafs'
+      ..awayTeam = 'Utah Mammoth'
+      ..captionTemplate = CaptionTemplate.getty().copyWith(
+        gameIdentifierText: '',
+        freeTextSnippets: const [''],
+      );
+
+    controller.selectPlayer(player('Sergei Bobrovsky', '72'), isHome: true);
+    controller.selectPlayer(player('Dylan Guenther', '11'), isHome: false);
+    controller.selectVerb('Skates');
+    controller.setPre(true);
+
+    final body = controller.buildCaptionBody();
+    expect(body, contains('Sergei Bobrovsky'));
+    expect(body, contains('Dylan Guenther'));
+    expect(body, contains('and'));
+    expect(body, contains('before the game'));
+    expect(body, isNot(contains('against')));
+    expect(body, isNot(contains('before the game against')));
+    expect('before the game'.allMatches(body).length, 1);
+  });
+
+  test('post + verb + opponent uses after the game against once', () {
+    final controller = CaptionV2Controller()
+      ..sport = 'hockey'
+      ..homeTeam = 'Toronto Maple Leafs'
+      ..awayTeam = 'Utah Mammoth'
+      ..captionTemplate = CaptionTemplate.getty().copyWith(
+        gameIdentifierText: '',
+        freeTextSnippets: const [''],
+      );
+
+    controller.selectPlayer(player('Auston Matthews', '34'), isHome: true);
+    controller.selectVerb('Skates');
+    controller.setPost(true);
+
+    final body = controller.buildCaptionBody();
+    expect(
+      body,
+      contains('after the game against the Utah Mammoth'),
+    );
+    expect(body, isNot(contains('against the Utah Mammoth after the game')));
+    expect(body, isNot(contains('following the game')));
+    expect('after the game'.allMatches(body).length, 1);
+  });
+
+  test('post + both-team players uses after the game without against', () {
+    final controller = CaptionV2Controller()
+      ..sport = 'hockey'
+      ..homeTeam = 'Toronto Maple Leafs'
+      ..awayTeam = 'Utah Mammoth'
+      ..captionTemplate = CaptionTemplate.getty().copyWith(
+        gameIdentifierText: '',
+        freeTextSnippets: const [''],
+      );
+
+    controller.selectPlayer(player('Sergei Bobrovsky', '72'), isHome: true);
+    controller.selectPlayer(player('Dylan Guenther', '11'), isHome: false);
+    controller.selectVerb('Skates');
+    controller.setPost(true);
+
+    final body = controller.buildCaptionBody();
+    expect(body, contains('Sergei Bobrovsky'));
+    expect(body, contains('Dylan Guenther'));
+    expect(body, contains('and'));
+    expect(body, contains('after the game'));
+    expect(body, isNot(contains('against')));
+    expect(body, isNot(contains('after the game against')));
+    expect(body, isNot(contains('following the game')));
+    expect('after the game'.allMatches(body).length, 1);
+  });
+
+  test('post with no opponent keeps after the game alone', () {
+    final controller = CaptionV2Controller()
+      ..sport = 'hockey'
+      ..homeTeam = 'Toronto Maple Leafs'
+      ..awayTeam = 'Utah Mammoth'
+      ..singleTeamMode = true
+      ..captionTemplate = CaptionTemplate.getty().copyWith(
+        gameIdentifierText: '',
+        freeTextSnippets: const [''],
+      );
+
+    controller.selectPlayer(player('Auston Matthews', '34'), isHome: true);
+    controller.selectVerb('Skates');
+    controller.setPost(true);
+
+    expect(controller.timingCaptionClause, 'after the game');
+    final body = controller.buildCaptionBody();
+    expect(body, contains('after the game'));
+    expect(body, isNot(contains('following the game')));
+    expect(body, isNot(contains('against')));
+    expect(body, isNot(contains('Utah Mammoth')));
   });
 
   test('typed inning previews immediately and completes without Enter', () {

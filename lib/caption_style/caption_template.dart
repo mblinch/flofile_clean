@@ -931,7 +931,7 @@ class CaptionTemplate {
   final bool timingPhraseCaps;
 
   /// When false, captions omit the time-of-game clause (inning / period /
-  /// quarter / half / before / following the game). Defaults to on.
+  /// quarter / half / before / after the game). Defaults to on.
   final bool includeTimingPhrase;
 
   /// Primary joiner used in [WireStyle.custom] between segments.

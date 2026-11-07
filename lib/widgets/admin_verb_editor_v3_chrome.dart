@@ -9,24 +9,40 @@ import 'app_styled_dialogs.dart';
 import 'ff_dropdown.dart';
 
 TextStyle verbEditorPanelTitle(FfTokens t) => FfTokens.railLabel.copyWith(
-      color: t.text.withValues(alpha: 0.48),
-      fontSize: 10,
-      letterSpacing: 1.15,
+      color: t.textTertiary,
+      fontSize: 11,
+      letterSpacing: 1.1,
+      fontWeight: FontWeight.w600,
     );
 
 TextStyle verbEditorFieldLabel(FfTokens t) => t.microStyle.copyWith(
-      fontSize: 11,
-      color: t.text.withValues(alpha: 0.82),
+      fontSize: 13,
+      fontWeight: FontWeight.w500,
+      color: t.textSecondary,
     );
 
 BoxDecoration verbEditorPanelDecoration(FfTokens t) => BoxDecoration(
-      color: t.surface.withValues(alpha: 0.55),
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(
-        color: FfTokens.panelOutline.withValues(alpha: 0.45),
-        width: 0.5,
-      ),
+      color: t.elevated,
+      borderRadius: BorderRadius.circular(14),
     );
+
+IconData verbEditorSportIcon(String sport) {
+  switch (sport.toLowerCase()) {
+    case 'hockey':
+      return PhosphorIconsRegular.hockey;
+    case 'basketball':
+    case 'wnba':
+      return PhosphorIconsRegular.basketball;
+    case 'soccer':
+      return PhosphorIconsRegular.soccerBall;
+    case 'baseball':
+      return PhosphorIconsRegular.baseball;
+    case 'football':
+      return PhosphorIconsRegular.football;
+    default:
+      return PhosphorIconsRegular.circlesThree;
+  }
+}
 
 class VerbSearchHit {
   const VerbSearchHit({
@@ -251,7 +267,7 @@ class VerbEditorPickerBox extends StatelessWidget {
   }
 }
 
-/// Sport left + search right.
+/// Sport left + search right (HTML Verb Editor chrome).
 class VerbEditorTopBar extends StatelessWidget {
   const VerbEditorTopBar({
     super.key,
@@ -283,182 +299,209 @@ class VerbEditorTopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = tokens;
-    final showResults =
-        searchFocus.hasFocus && searchController.text.trim().isNotEmpty;
+    final hasQuery = searchController.text.trim().isNotEmpty;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Row(
         children: [
-          Text(
-            'VERB EDITOR',
-            style: verbEditorPanelTitle(t),
+          _SportSelect(
+            tokens: t,
+            sport: sport,
+            sports: sports,
+            enabled: !busy,
+            onChanged: onSportChanged,
           ),
-          const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              SizedBox(
-                width: 140,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Sport',
-                      style: verbEditorFieldLabel(t),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: SizedBox(
+                  height: 32,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: t.sunken,
+                      borderRadius: BorderRadius.circular(9),
+                      border: searchFocus.hasFocus
+                          ? Border.all(color: t.accent)
+                          : null,
+                      boxShadow: searchFocus.hasFocus
+                          ? [
+                              BoxShadow(
+                                color: FfTokens.sessionHot,
+                                blurRadius: 0,
+                                spreadRadius: 3,
+                              ),
+                            ]
+                          : null,
                     ),
-                    const SizedBox(height: 6),
-                    SizedBox(
-                      height: 34,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: t.sunken,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: FfTokens.panelOutline,
-                            width: 0.5,
+                    child: Row(
+                      children: [
+                        const SizedBox(width: 12),
+                        PhosphorIcon(
+                          PhosphorIconsRegular.magnifyingGlass,
+                          size: 16,
+                          color: t.textTertiary,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: searchController,
+                            focusNode: searchFocus,
+                            enabled: !busy,
+                            onChanged: onSearchChanged,
+                            style: t.metaStyle.copyWith(
+                              color: t.text,
+                              fontSize: 13,
+                            ),
+                            cursorColor: t.accent,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              contentPadding: EdgeInsets.zero,
+                            ),
                           ),
                         ),
-                        child: FfDropdownButton<String>(
-                          value: sport,
-                          isExpanded: true,
-                          menuColor: t.surface,
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          style: t.metaStyle.copyWith(color: t.text),
-                          items: [
-                            for (final item in sports)
-                              DropdownMenuItem(
-                                value: item,
+                        if (hasQuery)
+                          IconButton(
+                            tooltip: 'Clear',
+                            onPressed: onClearSearch,
+                            visualDensity: VisualDensity.compact,
+                            icon: PhosphorIcon(
+                              PhosphorIconsRegular.x,
+                              size: 14,
+                              color: t.textTertiary,
+                            ),
+                          )
+                        else
+                          Padding(
+                            padding: const EdgeInsets.only(right: 10),
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: FfTokens.card,
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
                                 child: Text(
-                                  SportVerbCategories.displayLabel(item),
+                                  '/',
+                                  style: t.metaStyle.copyWith(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: t.textTertiary,
+                                  ),
                                 ),
                               ),
-                          ],
-                          onChanged: busy
-                              ? null
-                              : (value) {
-                                  if (value != null) onSportChanged(value);
-                                },
-                        ),
-                      ),
+                            ),
+                          ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SizedBox(
-                      height: 34,
-                      child: TextField(
-                    controller: searchController,
-                    focusNode: searchFocus,
-                    enabled: !busy,
-                    onChanged: onSearchChanged,
-                    style: t.metaStyle.copyWith(color: t.text, fontSize: 13),
-                    cursorColor: t.accent,
-                    decoration: InputDecoration(
-                      hintText: 'Search all verbs',
-                      hintStyle: t.metaStyle.copyWith(
-                        color: t.textSecondary,
-                        fontSize: 13,
-                      ),
-                      filled: true,
-                      fillColor: t.sunken,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      prefixIcon: PhosphorIcon(PhosphorIconsRegular.magnifyingGlass,
-                        size: 16,
-                        color: t.textSecondary,
-                      ),
-                      suffixIcon: searchController.text.isEmpty
-                          ? null
-                          : IconButton(
-                              tooltip: 'Clear',
-                              onPressed: onClearSearch,
-                              icon: PhosphorIcon(PhosphorIconsRegular.x,
-                                size: 14,
-                                color: t.textSecondary,
-                              ),
-                            ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(
-                          color: FfTokens.panelOutline,
-                          width: 0.5,
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: t.accent),
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(
-                          color: FfTokens.panelOutline,
-                          width: 0.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                if (showResults)
-                  Material(
-                    color: t.surface,
-                    elevation: 8,
-                    borderRadius: BorderRadius.circular(8),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 240),
-                      child: searchResults.isEmpty
-                          ? Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Text(
-                                'No matches',
-                                style: t.metaStyle.copyWith(
-                                  color: t.textSecondary,
-                                ),
-                              ),
-                            )
-                          : ListView.separated(
-                              shrinkWrap: true,
-                              padding: const EdgeInsets.symmetric(vertical: 4),
-                              itemCount: searchResults.length,
-                              separatorBuilder: (_, __) =>
-                                  Divider(height: 1, color: t.divider),
-                              itemBuilder: (context, index) {
-                                final hit = searchResults[index];
-                                return InkWell(
-                                  onTap: () => onPickSearchResult(hit.key),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 8,
-                                    ),
-                                    child: Text(
-                                      '${hit.category} / ${hit.label}',
-                                      softWrap: false,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: t.metaStyle.copyWith(
-                                        color: t.text,
-                                        fontSize: 12.5,
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                    ),
-                  ),
-              ],
             ),
           ),
         ],
       ),
-        ],
+    );
+  }
+}
+
+class _SportSelect extends StatelessWidget {
+  const _SportSelect({
+    required this.tokens,
+    required this.sport,
+    required this.sports,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final FfTokens tokens;
+  final String sport;
+  final List<String> sports;
+  final bool enabled;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = tokens;
+    return SizedBox(
+      height: 32,
+      child: Material(
+        color: t.sunken,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: enabled
+              ? () async {
+                  final box = context.findRenderObject() as RenderBox?;
+                  final overlay = Overlay.of(context)
+                      .context
+                      .findRenderObject() as RenderBox?;
+                  if (box == null || overlay == null) return;
+                  final pos = RelativeRect.fromRect(
+                    Rect.fromPoints(
+                      box.localToGlobal(Offset.zero, ancestor: overlay),
+                      box.localToGlobal(
+                        box.size.bottomRight(Offset.zero),
+                        ancestor: overlay,
+                      ),
+                    ),
+                    Offset.zero & overlay.size,
+                  );
+                  final picked = await showMenu<String>(
+                    context: context,
+                    position: pos,
+                    color: t.surface,
+                    items: [
+                      for (final item in sports)
+                        PopupMenuItem(
+                          value: item,
+                          child: Text(
+                            SportVerbCategories.displayLabel(item),
+                            style: t.metaStyle.copyWith(color: t.text),
+                          ),
+                        ),
+                    ],
+                  );
+                  if (picked != null) onChanged(picked);
+                }
+              : null,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 0, 8, 0),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                PhosphorIcon(
+                  verbEditorSportIcon(sport),
+                  size: 14,
+                  color: t.textTertiary,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  SportVerbCategories.displayLabel(sport),
+                  style: t.metaStyle.copyWith(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: t.text,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                PhosphorIcon(
+                  PhosphorIconsRegular.caretDown,
+                  size: 11,
+                  color: t.textTertiary,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -487,19 +530,14 @@ class VerbEditorFooter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = tokens;
-    final changed = changedVerbs.join(', ');
+    final dirty = pendingChanges > 0;
     final status = personalMode
-        ? (pendingChanges <= 0
-            ? 'Saved to your account only — app defaults are unchanged'
-            : '$pendingChanges unsaved change${pendingChanges == 1 ? '' : 's'}')
-        : (pendingChanges <= 0
-            ? 'Everything is published'
-            : changed.isEmpty
-                ? '$pendingChanges unpublished change${pendingChanges == 1 ? '' : 's'} — saved as draft, not live until published'
-                : 'Changed: $changed');
+        ? (dirty
+            ? '$pendingChanges unsaved change${pendingChanges == 1 ? '' : 's'}'
+            : 'Saved to your account')
+        : (dirty ? 'Unpublished changes' : 'Everything is published');
     return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: t.surface,
         border: Border(top: BorderSide(color: t.divider)),
@@ -507,38 +545,65 @@ class VerbEditorFooter extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              status,
-              maxLines: changed.isEmpty ? 1 : 2,
-              overflow: TextOverflow.ellipsis,
-              style: t.microStyle.copyWith(
-                fontSize: 11,
-                height: 1.25,
-                color: t.text.withValues(alpha: 0.55),
-              ),
+            child: Row(
+              children: [
+                if (dirty)
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: const BoxDecoration(
+                      color: FfTokens.accent2,
+                      shape: BoxShape.circle,
+                    ),
+                  )
+                else
+                  PhosphorIcon(
+                    PhosphorIconsFill.checkCircle,
+                    size: 14,
+                    color: FfTokens.sessionOk,
+                  ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    status,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.metaStyle.copyWith(
+                      fontSize: 12,
+                      color: t.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          TextButton(
-            onPressed: busy || pendingChanges <= 0 ? null : onDiscard,
-            child: Text(
-              'Discard',
-              softWrap: false,
-              style: t.metaStyle.copyWith(
-                color: (busy || pendingChanges <= 0)
-                    ? t.text.withValues(alpha: 0.28)
-                    : t.text.withValues(alpha: 0.70),
+          if (dirty) ...[
+            TextButton(
+              onPressed: busy ? null : onDiscard,
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+              ),
+              child: Text(
+                'Discard',
+                softWrap: false,
+                style: t.metaStyle.copyWith(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: t.textSecondary,
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
+            const SizedBox(width: 6),
+          ],
           ElevatedGreyButton(
             label: busy
                 ? (personalMode ? 'Saving…' : 'Publishing…')
                 : (personalMode ? 'Save' : 'Publish default'),
-            fontSize: 11,
+            fontSize: 12,
             isPrimary: true,
             isAdmin: !personalMode,
-            onPressed: pendingChanges <= 0 ? null : onPublish,
+            onPressed: !dirty || busy ? null : onPublish,
           ),
         ],
       ),

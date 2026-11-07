@@ -937,6 +937,15 @@ class PreferencesService {
     return prefs.getString(_keyCurrentSport) ?? 'baseball';
   }
 
+  /// Last sport the user picked, or null if they have never chosen one.
+  /// Unlike [getCurrentSport], this does not fall back to baseball.
+  Future<String?> getLastSelectedSport() async {
+    final prefs = await _getPrefs();
+    final raw = prefs.getString(_keyCurrentSport)?.trim();
+    if (raw == null || raw.isEmpty) return null;
+    return raw;
+  }
+
   // Helper to get sport-specific key
   String _getSportSpecificKey(String sport) {
     switch (sport.toLowerCase()) {

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -5,8 +6,10 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../caption_style/wire_iptc_specs.dart';
+import '../../../services/iptc_template_import_service.dart';
 import '../../../services/preferences_service.dart';
 import '../../../theme/ff_tokens.dart';
+import '../../../utils/exiftool_helper.dart';
 import '../../../widgets/app_styled_dialogs.dart';
 import '../../../widgets/ff_menu.dart';
 import '../../../widgets/oriented_file_preview.dart';
@@ -427,25 +430,158 @@ class _CaptionV2MetadataEditor extends StatefulWidget {
 }
 
 class _CaptionV2MetadataEditorState extends State<_CaptionV2MetadataEditor> {
+  /// Near Edit IPTC.html `minmax(220px, 300px)`, with room to drag wider.
+  static const double _defaultPhotoWidth = 260;
+  static const double _minPhotoWidth = 220;
+  static const double _maxPhotoWidth = 360;
+
+  /// Capture tags for the under-photo EXIF list (aligned with photo_column /
+  /// picture_preview_widget / metadata_popup_dialog).
+  static const _captureExifTags = <String>[
+    '-Model',
+    '-Make',
+    '-ShutterSpeed',
+    '-ExposureTime',
+    '-FNumber',
+    '-ISO',
+    '-ISOSpeed',
+    '-PhotographicSensitivity',
+    '-FocalLength',
+    '-LensID',
+    '-LensModel',
+    '-Lens',
+    '-DateTimeOriginal',
+    '-CreateDate',
+    '-ModifyDate',
+    '-SubSecTimeOriginal',
+    '-SerialNumber',
+    '-BodySerialNumber',
+    '-ImageWidth',
+    '-ImageHeight',
+    '-ExifImageWidth',
+    '-ExifImageHeight',
+    '-PixelXDimension',
+    '-PixelYDimension',
+    '-ImageSize',
+  ];
+
+  static const _captureKeys = <String>{
+    'DateTimeOriginal',
+    'CreateDate',
+    'ModifyDate',
+    'SubSecTimeOriginal',
+    'Make',
+    'Model',
+    'ShutterSpeed',
+    'ExposureTime',
+    'FNumber',
+    'ISO',
+    'ISOSpeed',
+    'PhotographicSensitivity',
+    'FocalLength',
+    'LensID',
+    'LensModel',
+    'Lens',
+    'SerialNumber',
+    'BodySerialNumber',
+    'ImageWidth',
+    'ImageHeight',
+    'ExifImageWidth',
+    'ExifImageHeight',
+    'PixelXDimension',
+    'PixelYDimension',
+    'ImageSize',
+  };
+
   Map<String, String> _values = const {};
   int _revision = 0;
   bool _loading = true;
+  bool _exifLoading = true;
   bool _saving = false;
+  double _photoWidth = _defaultPhotoWidth;
+  Map<String, dynamic>? _exif;
 
   @override
   void initState() {
     super.initState();
+    _seedExifFromController();
     _load();
   }
 
+  void _seedExifFromController() {
+    if (widget.controller.currentPath != widget.imagePath) return;
+    final meta = widget.controller.currentIptcMeta;
+    if (meta.isEmpty) return;
+    final capture = _captureOnly(Map<String, dynamic>.from(meta));
+    if (capture.isEmpty) return;
+    _exif = capture;
+    _exifLoading = false;
+  }
+
+  /// Keep camera/capture tags only; normalize group prefixes to short keys so
+  /// [IptcTemplateImportService.formatExifDateHeading] and row lookups match.
+  static Map<String, dynamic> _captureOnly(Map<String, dynamic> raw) {
+    final out = <String, dynamic>{};
+    raw.forEach((key, value) {
+      if (value == null) return;
+      final short = key.contains(':') ? key.split(':').last : key;
+      if (short == 'SourceFile' || short == 'ExifToolVersion') return;
+      if (!_captureKeys.contains(short) && !_captureKeys.contains(key)) return;
+      final dest = _captureKeys.contains(short) ? short : key;
+      if (out.containsKey(dest) && out[dest] != null) return;
+      if (value is String && value.trim().isEmpty) return;
+      if (value is List && value.isEmpty) return;
+      out[dest] = value;
+    });
+    return out;
+  }
+
+  static bool _hasCaptureData(Map<String, dynamic>? meta) {
+    if (meta == null || meta.isEmpty) return false;
+    return meta.keys.any((k) {
+      final short = k.contains(':') ? k.split(':').last : k;
+      return short != 'SourceFile' && _captureKeys.contains(short);
+    });
+  }
+
   Future<void> _load() async {
-    final values =
-        await widget.controller.readIptcPanelValues(widget.imagePath);
+    final valuesFuture =
+        widget.controller.readIptcPanelValues(widget.imagePath);
+    final exifFuture = _loadExif(widget.imagePath);
+    final values = await valuesFuture;
+    final exif = await exifFuture;
     if (!mounted) return;
     setState(() {
       _values = values;
+      if (_hasCaptureData(exif)) {
+        // Merge onto seed so a thin/partial load cannot wipe populated rows.
+        _exif = <String, dynamic>{
+          ...?_exif,
+          ...exif!,
+        };
+      }
+      _exifLoading = false;
       _loading = false;
     });
+  }
+
+  Future<Map<String, dynamic>?> _loadExif(String path) async {
+    try {
+      final proc = await ExiftoolHelper.run([
+        '-j',
+        ..._captureExifTags,
+        path,
+      ]);
+      if (!proc.isSuccess) return null;
+      final decoded = jsonDecode(proc.stdoutText);
+      if (decoded is! List || decoded.isEmpty) return null;
+      final first = decoded.first;
+      if (first is! Map) return null;
+      final capture = _captureOnly(Map<String, dynamic>.from(first));
+      return capture.isEmpty ? null : capture;
+    } catch (_) {
+      return null;
+    }
   }
 
   void _onValueChanged(String key, String value) {
@@ -502,7 +638,8 @@ class _CaptionV2MetadataEditorState extends State<_CaptionV2MetadataEditor> {
     final wire = widget.controller.captionTemplate.wireStyle;
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      backgroundColor: FfTokens.nocturneBg,
+      // Edit IPTC.html `.m` panel — `--p: #181D22`
+      backgroundColor: FfTokens.nocturneEl,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
         side: const BorderSide(color: FfTokens.nocturneLn2),
@@ -548,32 +685,338 @@ class _CaptionV2MetadataEditorState extends State<_CaptionV2MetadataEditor> {
                 doneLabel: _saving ? 'Saving' : 'Save',
                 showTemplateControls: false,
                 workspacePalette: true,
-                leading: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 0, 0, 12),
-                  child: SizedBox(
-                    width: 280,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: FfTokens.nocturneSunken,
-                        borderRadius:
-                            BorderRadius.circular(FfTokens.radiusCard),
-                        border: Border.all(color: FfTokens.nocturneLn2),
-                      ),
-                      child: ClipRRect(
-                        borderRadius:
-                            BorderRadius.circular(FfTokens.radiusCard),
-                        child: OrientedFilePreview(
-                          path: widget.imagePath,
-                          version: widget.controller
-                              .imageContentStamp(widget.imagePath),
-                          fit: BoxFit.contain,
-                          cacheWidth: 1000,
+                leading: _EditIptcLeadingColumn(
+                  imagePath: widget.imagePath,
+                  imageVersion:
+                      widget.controller.imageContentStamp(widget.imagePath),
+                  width: _photoWidth.clamp(_minPhotoWidth, _maxPhotoWidth),
+                  exif: _exif,
+                  exifLoading: _exifLoading,
+                  onDragWidth: (delta) => setState(() {
+                    _photoWidth = (_photoWidth + delta)
+                        .clamp(_minPhotoWidth, _maxPhotoWidth);
+                  }),
+                  onResetWidth: () =>
+                      setState(() => _photoWidth = _defaultPhotoWidth),
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+/// Photo on top (3:2), scrollable capture/EXIF underneath, drag handle on right.
+class _EditIptcLeadingColumn extends StatelessWidget {
+  const _EditIptcLeadingColumn({
+    required this.imagePath,
+    required this.imageVersion,
+    required this.width,
+    required this.exif,
+    required this.exifLoading,
+    required this.onDragWidth,
+    required this.onResetWidth,
+  });
+
+  final String imagePath;
+  final int imageVersion;
+  final double width;
+  final Map<String, dynamic>? exif;
+  final bool exifLoading;
+  final ValueChanged<double> onDragWidth;
+  final VoidCallback onResetWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 0, 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: width,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final photoHeight = (width * 2 / 3)
+                    .clamp(0.0, constraints.maxHeight * 0.55);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(
+                      height: photoHeight,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF101418),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: OrientedFilePreview(
+                            path: imagePath,
+                            version: imageVersion,
+                            fit: BoxFit.cover,
+                            cacheWidth: 1000,
+                          ),
                         ),
                       ),
                     ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: _EditIptcExifList(
+                        exif: exif,
+                        loading: exifLoading,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          _EditIptcResizeHandle(
+            onDrag: onDragWidth,
+            onReset: onResetWidth,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EditIptcResizeHandle extends StatelessWidget {
+  const _EditIptcResizeHandle({
+    required this.onDrag,
+    required this.onReset,
+  });
+
+  final ValueChanged<double> onDrag;
+  final VoidCallback onReset;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeLeftRight,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragUpdate: (details) => onDrag(details.delta.dx),
+        onDoubleTap: onReset,
+        child: const Tooltip(
+          message: 'Drag to resize the preview. Double-click to reset.',
+          waitDuration: Duration(milliseconds: 400),
+          child: SizedBox(
+            width: 22,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(width: 10),
+                SizedBox(
+                  width: 2,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: FfTokens.sessionLn2,
+                      borderRadius: BorderRadius.all(Radius.circular(1)),
+                    ),
                   ),
                 ),
-              ),
+                SizedBox(width: 10),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EditIptcExifList extends StatelessWidget {
+  const _EditIptcExifList({
+    required this.exif,
+    required this.loading,
+  });
+
+  final Map<String, dynamic>? exif;
+  final bool loading;
+
+  String _stringify(dynamic raw) {
+    if (raw == null) return '';
+    if (raw is List) {
+      for (final item in raw) {
+        final s = item?.toString().trim() ?? '';
+        if (s.isNotEmpty) return s;
+      }
+      return '';
+    }
+    return raw.toString().trim();
+  }
+
+  String _first(List<String> keys) {
+    final meta = exif;
+    if (meta == null) return '';
+    for (final key in keys) {
+      final direct = _stringify(meta[key]);
+      if (direct.isNotEmpty) return direct;
+      // Group-prefixed fallbacks (EXIF:Make, Composite:ImageSize, …).
+      for (final entry in meta.entries) {
+        final k = entry.key;
+        final short = k.contains(':') ? k.split(':').last : k;
+        if (short != key) continue;
+        final value = _stringify(entry.value);
+        if (value.isNotEmpty) return value;
+      }
+    }
+    return '';
+  }
+
+  String _formatShutter(String raw) {
+    if (raw.isEmpty) return '';
+    if (raw.contains('/')) return raw;
+    final value = double.tryParse(raw);
+    if (value == null || value <= 0) return raw;
+    return value < 1
+        ? '1/${(1 / value).round()}s'
+        : '${value.toStringAsFixed(1)}s';
+  }
+
+  String _formatAperture(String raw) {
+    if (raw.isEmpty) return '';
+    final f = double.tryParse(raw);
+    if (f != null) return 'f/${f.toStringAsFixed(1)}';
+    if (raw.startsWith('f/') || raw.startsWith('F/')) return raw;
+    return 'f/$raw';
+  }
+
+  String _formatFocal(String raw) {
+    if (raw.isEmpty) return '';
+    final cleaned = raw.replaceAll(RegExp(r'm+$'), '').trim();
+    final d = double.tryParse(cleaned);
+    if (d != null) return '${d.toInt()}mm';
+    return cleaned.toLowerCase().endsWith('mm') ? cleaned : '${cleaned}mm';
+  }
+
+  String _dimensions() {
+    final w = _first(const [
+      'ImageWidth',
+      'ExifImageWidth',
+      'PixelXDimension',
+    ]);
+    final h = _first(const [
+      'ImageHeight',
+      'ExifImageHeight',
+      'PixelYDimension',
+    ]);
+    if (w.isNotEmpty && h.isNotEmpty) return '$w×$h';
+    final size = _first(const ['ImageSize']);
+    if (size.isEmpty) return '';
+    return size.replaceAll(RegExp(r'[xX]'), '×');
+  }
+
+  String _camera() {
+    final make = _first(const ['Make']);
+    final model = _first(const ['Model']);
+    final serial = _first(const ['SerialNumber', 'BodySerialNumber']);
+    final name = '$make $model'.trim();
+    if (name.isEmpty) return '';
+    if (serial.isEmpty) return name;
+    return '$name · SN $serial';
+  }
+
+  String _settings() {
+    final shutter = _formatShutter(
+      _first(const ['ShutterSpeed', 'ExposureTime']),
+    );
+    final aperture = _formatAperture(_first(const ['FNumber']));
+    if (shutter.isNotEmpty && aperture.isNotEmpty) {
+      return '$shutter @ $aperture';
+    }
+    if (shutter.isNotEmpty) return shutter;
+    return aperture;
+  }
+
+  List<({String label, String value})> _rows() {
+    final meta = exif;
+    final date = meta == null
+        ? ''
+        : IptcTemplateImportService.formatExifDateHeading(meta);
+    final time = meta == null
+        ? ''
+        : IptcTemplateImportService.formatExifTimeHeading(meta);
+    final iso = _first(const ['ISO', 'ISOSpeed', 'PhotographicSensitivity']);
+    return [
+      (label: 'Date', value: date),
+      (label: 'Time', value: time),
+      (label: 'Dimensions', value: _dimensions()),
+      (label: 'Settings', value: _settings()),
+      (label: 'ISO', value: iso.isEmpty ? '' : 'ISO $iso'),
+      (label: 'Focal length', value: _formatFocal(_first(const ['FocalLength']))),
+      (label: 'Camera', value: _camera()),
+      (
+        label: 'Lens',
+        value: _first(const ['LensModel', 'Lens', 'LensID']),
+      ),
+    ].where((row) => row.value.isNotEmpty).toList(growable: false);
+  }
+
+  Widget _panel({required Widget child}) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: FfTokens.nocturneSunken,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: FfTokens.nocturneLn2),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: child,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = _rows();
+    if (rows.isEmpty && loading) {
+      return _panel(
+        child: const Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: FfTokens.nocturneAc,
+            ),
+          ),
+        ),
+      );
+    }
+    if (rows.isEmpty) {
+      // Hide the empty decorated box that previously looked like a blank panel.
+      return const SizedBox.shrink();
+    }
+    const labelStyle = TextStyle(
+      fontSize: 11,
+      height: 1.25,
+      fontWeight: FontWeight.w500,
+      color: FfTokens.nocturneT3,
+    );
+    const valueStyle = TextStyle(
+      fontSize: 12,
+      height: 1.3,
+      fontWeight: FontWeight.w500,
+      color: FfTokens.nocturneTx,
+    );
+    return _panel(
+      child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+        itemCount: rows.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        itemBuilder: (context, index) {
+          final row = rows[index];
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(row.label, style: labelStyle),
+              const SizedBox(height: 2),
+              Text(row.value, style: valueStyle),
+            ],
+          );
+        },
       ),
     );
   }

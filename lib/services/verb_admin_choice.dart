@@ -326,7 +326,8 @@ class _VerbChange {
   final bool added;
 
   /// Added: show the verb. Changed: replace the personal copy.
-  bool takeAdmin = false;
+  /// Defaults to admin so new publishes land unless the user opts out.
+  bool takeAdmin = true;
 }
 
 class _AdminVerbChoiceDialog extends StatefulWidget {

@@ -1244,7 +1244,10 @@ class CaptionFormulaRenderer {
     final hasGameSegment = RegExp(
       r'\b(inning|innings|quarter|quarters|period|periods|halftime)\b|'
       r'\b(first|second)\s+half\b|'
-      r'\b(top|bottom)\s+of\s+the\b',
+      r'\b(top|bottom)\s+of\s+the\b|'
+      r'\b(before|following)\s+the\s+game\b|'
+      r'\b(ahead of|following)\s+their\b|'
+      r'\bahead of\s+(?:the\s+game|playing)\b',
       caseSensitive: false,
     ).hasMatch(line);
     if (!hasGameSegment) {

@@ -12,6 +12,7 @@ class EffectiveVerb {
     required this.key,
     required this.label,
     required this.category,
+    required this.categories,
     required this.singularPhrase,
     required this.pluralPhrase,
     required this.ingPhrase,
@@ -29,7 +30,10 @@ class EffectiveVerb {
 
   final String key;
   final String label;
+  /// Primary / home category (edit target, single-category fallback).
   final String category;
+  /// Every category this verb appears under (one or more).
+  final List<String> categories;
   final String singularPhrase;
   final String pluralPhrase;
   final String ingPhrase;
@@ -212,40 +216,95 @@ class EffectiveVerbCatalog {
     final categoryKeys = <String, List<String>>{
       for (final category in orderedCategories) category: <String>[],
     };
+
+    List<String> categoriesForRecord(Map<String, dynamic> raw, String fallback) {
+      final fromList = <String>[];
+      final rawList = raw['categories'];
+      if (rawList is List) {
+        for (final value in rawList) {
+          final category = remapCategory(value.toString().trim());
+          if (category.isEmpty ||
+              category == 'Favorites' ||
+              category == 'All') {
+            continue;
+          }
+          if (!fromList.contains(category)) fromList.add(category);
+        }
+      }
+      if (fromList.isNotEmpty) return fromList;
+      final single = remapCategory((raw['category'] ?? fallback).toString());
+      if (single.isEmpty || single == 'Favorites' || single == 'All') {
+        return const [];
+      }
+      return [single];
+    }
+
+    void placeKey(String category, String key) {
+      if (category.isEmpty || key.isEmpty) return;
+      addCategory(category);
+      final list = categoryKeys.putIfAbsent(category, () => <String>[]);
+      if (!list.contains(key)) list.add(key);
+    }
+
     for (final entry in verbOrder.entries) {
       final orderCategory = remapCategory(entry.key);
+      if (!categoryKeys.containsKey(orderCategory) &&
+          orderCategory != 'Favorites' &&
+          orderCategory != 'All' &&
+          orderCategory.isNotEmpty) {
+        // Allow verbOrder to introduce a saved category before records do.
+        addCategory(orderCategory);
+        categoryKeys.putIfAbsent(orderCategory, () => <String>[]);
+      }
       if (!categoryKeys.containsKey(orderCategory)) continue;
       for (final value in entry.value) {
         final trimmed = value.trim();
         if (trimmed.isEmpty) continue;
         final resolved = resolveFavorite(trimmed);
         final key = resolved ?? trimmed;
-        if (!records.containsKey(key) ||
-            categoryKeys.values.any((keys) => keys.contains(key))) {
-          continue;
-        }
+        if (!records.containsKey(key)) continue;
+        if (categoryKeys[orderCategory]!.contains(key)) continue;
         // Phrase aliases ("makes a save") must not pull a verb into a
-        // different category than the one stored on the verb itself.
+        // different category than the one stored on the verb itself — unless
+        // the verb explicitly lists that category in [categories].
         if (resolved != null && resolved != trimmed) {
-          final home = remapCategory((records[key]!['category'] ??
-                  factoryCategory[key] ??
-                  '')
-              .toString());
-          if (home.isNotEmpty && home != orderCategory) continue;
+          final declared = categoriesForRecord(
+            records[key]!,
+            factoryCategory[key] ?? '',
+          );
+          if (declared.isNotEmpty && !declared.contains(orderCategory)) {
+            continue;
+          }
+          if (declared.isEmpty) {
+            final home = remapCategory((records[key]!['category'] ??
+                    factoryCategory[key] ??
+                    '')
+                .toString());
+            if (home.isNotEmpty && home != orderCategory) continue;
+          }
         }
-        categoryKeys[orderCategory]!.add(key);
+        placeKey(orderCategory, key);
       }
     }
     for (final entry in records.entries) {
-      if (categoryKeys.values.any((keys) => keys.contains(entry.key))) continue;
       final fallbackCategory =
           orderedCategories.isEmpty ? 'Other' : orderedCategories.first;
-      final category = remapCategory((entry.value['category'] ??
-              factoryCategory[entry.key] ??
-              fallbackCategory)
-          .toString());
-      categoryKeys.putIfAbsent(category, () => <String>[]).add(entry.key);
-      addCategory(category);
+      final declared = categoriesForRecord(
+        entry.value,
+        factoryCategory[entry.key] ?? fallbackCategory,
+      );
+      if (declared.length > 1) {
+        // Explicit multi-category verbs appear in every listed bucket.
+        for (final category in declared) {
+          placeKey(category, entry.key);
+        }
+        continue;
+      }
+      if (categoryKeys.values.any((keys) => keys.contains(entry.key))) {
+        continue;
+      }
+      final category = declared.isEmpty ? fallbackCategory : declared.first;
+      placeKey(category, entry.key);
     }
 
     // Preserve favorites list order, including verbs parked under a
@@ -318,13 +377,33 @@ class EffectiveVerbCatalog {
               baseballDefault: baseballPlural,
               sportDefault: sportPlural,
             );
+      final fallbackCategory =
+          orderedCategories.isEmpty ? 'Other' : orderedCategories.first;
+      final placedCategories = <String>[
+        for (final category in orderedCategories)
+          if ((categoryKeys[category] ?? const <String>[]).contains(entry.key))
+            category,
+      ];
+      final declaredCategories = categoriesForRecord(
+        raw,
+        factoryCategory[entry.key] ?? fallbackCategory,
+      );
+      final effectiveCategories = placedCategories.isNotEmpty
+          ? placedCategories
+          : (declaredCategories.isNotEmpty
+              ? declaredCategories
+              : [fallbackCategory]);
+      final primaryCategory = remapCategory((raw['category'] ??
+              factoryCategory[entry.key] ??
+              effectiveCategories.first)
+          .toString());
       byKey[entry.key] = EffectiveVerb(
         key: entry.key,
         label: label.isEmpty ? entry.key : label,
-        category: remapCategory((raw['category'] ??
-                factoryCategory[entry.key] ??
-                (orderedCategories.isEmpty ? 'Other' : orderedCategories.first))
-            .toString()),
+        category: primaryCategory.isNotEmpty
+            ? primaryCategory
+            : effectiveCategories.first,
+        categories: List.unmodifiable(effectiveCategories),
         singularPhrase: effectiveSingular,
         pluralPhrase: resolvedPlural,
         ingPhrase: _wordingForSport(

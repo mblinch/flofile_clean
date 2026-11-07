@@ -134,6 +134,35 @@ void main() {
     expect(order['Goalie'] ?? const [], isNot(contains('Handles the Puck')));
   });
 
+  test('keeps multi-category verbs in every listed bucket', () {
+    final multi = <String, dynamic>{
+      'catalogComplete': true,
+      'verbOverrides': {
+        'Handles the Puck': {
+          'label': 'Handles the Puck',
+          'category': 'Goalie',
+          'categories': ['Offense', 'Goalie'],
+          'verbPhrase': 'handles the puck',
+        },
+      },
+      'categoryOrder': ['Offense', 'Defense', 'Goalie', 'Non Game-Action'],
+      'verbOrder': {
+        'Offense': ['Handles the Puck'],
+        'Goalie': ['Saves', 'Handles the Puck'],
+      },
+    };
+
+    final fixed = VerbDefaultsBundle.ensureComplete(multi, 'hockey');
+    final order = Map<String, List<dynamic>>.from(
+      (fixed['verbOrder'] as Map).map(
+        (key, value) =>
+            MapEntry(key.toString(), List<dynamic>.from(value as List)),
+      ),
+    );
+    expect(order['Offense'], contains('Handles the Puck'));
+    expect(order['Goalie'], contains('Handles the Puck'));
+  });
+
   test('heals misfiled hockey factory verbs into factory categories', () {
     final misfiled = <String, dynamic>{
       'catalogComplete': true,

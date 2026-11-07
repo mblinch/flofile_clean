@@ -2177,36 +2177,18 @@ class CaptionV2Controller extends ChangeNotifier {
     return _ordinal(inning);
   }
 
-  static final RegExp _inTheirGameId =
-      RegExp(r'^in their\b', caseSensitive: false);
-
-  /// When Pre/Post is on and the style uses an "in their … game/match"
-  /// identifier, fold timing into that phrase ("ahead of their WNBA game")
-  /// instead of stacking "before the game in their WNBA game".
-  bool get _canFoldPrePostIntoGameIdentifier {
-    if (!preGame && !postGame) return false;
-    return _inTheirGameId.hasMatch(captionTemplate.gameIdentifierText.trim());
-  }
-
-  String? get _foldedGameIdentifierText {
-    if (!_canFoldPrePostIntoGameIdentifier) return null;
-    final id = captionTemplate.gameIdentifierText.trim();
-    if (preGame) {
-      return id.replaceFirst(_inTheirGameId, 'ahead of their');
-    }
-    if (postGame) {
-      return id.replaceFirst(_inTheirGameId, 'following their');
-    }
-    return null;
-  }
-
   /// Caption clause for the current timing selection (matches classic wording).
+  ///
+  /// Pre always writes "before the game" into the caption body — including when
+  /// the wire style also has an "in their … game" free-text identifier. Folding
+  /// Pre into that identifier ("ahead of their …") hid timing on Imagn/AP
+  /// (no free-text slot) and did not match the Pre control's expected wording.
   String get timingCaptionClause {
     String phrase;
     if (preGame) {
-      phrase = _canFoldPrePostIntoGameIdentifier ? '' : 'before the game';
+      phrase = 'before the game';
     } else if (postGame) {
-      phrase = _canFoldPrePostIntoGameIdentifier ? '' : 'following the game';
+      phrase = 'after the game';
     } else if (timingHalf == '1H') {
       phrase = 'during the first half';
     } else if (timingHalf == '2H') {
@@ -2262,8 +2244,21 @@ class CaptionV2Controller extends ChangeNotifier {
     if (!hasOpponentTeam) {
       return ' $timingCaptionClause$venueBit.'.replaceAll(RegExp(r'\s+'), ' ');
     }
+    // Named players from both teams already imply the matchup.
+    if (preGame && opposingPlayers.isNotEmpty) {
+      return ' before the game$venueBit.';
+    }
+    if (postGame && opposingPlayers.isNotEmpty) {
+      return ' after the game$venueBit.';
+    }
     final subjectIsHome = _captionSubjectIsHome;
     final opp = subjectIsHome ? awayTeam : homeTeam;
+    if (preGame) {
+      return ' ${CaptionV2CaptionDomain.preGameOpponentJoiner} the $opp$venueBit.';
+    }
+    if (postGame) {
+      return ' ${CaptionV2CaptionDomain.postGameOpponentJoiner} the $opp$venueBit.';
+    }
     return ' against the $opp $timingCaptionClause$venueBit.';
   }
 
@@ -2435,13 +2430,8 @@ class CaptionV2Controller extends ChangeNotifier {
       ],
     );
 
-    final foldedGid = _foldedGameIdentifierText;
-    final templateForRender = foldedGid == null
-        ? territoryTemplate
-        : territoryTemplate.copyWith(gameIdentifierText: foldedGid);
-
     var caption = CaptionFormulaRenderer.render(
-      template: templateForRender,
+      template: territoryTemplate,
       game: game,
       sampleAgency: agency,
       captionOverride: body,
@@ -2463,13 +2453,16 @@ class CaptionV2Controller extends ChangeNotifier {
   /// Venue / date / byline stay in the caption style renderer.
   String _incompleteContextPhrase() {
     if (!hasOpponentTeam) {
-      if (preGame) {
-        return _canFoldPrePostIntoGameIdentifier ? '' : 'ahead of the game';
-      }
-      if (postGame) {
-        return _canFoldPrePostIntoGameIdentifier ? '' : 'following the game';
-      }
+      if (preGame) return 'before the game';
+      if (postGame) return 'after the game';
       return timingCaptionClause;
+    }
+    // Both teams' players selected: names imply the matchup — no against.
+    if (preGame && opposingPlayers.isNotEmpty) {
+      return 'before the game';
+    }
+    if (postGame && opposingPlayers.isNotEmpty) {
+      return 'after the game';
     }
     final subjectIsHome = _captionSubjectIsHome;
     final opponentTeam = subjectIsHome ? awayTeam : homeTeam;
@@ -2477,8 +2470,12 @@ class CaptionV2Controller extends ChangeNotifier {
         ? 'the ${opponentTeam.trim()}'
         : _formatPlayersWithTeam(opposingPlayers, captionTemplate);
 
-    if (preGame) return 'ahead of playing against $target';
-    if (postGame) return 'following the game against $target';
+    if (preGame) {
+      return '${CaptionV2CaptionDomain.preGameOpponentJoiner} $target';
+    }
+    if (postGame) {
+      return '${CaptionV2CaptionDomain.postGameOpponentJoiner} $target';
+    }
     return 'against $target $timingCaptionClause';
   }
 
@@ -2529,12 +2526,17 @@ class CaptionV2Controller extends ChangeNotifier {
     if (template.removeDiacritics) {
       teamName = CaptionTextNormalize.stripDiacritics(teamName);
     }
-    switch (template.captionTeamOrder) {
-      case CaptionTeamOrder.teamAfter:
-        return '$playersText of the $teamName';
-      case CaptionTeamOrder.teamBefore:
-        return '$teamName $playersText';
+    final subjectLead = switch (template.captionTeamOrder) {
+      CaptionTeamOrder.teamAfter => '$playersText of the $teamName',
+      CaptionTeamOrder.teamBefore => '$teamName $playersText',
+    };
+    // Pre/Post + opposing player(s): name both sides in the lead so the
+    // matchup is clear without an "against …" joiner after the action.
+    if ((preGame || postGame) && opposingPlayers.isNotEmpty) {
+      final oppLead = _formatPlayersWithTeam(opposingPlayers, template);
+      if (oppLead.isNotEmpty) return '$subjectLead and $oppLead';
     }
+    return subjectLead;
   }
 
   String _teamPlayersLead(CaptionTemplate template) {
@@ -2608,18 +2610,22 @@ class CaptionV2Controller extends ChangeNotifier {
     }
 
     final namedOpponents = _namedOpponentsForCaption();
-    final includeOpponent =
-        (definition?.wantsOpponent ?? true) || namedOpponents.isNotEmpty;
-    final opponentName = opponentTeam.trim();
-    final opponentTarget = namedOpponents.isNotEmpty
+    final hasNamedOpposingPlayers = namedOpponents.isNotEmpty;
+    final includeOpponent = hasOpponentTeam &&
+        ((definition?.wantsOpponent ?? true) || hasNamedOpposingPlayers);
+    final opponentName = hasOpponentTeam ? opponentTeam.trim() : '';
+    final opponentTarget = hasNamedOpposingPlayers
         ? namedOpponents
         : (opponentName.isEmpty ? '' : 'the $opponentName');
     action = CaptionV2CaptionDomain.fillTheirTeam(action, opponentTarget);
-    if (includeOpponent && opponentTarget.isNotEmpty) {
+    // Pre/Post + players from both teams: names are in the lead; skip against.
+    final skipOpponentJoiner =
+        (preGame || postGame) && hasNamedOpposingPlayers;
+    if (includeOpponent && opponentTarget.isNotEmpty && !skipOpponentJoiner) {
       final lower = action.toLowerCase();
-      final alreadyNamed = namedOpponents.isNotEmpty &&
+      final alreadyNamed = hasNamedOpposingPlayers &&
           lower.contains(namedOpponents.toLowerCase());
-      final alreadyTeam = namedOpponents.isEmpty &&
+      final alreadyTeam = !hasNamedOpposingPlayers &&
           opponentName.isNotEmpty &&
           lower.contains(opponentName.toLowerCase());
       if (!alreadyNamed && !alreadyTeam) {
@@ -2628,22 +2634,37 @@ class CaptionV2Controller extends ChangeNotifier {
           verb: verb,
           action: action,
           opponentTeam: opponentName,
-          opposingPlayers: namedOpponents.isEmpty ? null : namedOpponents,
+          opposingPlayers: hasNamedOpposingPlayers ? namedOpponents : null,
           omitAgainst: definition?.omitAgainst ?? joiner.isEmpty,
           opponentJoiner: joiner,
+          preGame: CaptionV2CaptionDomain.usePreGameOpponentJoiner(
+            preGame: preGame,
+            hasNamedOpposingPlayers: hasNamedOpposingPlayers,
+          ),
+          postGame: CaptionV2CaptionDomain.usePostGameOpponentJoiner(
+            postGame: postGame,
+            hasNamedOpposingPlayers: hasNamedOpposingPlayers,
+          ),
         );
       }
     }
 
     if (verb == 'Post Game Win' || verb == 'Post Game Loss') {
-      return _canFoldPrePostIntoGameIdentifier
-          ? action
-          : '$action following the game';
+      return '$action following the game';
     }
     if (preGame) {
-      return _canFoldPrePostIntoGameIdentifier
-          ? action
-          : '$action before the game';
+      // Team-only Pre already folded timing into "before the game against …".
+      if (action.toLowerCase().contains('before the game')) {
+        return action;
+      }
+      return '$action before the game';
+    }
+    if (postGame) {
+      // Team-only Post already folded timing into "after the game against …".
+      if (action.toLowerCase().contains('after the game')) {
+        return action;
+      }
+      return '$action after the game';
     }
     return '$action $timingCaptionClause'.trim();
   }
@@ -2656,42 +2677,58 @@ class CaptionV2Controller extends ChangeNotifier {
     }
     final subjectIsHome = _captionSubjectIsHome;
     final namedOpponents = _namedOpponentsForCaption();
-    final opponentName =
-        (subjectIsHome ? awayTeam : homeTeam).trim();
-    final opponentTarget = namedOpponents.isNotEmpty
+    final hasNamedOpposingPlayers = namedOpponents.isNotEmpty;
+    final opponentName = hasOpponentTeam
+        ? (subjectIsHome ? awayTeam : homeTeam).trim()
+        : '';
+    final opponentTarget = hasNamedOpposingPlayers
         ? namedOpponents
         : (opponentName.isEmpty ? '' : 'the $opponentName');
     action = CaptionV2CaptionDomain.fillTheirTeam(action, opponentTarget);
-    if (opponentTarget.isNotEmpty) {
+    final skipOpponentJoiner =
+        (preGame || postGame) && hasNamedOpposingPlayers;
+    if (opponentTarget.isNotEmpty && !skipOpponentJoiner) {
       final lower = action.toLowerCase();
-      final alreadyNamed = namedOpponents.isNotEmpty &&
+      final alreadyNamed = hasNamedOpposingPlayers &&
           lower.contains(namedOpponents.toLowerCase());
-      final alreadyTeam = namedOpponents.isEmpty &&
+      final alreadyTeam = !hasNamedOpposingPlayers &&
           opponentName.isNotEmpty &&
           lower.contains(opponentName.toLowerCase());
       if (!alreadyNamed && !alreadyTeam) {
         final alreadyJoined =
             lower.contains(' against ') || lower.contains(' playing ');
         action = alreadyJoined
-            ? '$action ${namedOpponents.isNotEmpty ? namedOpponents : 'the $opponentName'}'
+            ? '$action ${hasNamedOpposingPlayers ? namedOpponents : 'the $opponentName'}'
             : CaptionV2CaptionDomain.withOpponent(
                 verb: action,
                 action: action,
                 opponentTeam: opponentName,
                 opposingPlayers:
-                    namedOpponents.isEmpty ? null : namedOpponents,
+                    hasNamedOpposingPlayers ? namedOpponents : null,
+                preGame: CaptionV2CaptionDomain.usePreGameOpponentJoiner(
+                  preGame: preGame,
+                  hasNamedOpposingPlayers: hasNamedOpposingPlayers,
+                ),
+                postGame: CaptionV2CaptionDomain.usePostGameOpponentJoiner(
+                  postGame: postGame,
+                  hasNamedOpposingPlayers: hasNamedOpposingPlayers,
+                ),
               );
       }
     }
     if (preGame) {
-      return _canFoldPrePostIntoGameIdentifier
-          ? action
-          : '$action before the game';
+      // Team-only Pre already folded timing into "before the game against …".
+      if (action.toLowerCase().contains('before the game')) {
+        return action;
+      }
+      return '$action before the game';
     }
     if (postGame) {
-      return _canFoldPrePostIntoGameIdentifier
-          ? action
-          : '$action following the game';
+      // Team-only Post already folded timing into "after the game against …".
+      if (action.toLowerCase().contains('after the game')) {
+        return action;
+      }
+      return '$action after the game';
     }
     return '$action $timingCaptionClause'.trim();
   }

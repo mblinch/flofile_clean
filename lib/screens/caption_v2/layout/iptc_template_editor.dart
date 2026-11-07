@@ -402,120 +402,439 @@ class IptcTemplateEditor extends StatelessWidget {
               : 1200.0;
           final compact = h < 820 || w < 1100;
           final narrow = w < 1100;
-          final fieldH = narrow ? 36.0 : 32.0;
+          // Edit IPTC.html uses label-above fields; New Session keeps label-left.
+          final editIptc = workspacePalette;
+          final fieldH = editIptc
+              ? (compact ? 38.0 : 34.0)
+              : (narrow ? 36.0 : 32.0);
           final gap = compact ? 8.0 : 10.0;
+          final labelAbove = editIptc;
 
-          final story = _group(
-            colors: colors,
-            icon: PhosphorIconsRegular.article,
-            title: 'Story',
-            compact: compact,
-            children: [
-              _text(specs, 'Headline', narrow, fieldH),
-              _text(specs, 'Personality', narrow, fieldH),
-              _text(specs, 'Keywords', narrow, fieldH),
-              _text(
-                specs,
-                'Special Instructions',
-                narrow,
-                fieldH,
-                display: 'Instructions',
+          final Widget fieldsBody;
+          if (editIptc) {
+            // Edit IPTC.html — stacked category rows + 6-col-style field grids.
+            fieldsBody = TapRegion(
+              groupId: _legendFocusTapGroup,
+              onTapOutside: (_) {
+                _LegendFocusScope.maybeOf(context)?.dismissFocus();
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _editIptcCat(
+                    colors: colors,
+                    icon: PhosphorIconsRegular.article,
+                    title: 'Story',
+                    compact: compact,
+                    first: true,
+                    child: Column(
+                      children: [
+                        _text(
+                          specs,
+                          'Headline',
+                          compact,
+                          fieldH,
+                          labelAbove: labelAbove,
+                        ),
+                        SizedBox(height: compact ? 6 : 12),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: _text(
+                                specs,
+                                'Personality',
+                                compact,
+                                fieldH,
+                                labelAbove: labelAbove,
+                              ),
+                            ),
+                            SizedBox(width: compact ? 6 : 10),
+                            Expanded(
+                              child: _text(
+                                specs,
+                                'Keywords',
+                                compact,
+                                fieldH,
+                                labelAbove: labelAbove,
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: compact ? 6 : 12),
+                        _text(
+                          specs,
+                          'Special Instructions',
+                          compact,
+                          fieldH,
+                          display: 'Instructions',
+                          labelAbove: labelAbove,
+                        ),
+                      ],
+                    ),
+                  ),
+                  _editIptcCat(
+                    colors: colors,
+                    icon: PhosphorIconsRegular.user,
+                    title: 'Credit',
+                    compact: compact,
+                    child: Column(
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: _text(
+                                specs,
+                                'Creator',
+                                compact,
+                                fieldH,
+                                labelAbove: labelAbove,
+                              ),
+                            ),
+                            SizedBox(width: compact ? 6 : 10),
+                            Expanded(
+                              child: _text(
+                                specs,
+                                'Job Title',
+                                compact,
+                                fieldH,
+                                display: 'Job title',
+                                labelAbove: labelAbove,
+                              ),
+                            ),
+                            SizedBox(width: compact ? 6 : 10),
+                            Expanded(
+                              child: _text(
+                                specs,
+                                'Description Writers',
+                                compact,
+                                fieldH,
+                                display: 'Writers',
+                                labelAbove: labelAbove,
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: compact ? 6 : 12),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: _text(
+                                specs,
+                                'Credit',
+                                compact,
+                                fieldH,
+                                labelAbove: labelAbove,
+                              ),
+                            ),
+                            SizedBox(width: compact ? 6 : 10),
+                            Expanded(
+                              child: _text(
+                                specs,
+                                'Source',
+                                compact,
+                                fieldH,
+                                labelAbove: labelAbove,
+                              ),
+                            ),
+                            SizedBox(width: compact ? 6 : 10),
+                            Expanded(
+                              child: _text(
+                                specs,
+                                'Copyright',
+                                compact,
+                                fieldH,
+                                labelAbove: labelAbove,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  _editIptcCat(
+                    colors: colors,
+                    icon: PhosphorIconsRegular.mapPin,
+                    title: 'Location',
+                    compact: compact,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: _text(
+                            specs,
+                            'Location',
+                            compact,
+                            fieldH,
+                            display: 'Venue',
+                            labelAbove: labelAbove,
+                          ),
+                        ),
+                        SizedBox(width: compact ? 6 : 10),
+                        Expanded(
+                          child: _text(
+                            specs,
+                            'City',
+                            compact,
+                            fieldH,
+                            labelAbove: labelAbove,
+                          ),
+                        ),
+                        SizedBox(width: compact ? 6 : 10),
+                        Expanded(
+                          child: _text(
+                            specs,
+                            'Province/State',
+                            compact,
+                            fieldH,
+                            display: 'State / Prov',
+                            labelAbove: labelAbove,
+                          ),
+                        ),
+                        SizedBox(width: compact ? 6 : 10),
+                        Expanded(
+                          child: _text(
+                            specs,
+                            'Country',
+                            compact,
+                            fieldH,
+                            labelAbove: labelAbove,
+                          ),
+                        ),
+                        SizedBox(width: compact ? 6 : 10),
+                        Expanded(
+                          child: _text(
+                            specs,
+                            'Country Code',
+                            compact,
+                            fieldH,
+                            display: 'Country Code',
+                            labelAbove: labelAbove,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _editIptcCat(
+                    colors: colors,
+                    icon: PhosphorIconsRegular.folder,
+                    title: 'Filing',
+                    compact: compact,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              flex: 19,
+                              child: _text(
+                                specs,
+                                'Object Name',
+                                compact,
+                                fieldH,
+                                display: 'Object name',
+                                labelAbove: labelAbove,
+                              ),
+                            ),
+                            SizedBox(width: compact ? 6 : 10),
+                            Expanded(
+                              flex: 11,
+                              child: _text(
+                                specs,
+                                'MEID',
+                                compact,
+                                fieldH,
+                                labelAbove: labelAbove,
+                              ),
+                            ),
+                            SizedBox(width: compact ? 6 : 10),
+                            Expanded(
+                              flex: 8,
+                              child: _text(
+                                specs,
+                                'Category',
+                                compact,
+                                fieldH,
+                                labelAbove: labelAbove,
+                              ),
+                            ),
+                            SizedBox(width: compact ? 6 : 10),
+                            Expanded(
+                              flex: 22,
+                              child: _supp(
+                                specs,
+                                compact,
+                                fieldH,
+                                colors,
+                                labelAbove: labelAbove,
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: compact ? 6 : 12),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              flex: 19,
+                              child: _urgency(
+                                specs,
+                                compact,
+                                fieldH,
+                                labelAbove: labelAbove,
+                              ),
+                            ),
+                            SizedBox(width: compact ? 6 : 10),
+                            const Expanded(flex: 11, child: SizedBox.shrink()),
+                            SizedBox(width: compact ? 6 : 10),
+                            const Expanded(flex: 8, child: SizedBox.shrink()),
+                            SizedBox(width: compact ? 6 : 10),
+                            const Expanded(flex: 22, child: SizedBox.shrink()),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Clear all sits under Filing (last category), not in the header.
+                  if (clearEnabled && onClearTemplate != null) ...[
+                    SizedBox(height: compact ? 4 : 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: _ClearLink(
+                        onTap: onClearTemplate,
+                        compact: compact,
+                      ),
+                    ),
+                  ],
+                ],
               ),
-            ],
-          );
-          final credit = _group(
-            colors: colors,
-            icon: PhosphorIconsRegular.user,
-            title: 'Credit',
-            compact: compact,
-            children: [
-              _text(specs, 'Creator', narrow, fieldH),
-              _text(specs, 'Job Title', narrow, fieldH, display: 'Job title'),
-              _text(
-                specs,
-                'Description Writers',
-                narrow,
-                fieldH,
-                display: 'Writers',
-              ),
-              _text(specs, 'Credit', narrow, fieldH),
-              _text(specs, 'Source', narrow, fieldH),
-              _text(specs, 'Copyright', narrow, fieldH),
-            ],
-          );
-          final location = _group(
-            colors: colors,
-            icon: PhosphorIconsRegular.mapPin,
-            title: 'Location',
-            compact: compact,
-            children: [
-              _text(specs, 'Location', narrow, fieldH, display: 'Venue'),
-              _text(specs, 'City', narrow, fieldH),
-              _text(
-                specs,
-                'Province/State',
-                narrow,
-                fieldH,
-                display: 'State/Province',
-              ),
-              _country(specs, narrow, fieldH),
-            ],
-          );
-          final filing = _group(
-            colors: colors,
-            icon: PhosphorIconsRegular.folderSimple,
-            title: 'Filing',
-            compact: compact,
-            children: [
-              _text(specs, 'MEID', narrow, fieldH),
-              _text(
-                specs,
-                'Object Name',
-                narrow,
-                fieldH,
-                display: 'Object name',
-              ),
-              _text(specs, 'Category', narrow, fieldH),
-              _supp(specs, narrow, fieldH, colors),
-              _urgency(specs, narrow, fieldH),
-            ],
-          );
-
-          // Always 2×2: Story | Credit / Location | Filing.
-          // TapRegion keeps red/yellow mode on while editing fields.
-          final grid = TapRegion(
-            groupId: _legendFocusTapGroup,
-            onTapOutside: (_) {
-              _LegendFocusScope.maybeOf(context)?.dismissFocus();
-            },
-            child: Column(
+            );
+          } else {
+            final story = _group(
+              colors: colors,
+              icon: PhosphorIconsRegular.article,
+              title: 'Story',
+              compact: compact,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: story),
-                    SizedBox(width: gap),
-                    Expanded(child: credit),
-                  ],
-                ),
-                SizedBox(height: gap),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: location),
-                    SizedBox(width: gap),
-                    Expanded(child: filing),
-                  ],
+                _text(specs, 'Headline', narrow, fieldH),
+                _text(specs, 'Personality', narrow, fieldH),
+                _text(specs, 'Keywords', narrow, fieldH),
+                _text(
+                  specs,
+                  'Special Instructions',
+                  narrow,
+                  fieldH,
+                  display: 'Instructions',
                 ),
               ],
-            ),
-          );
+            );
+            final credit = _group(
+              colors: colors,
+              icon: PhosphorIconsRegular.user,
+              title: 'Credit',
+              compact: compact,
+              children: [
+                _text(specs, 'Creator', narrow, fieldH),
+                _text(specs, 'Job Title', narrow, fieldH, display: 'Job title'),
+                _text(
+                  specs,
+                  'Description Writers',
+                  narrow,
+                  fieldH,
+                  display: 'Writers',
+                ),
+                _text(specs, 'Credit', narrow, fieldH),
+                _text(specs, 'Source', narrow, fieldH),
+                _text(specs, 'Copyright', narrow, fieldH),
+              ],
+            );
+            final location = _group(
+              colors: colors,
+              icon: PhosphorIconsRegular.mapPin,
+              title: 'Location',
+              compact: compact,
+              children: [
+                _text(specs, 'Location', narrow, fieldH, display: 'Venue'),
+                _text(specs, 'City', narrow, fieldH),
+                _text(
+                  specs,
+                  'Province/State',
+                  narrow,
+                  fieldH,
+                  display: 'State/Province',
+                ),
+                _country(specs, narrow, fieldH),
+              ],
+            );
+            final filing = _group(
+              colors: colors,
+              icon: PhosphorIconsRegular.folderSimple,
+              title: 'Filing',
+              compact: compact,
+              children: [
+                _text(specs, 'MEID', narrow, fieldH),
+                _text(
+                  specs,
+                  'Object Name',
+                  narrow,
+                  fieldH,
+                  display: 'Object name',
+                ),
+                _text(specs, 'Category', narrow, fieldH),
+                _supp(specs, narrow, fieldH, colors),
+                _urgency(specs, narrow, fieldH),
+              ],
+            );
 
+            // New Session / IPTC Editor v2 — 2×2 cards.
+            fieldsBody = TapRegion(
+              groupId: _legendFocusTapGroup,
+              onTapOutside: (_) {
+                _LegendFocusScope.maybeOf(context)?.dismissFocus();
+              },
+              child: Column(
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: story),
+                      SizedBox(width: gap),
+                      Expanded(child: credit),
+                    ],
+                  ),
+                  SizedBox(height: gap),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: location),
+                      SizedBox(width: gap),
+                      Expanded(child: filing),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          }
+
+          final hasLeading = leading != null;
+          final bodyPadL = editIptc
+              ? (hasLeading ? 0.0 : (compact ? 12.0 : 20.0))
+              : (compact ? 12.0 : 16.0);
+          final bodyPadR = editIptc
+              ? (compact ? 16.0 : 24.0)
+              : (compact ? 12.0 : 16.0);
+          final bodyPadT = editIptc
+              ? (compact ? 12.0 : 20.0)
+              : (compact ? 8.0 : 14.0);
           final body = ListView(
             padding: EdgeInsets.fromLTRB(
-              compact ? 12 : 16,
-              compact ? 8 : 14,
-              compact ? 12 : 16,
+              bodyPadL,
+              bodyPadT,
+              bodyPadR,
               compact ? 8 : 16,
             ),
             children: [
@@ -527,9 +846,12 @@ class IptcTemplateEditor extends StatelessWidget {
                 ),
                 SizedBox(height: compact ? 6 : 10),
               ],
-              _CaptionOmittedNote(compact: compact),
-              SizedBox(height: compact ? 6 : 10),
-              grid,
+              // Startup IPTC only — omit on in-session Edit IPTC.
+              if (!workspacePalette) ...[
+                _CaptionOmittedNote(compact: compact),
+                SizedBox(height: compact ? 6 : 10),
+              ],
+              fieldsBody,
             ],
           );
 
@@ -545,7 +867,10 @@ class IptcTemplateEditor extends StatelessWidget {
                 onTemplateSelected: onTemplateSelected,
                 onDeleteTemplate: onDeleteTemplate,
                 onLoad: loadEnabled ? onLoadTemplate : null,
-                onClear: clearEnabled ? onClearTemplate : null,
+                // Edit IPTC: Clear all lives under Filing, not the header.
+                onClear: editIptc
+                    ? null
+                    : (clearEnabled ? onClearTemplate : null),
                 onSave: fieldsEnabled ? onSaveTemplate : null,
                 loadingTemplate: loadingTemplate,
                 onClose: onCancel,
@@ -554,12 +879,14 @@ class IptcTemplateEditor extends StatelessWidget {
                 wireLabels: wireLabels,
               ),
               Expanded(
-                child: leading == null
+                child: !hasLeading
                     ? body
                     : Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           leading!,
+                          // Edit IPTC.html `.bd` column gap.
+                          SizedBox(width: compact ? 16 : 24),
                           Expanded(child: body),
                         ],
                       ),
@@ -569,8 +896,12 @@ class IptcTemplateEditor extends StatelessWidget {
                 compact: compact,
                 doneLabel: doneLabel,
                 onCancel: onCancel,
-                onClear: clearEnabled ? onClearTemplate : null,
+                // Edit IPTC: Clear all is under Filing; New Session keeps footer Clear.
+                onClear: editIptc
+                    ? null
+                    : (clearEnabled ? onClearTemplate : null),
                 onDone: onDone,
+                editIptcLegend: editIptc,
               ),
             ],
           );
@@ -737,12 +1068,71 @@ class IptcTemplateEditor extends StatelessWidget {
     );
   }
 
+  /// Edit IPTC.html `.cat` — left category label + field grid, hairline dividers.
+  Widget _editIptcCat({
+    required IptcEditorColors colors,
+    required IconData icon,
+    required String title,
+    required Widget child,
+    required bool compact,
+    bool first = false,
+  }) {
+    final titleW = compact ? 84.0 : 112.0;
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: compact ? 8 : 14),
+      decoration: BoxDecoration(
+        border: first
+            ? null
+            : Border(top: BorderSide(color: colors.line)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: titleW,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Row(
+                children: [
+                  PhosphorIcon(
+                    icon,
+                    size: compact ? 14 : 15,
+                    color: colors.t3,
+                  ),
+                  SizedBox(width: compact ? 6 : 8),
+                  Expanded(
+                    child: Text(
+                      title.toUpperCase(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: compact ? 0.08 * 11 : 0.1 * 11,
+                        color: colors.t3,
+                        height: 16 / 11,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(width: compact ? 10 : 16),
+          Expanded(child: child),
+        ],
+      ),
+    );
+  }
+
   Widget _text(
     Map<String, WireIptcFieldSpec> specs,
     String label,
     bool narrow,
     double fieldH, {
     String? display,
+    bool labelAbove = false,
   }) {
     final spec = specs[label];
     final key = spec?.storageKey ?? label;
@@ -754,8 +1144,11 @@ class IptcTemplateEditor extends StatelessWidget {
       inCaptionGroup: _inCaptionGroup(label),
       inFilingGroup: _inFilingGroup(label, spec),
       narrow: narrow,
+      labelAbove: labelAbove,
       height: fieldH,
-      labelTip: (label == 'Personality' || label == 'Keywords')
+      // Edit IPTC hides the merge warning; New Session keeps it.
+      labelTip: !workspacePalette &&
+              (label == 'Personality' || label == 'Keywords')
           ? _listMergeTip(label)
           : null,
       child: _TextInput(
@@ -769,8 +1162,8 @@ class IptcTemplateEditor extends StatelessWidget {
         inFilingGroup: _inFilingGroup(label, spec),
         height: fieldH,
         narrow: narrow,
-        maxLength: label == 'Country Code' ? 3 : null,
-        center: label == 'Country Code',
+        maxLength: label == 'Category' || label == 'Country Code' ? 3 : null,
+        center: label == 'Category',
         needsCaptionFill: () => _captionMissing(label),
         needsFilingFill: () =>
             _inFilingGroup(label, spec) && _blank(label, spec),
@@ -814,8 +1207,9 @@ class IptcTemplateEditor extends StatelessWidget {
     Map<String, WireIptcFieldSpec> specs,
     bool narrow,
     double fieldH,
-    IptcEditorColors colors,
-  ) {
+    IptcEditorColors colors, {
+    bool labelAbove = false,
+  }) {
     final labels = _suppLabels;
     final shorts = ['Supp 1', 'Supp 2', 'Supp 3'];
     final groupMissing = _gettyNeedsOneSupp && _allSuppBlank(specs);
@@ -835,8 +1229,11 @@ class IptcTemplateEditor extends StatelessWidget {
       alert: slotAlert,
       inCaptionGroup: false,
       inFilingGroup: labels.any((l) => _inFilingGroup(l, specs[l])),
+      // Compact fields already label each box (Supp 1–3). A second
+      // "Supp cats" label sits on top of those and overlaps them.
       hideLabel: narrow,
       narrow: narrow,
+      labelAbove: labelAbove,
       height: fieldH,
       child: Row(
         children: [
@@ -856,7 +1253,7 @@ class IptcTemplateEditor extends StatelessWidget {
                     inFilingGroup: _inFilingGroup(labels[i], specs[labels[i]]),
                     height: fieldH,
                     narrow: narrow,
-                    center: true,
+                    center: false,
                     needsCaptionFill: () => _captionMissing(labels[i]),
                     needsFilingFill: () {
                       final label = labels[i];
@@ -875,8 +1272,8 @@ class IptcTemplateEditor extends StatelessWidget {
                   if (narrow)
                     Positioned(
                       top: 3,
-                      left: 0,
-                      right: 0,
+                      left: 10,
+                      right: 4,
                       child: IgnorePointer(
                         child: Builder(
                           builder: (context) {
@@ -892,7 +1289,7 @@ class IptcTemplateEditor extends StatelessWidget {
                                 : alerts[i];
                             return Text(
                               shorts[i].toUpperCase(),
-                              textAlign: TextAlign.center,
+                              textAlign: TextAlign.start,
                               style: TextStyle(
                                 fontFamily: FfTokens.fontFamily,
                                 fontSize: 10,
@@ -919,8 +1316,9 @@ class IptcTemplateEditor extends StatelessWidget {
   Widget _urgency(
     Map<String, WireIptcFieldSpec> specs,
     bool narrow,
-    double fieldH,
-  ) {
+    double fieldH, {
+    bool labelAbove = false,
+  }) {
     final spec = specs['Urgency'];
     final key = spec?.storageKey ?? 'Urgency';
     final raw = _raw('Urgency', spec).trim();
@@ -933,6 +1331,7 @@ class IptcTemplateEditor extends StatelessWidget {
       inCaptionGroup: false,
       inFilingGroup: _inFilingGroup('Urgency', spec),
       narrow: narrow,
+      labelAbove: labelAbove,
       height: fieldH,
       child: _UrgencyInput(
         value: value,
@@ -1017,7 +1416,7 @@ class _Header extends StatelessWidget {
               ),
             ] else
               const Spacer(),
-            _ClearLink(onTap: onClear),
+            if (onClear != null) _ClearLink(onTap: onClear),
             _IconButton(
               icon: PhosphorIconsRegular.x,
               tooltip: 'Close',
@@ -1581,6 +1980,7 @@ class _FieldSlot extends StatelessWidget {
     required this.height,
     required this.child,
     this.hideLabel = false,
+    this.labelAbove = false,
     this.labelTip,
   });
 
@@ -1594,6 +1994,8 @@ class _FieldSlot extends StatelessWidget {
   final double height;
   final Widget child;
   final bool hideLabel;
+  /// Edit IPTC.html — label stacked above the input (comfortable size).
+  final bool labelAbove;
   /// Tooltip shown via a small warning icon beside the label.
   final String? labelTip;
 
@@ -1611,8 +2013,11 @@ class _FieldSlot extends StatelessWidget {
             ? _FieldAlert.caption
             : alert;
     final alertOn = paintAlert != _FieldAlert.none;
-    final labelColor =
-        alertOn ? _alertColor(paintAlert) : (narrow ? colors.t3 : colors.t2);
+    final floatLabel = narrow || (labelAbove && narrow);
+    final stacked = labelAbove && !narrow;
+    final labelColor = alertOn
+        ? _alertColor(paintAlert)
+        : (floatLabel || stacked ? colors.t2 : colors.t2);
     final tip = labelTip;
     final tipIcon = tip == null
         ? null
@@ -1620,14 +2025,15 @@ class _FieldSlot extends StatelessWidget {
             message: tip,
             waitDuration: const Duration(milliseconds: 280),
             child: Padding(
-              padding: EdgeInsets.only(left: narrow ? 3 : 4),
+              padding: EdgeInsets.only(left: floatLabel ? 3 : 4),
               child: PhosphorIcon(
                 PhosphorIconsRegular.warning,
-                size: narrow ? 11 : 13,
+                size: floatLabel ? 11 : 13,
                 color: colors.t3,
               ),
             ),
           );
+    // Edit IPTC.html uses a trailing status dot after the label text.
     final labelText = Text.rich(
       TextSpan(
         children: [
@@ -1636,10 +2042,10 @@ class _FieldSlot extends StatelessWidget {
             WidgetSpan(
               alignment: PlaceholderAlignment.middle,
               child: Padding(
-                padding: const EdgeInsets.only(left: 5),
+                padding: const EdgeInsets.only(left: 6),
                 child: Container(
-                  width: narrow ? 4 : 5,
-                  height: narrow ? 4 : 5,
+                  width: floatLabel ? 5 : 6,
+                  height: floatLabel ? 5 : 6,
                   decoration: BoxDecoration(
                     color: _alertColor(paintAlert),
                     shape: BoxShape.circle,
@@ -1653,10 +2059,13 @@ class _FieldSlot extends StatelessWidget {
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
         fontFamily: FfTokens.fontFamily,
-        fontSize: narrow ? 10 : 12,
-        fontWeight: narrow ? FontWeight.w600 : FontWeight.w400,
-        letterSpacing: narrow ? 0.4 : 0,
-        color: labelColor,
+        fontSize: floatLabel ? 10 : (stacked ? 12 : 12),
+        fontWeight: floatLabel
+            ? FontWeight.w600
+            : (stacked ? FontWeight.w500 : FontWeight.w400),
+        letterSpacing: floatLabel ? 0.4 : 0,
+        height: stacked ? 16 / 12 : null,
+        color: floatLabel ? colors.t3 : labelColor,
       ),
     );
     final labelRow = Row(
@@ -1667,7 +2076,17 @@ class _FieldSlot extends StatelessWidget {
     );
 
     final Widget slot;
-    if (narrow) {
+    if (stacked) {
+      slot = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(height: 16, child: labelRow),
+          const SizedBox(height: 5),
+          SizedBox(height: height, child: child),
+        ],
+      );
+    } else if (narrow) {
       // Fixed height — never use Positioned.fill in a scroll view (unbounded).
       slot = Padding(
         padding: const EdgeInsets.only(bottom: 4),
@@ -2015,6 +2434,7 @@ class _Footer extends StatelessWidget {
     required this.onCancel,
     required this.onDone,
     this.onClear,
+    this.editIptcLegend = false,
   });
 
   final String wireLabel;
@@ -2023,14 +2443,22 @@ class _Footer extends StatelessWidget {
   final VoidCallback onCancel;
   final VoidCallback? onClear;
   final VoidCallback onDone;
+  /// Edit IPTC.html legend copy (“Required for captions” / “Needed for Getty”).
+  final bool editIptcLegend;
 
   @override
   Widget build(BuildContext context) {
     final colors = IptcEditorPalette.of(context);
     final focus = _LegendFocusScope.maybeOf(context);
     final filingName = wireLabel.trim().isEmpty ? 'wire' : wireLabel;
+    final captionLegend = editIptcLegend
+        ? 'Required for captions'
+        : 'Red - Required to build captions';
+    final filingLegend = editIptcLegend
+        ? 'Needed for Getty'
+        : 'Yellow - Needed for filing to $filingName';
     return Container(
-      padding: EdgeInsets.fromLTRB(20, compact ? 8 : 10, 12, compact ? 8 : 12),
+      padding: EdgeInsets.fromLTRB(20, compact ? 8 : 12, 16, compact ? 8 : 12),
       decoration: BoxDecoration(
         border: Border(top: BorderSide(color: colors.line)),
       ),
@@ -2040,20 +2468,20 @@ class _Footer extends StatelessWidget {
             child: TapRegion(
               groupId: _legendFocusTapGroup,
               child: Wrap(
-                spacing: 10,
+                spacing: editIptcLegend ? 16 : 10,
                 runSpacing: 6,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   _LegendButton(
                     color: _captionWarn,
-                    label: 'Red - Required to build captions',
+                    label: captionLegend,
                     selected: focus?.focus == _LegendFocus.caption,
                     onTap: focus?.onToggleCaption,
                     tooltipOff: 'Highlight fields required to build captions',
                   ),
                   _LegendButton(
                     color: _filingWarn,
-                    label: 'Yellow - Needed for filing to $filingName',
+                    label: filingLegend,
                     selected: focus?.focus == _LegendFocus.filing,
                     onTap: focus?.onToggleFiling,
                     tooltipOff:

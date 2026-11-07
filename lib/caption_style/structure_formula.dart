@@ -75,6 +75,39 @@ class StructureFormulaKeys {
   static bool isCaption(String key) => key == caption;
   static bool isGameId(String key) => key == gameId;
 
+  /// Preview colour-code group: date / geo / by / cap (matches Structure Editor HTML).
+  static String? previewColorGroup(String key) {
+    switch (key) {
+      case weekday:
+      case dlWeekday:
+      case month:
+      case dlMonth:
+      case day:
+      case dlDay:
+      case year:
+        return 'date';
+      case city:
+      case dlCity:
+      case state:
+      case dlState:
+      case country:
+      case dlCountry:
+      case countryCode:
+      case dlCountryCode:
+      case location:
+      case venue:
+        return 'geo';
+      case name:
+      case credit:
+      case byline:
+        return 'by';
+      case caption:
+        return 'cap';
+      default:
+        return null;
+    }
+  }
+
   /// Month variable (`{month}` / `{dl_month}`) — supports format optionIndex.
   static bool isMonth(String key) => key == month || key == dlMonth;
 

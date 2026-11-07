@@ -707,10 +707,11 @@ class StructureFormulaFieldState extends State<StructureFormulaField> {
           focusNode: _focus,
           enabled: widget.enabled,
           expands: widget.expands,
-          minLines: widget.expands ? null : 2,
+          // Content-height when not filling a parent (avoids empty formula box).
+          minLines: widget.expands ? null : 1,
           maxLines: widget.expands ? null : null,
           textAlignVertical: TextAlignVertical.top,
-          cursorColor: FfTokens.accentHover,
+          cursorColor: t.accent,
           enableInteractiveSelection: true,
           // Real Cut/Copy/Paste toolbar; suppressed while a chip Remove menu
           // is open so the two don't stack on secondary click.
@@ -755,8 +756,8 @@ class StructureFormulaFieldState extends State<StructureFormulaField> {
           },
           style: TextStyle(
             fontFamily: FfTokens.fontFamily,
-            fontSize: 16,
-            height: 32 / 16,
+            fontSize: 15,
+            height: 28 / 15,
             color: t.text,
           ),
           decoration: const InputDecoration(
@@ -773,14 +774,14 @@ class StructureFormulaFieldState extends State<StructureFormulaField> {
     final shell = AnimatedContainer(
       duration: const Duration(milliseconds: 120),
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
         color: t.sunken,
         borderRadius: BorderRadius.circular(10),
         boxShadow: focused
             ? [
                 BoxShadow(
-                  color: t.accent.withValues(alpha: 0.35),
+                  color: t.accent.withValues(alpha: 0.95),
                   blurRadius: 0,
                   spreadRadius: 1,
                 ),
@@ -1153,10 +1154,10 @@ class StructureFormulaPalette extends StatelessWidget {
   final VoidCallback onPointerDown;
   final bool compactPopup;
 
-  static const _groups = <(String, String, List<String>)>[
-    ('Date', '', StructureFormulaKeys.date),
-    ('Geographical', '', StructureFormulaKeys.locationGroup),
-    ('Byline', '', StructureFormulaKeys.bylineGroup),
+  static const _groups = <(String, List<String>)>[
+    ('Date', StructureFormulaKeys.date),
+    ('Geographical', StructureFormulaKeys.locationGroup),
+    ('Byline', StructureFormulaKeys.bylineGroup),
   ];
 
   Future<void> _openInsertMenu(BuildContext context, Rect anchor) async {
@@ -1180,7 +1181,7 @@ class StructureFormulaPalette extends StatelessWidget {
           ),
         ),
       );
-      for (final key in group.$3) {
+      for (final key in group.$2) {
         choices.add(
           FfMenuChoice<String>(
             value: key,
@@ -1240,6 +1241,7 @@ class StructureFormulaPalette extends StatelessWidget {
         ),
       );
     }
+    // Side-by-side columns stay above the fold (avoids Structure panel scroll).
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1263,7 +1265,7 @@ class StructureFormulaPalette extends StatelessWidget {
                   spacing: 6,
                   runSpacing: 6,
                   children: [
-                    for (final key in _groups[i].$3)
+                    for (final key in _groups[i].$2)
                       _PaletteButton(
                         label: StructureFormulaKeys.label(key),
                         dateline: StructureFormulaKeys.isDateline(key),
@@ -1303,7 +1305,7 @@ class _PaletteButton extends StatelessWidget {
     return Listener(
       onPointerDown: (_) => onPointerDown(),
       child: Material(
-        color: caption ? t.selected : FfTokens.card,
+        color: FfTokens.card,
         borderRadius: BorderRadius.circular(7),
         child: InkWell(
           onTap: onTap,
@@ -1311,15 +1313,15 @@ class _PaletteButton extends StatelessWidget {
           hoverColor: t.hover,
           child: Container(
             height: 28,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
+            padding: const EdgeInsets.fromLTRB(8, 0, 10, 0),
             alignment: Alignment.center,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 PhosphorIcon(
                   PhosphorIconsBold.plus,
-                  size: 12,
-                  color: caption ? FfTokens.accentHover : t.textTertiary,
+                  size: 11,
+                  color: caption ? FfTokens.accent2 : t.textTertiary,
                 ),
                 const SizedBox(width: 5),
                 Text(
@@ -1330,7 +1332,7 @@ class _PaletteButton extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                     letterSpacing: dateline ? 0.06 * 10 : 0,
                     height: 1,
-                    color: caption ? t.text : t.textSecondary,
+                    color: caption ? FfTokens.accent2 : t.textSecondary,
                   ),
                 ),
               ],

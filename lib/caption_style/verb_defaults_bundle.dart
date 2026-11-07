@@ -301,30 +301,111 @@ class VerbDefaultsBundle {
       verbOrder[entry.key] = List<String>.from(entry.value);
     }
 
+    List<String> categoriesFor(Map<String, dynamic> record, String fallback) {
+      final fromList = <String>[];
+      final rawList = record['categories'];
+      if (rawList is List) {
+        for (final value in rawList) {
+          final category = remapCategory(value.toString().trim());
+          if (category.isEmpty ||
+              category == 'Favorites' ||
+              category == 'All') {
+            continue;
+          }
+          if (!fromList.contains(category)) fromList.add(category);
+        }
+      }
+      if (fromList.isNotEmpty) return fromList;
+      final single = remapCategory(
+        (record['category'] ?? fallback).toString().trim(),
+      );
+      if (single.isEmpty || single == 'Favorites' || single == 'All') {
+        return const [];
+      }
+      return [single];
+    }
+
+    void placeInCategories(String key, List<String> categories) {
+      if (categories.isEmpty) return;
+      for (final list in verbOrder.values) {
+        list.remove(key);
+      }
+      for (final category in categories) {
+        addCategory(category);
+        verbOrder.putIfAbsent(category, () => <String>[]).add(key);
+      }
+    }
+
     // Place each override under its category; factory keys start in factory order.
     final placed = <String>{};
     for (final entry in verbOrder.entries) {
       placed.addAll(entry.value);
     }
     for (final entry in overrides.entries) {
+      final factoryCategory =
+          (factoryOverrides[entry.key]?['category'] ?? '').toString();
+      final declared = categoriesFor(
+        entry.value,
+        factoryCategory.isNotEmpty
+            ? factoryCategory
+            : (categoryOrder.isEmpty ? 'Other' : categoryOrder.first),
+      );
+      if (declared.length > 1) {
+        // Multi-category verbs stay in every listed bucket.
+        placeInCategories(entry.key, declared);
+        placed.add(entry.key);
+        continue;
+      }
       if (placed.contains(entry.key)) {
         // If admin moved a factory verb, relocate it.
-        final category =
-            (entry.value['category'] ?? categoryOrder.first).toString();
-        final factoryCategory =
-            (factoryOverrides[entry.key]?['category'] ?? '').toString();
+        final category = declared.isEmpty
+            ? (entry.value['category'] ?? categoryOrder.first).toString()
+            : declared.first;
         if (factoryCategory.isNotEmpty && category != factoryCategory) {
-          for (final list in verbOrder.values) {
-            list.remove(entry.key);
-          }
-          verbOrder.putIfAbsent(category, () => <String>[]).add(entry.key);
+          placeInCategories(entry.key, [category]);
         }
         continue;
       }
-      final category =
-          (entry.value['category'] ?? categoryOrder.first).toString();
+      final category = declared.isEmpty
+          ? (entry.value['category'] ?? categoryOrder.first).toString()
+          : declared.first;
       verbOrder.putIfAbsent(category, () => <String>[]).add(entry.key);
       placed.add(entry.key);
+    }
+
+    // Keep extra verbOrder memberships from the incoming catalog (so a verb
+    // listed under two categories in Firebase survives ensureComplete).
+    final incomingOrder = next['verbOrder'];
+    if (incomingOrder is Map) {
+      for (final entry in incomingOrder.entries) {
+        final category = remapCategory(entry.key.toString());
+        if (category.isEmpty ||
+            category == 'Favorites' ||
+            category == 'All') {
+          continue;
+        }
+        final values = entry.value;
+        if (values is! List) continue;
+        for (final value in values) {
+          final key = value.toString().trim();
+          if (key.isEmpty || !overrides.containsKey(key)) continue;
+          final declared = categoriesFor(
+            overrides[key]!,
+            (factoryOverrides[key]?['category'] ?? category).toString(),
+          );
+          // Only auto-add a second bucket when the record opts into multi
+          // categories, or when the incoming list matches the primary home.
+          if (declared.length > 1) {
+            if (!declared.contains(category)) continue;
+          } else if (declared.isNotEmpty && declared.first != category) {
+            continue;
+          }
+          addCategory(category);
+          final list = verbOrder.putIfAbsent(category, () => <String>[]);
+          if (!list.contains(key)) list.add(key);
+          placed.add(key);
+        }
+      }
     }
 
     // Keep custom verbs in order (ensureComplete used to drop them).
@@ -342,7 +423,6 @@ class VerbDefaultsBundle {
         if (category.isNotEmpty) customCategory[key] = category;
       }
     }
-    final incomingOrder = next['verbOrder'];
     if (incomingOrder is Map) {
       for (final entry in incomingOrder.entries) {
         final category = remapCategory(entry.key.toString());

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' show ImageFilter;
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
@@ -345,13 +346,30 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   bool get _postTeamsUnlocked =>
       _folderChosen && _sportChosen && _bothTeamsChosen;
 
+  /// Locked steps stay unreadable: heavy blur + fade until the prior pick.
   Widget _setupGate({required bool unlocked, required Widget child}) {
     return IgnorePointer(
       ignoring: !unlocked,
-      child: AnimatedOpacity(
-        opacity: unlocked ? 1 : 0.42,
-        duration: const Duration(milliseconds: 160),
+      child: TweenAnimationBuilder<double>(
+        tween: Tween<double>(end: unlocked ? 0.0 : 1.0),
+        duration: const Duration(milliseconds: 220),
         curve: Curves.easeOut,
+        builder: (context, t, child) {
+          final content = child!;
+          if (t <= 0.001) return content;
+          return ClipRect(
+            child: ImageFiltered(
+              imageFilter: ImageFilter.blur(
+                sigmaX: 7.5 * t,
+                sigmaY: 7.5 * t,
+              ),
+              child: Opacity(
+                opacity: 1.0 - (0.78 * t),
+                child: content,
+              ),
+            ),
+          );
+        },
         child: child,
       ),
     );
@@ -382,8 +400,8 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       if (!mounted) return;
       setState(() {});
 
-      final savedSport = (await _prefs!.getCurrentSport()).trim();
-      if (savedSport.isNotEmpty && _sports.contains(savedSport)) {
+      final savedSport = await _prefs!.getLastSelectedSport();
+      if (savedSport != null && _sports.contains(savedSport)) {
         // Favorites still apply. Last home/away picks do not — blank each launch.
         await _selectSport(savedSport, persist: false, restoreTeams: false);
       }
@@ -1680,60 +1698,67 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         color: FfTokens.sessionBg,
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final width = constraints.maxWidth;
+            final width =
+                constraints.maxWidth > 1270 ? 1270.0 : constraints.maxWidth;
             const compact = true;
             final stackTeams = width <= 1000;
             const padH = 20.0;
             const padV = 10.0;
             const gap = 8.0;
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(padH, padV, padH, padV),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildV4SetupCard(
-                    t,
-                    compact: compact,
-                    stackTeams: stackTeams,
-                  ),
-                  const SizedBox(height: gap),
-                  Expanded(
-                    child: _setupGate(
-                      unlocked: _postTeamsUnlocked,
-                      child: ValueListenableBuilder<bool>(
-                        valueListenable: AdminService.previewAsNonAdmin,
-                        builder: (context, _, __) {
-                          final showAdminSave =
-                              _postTeamsUnlocked &&
-                              AdminService.isCurrentUserAdminSync();
-                          return _buildV4CaptionCard(
-                            showAdminSave: showAdminSave,
-                          );
-                        },
+            return Align(
+              alignment: Alignment.center,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1270, maxHeight: 730),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(padH, padV, padH, padV),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildV4SetupCard(
+                        t,
+                        compact: compact,
+                        stackTeams: stackTeams,
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: gap),
-                  _setupGate(
-                    unlocked: _postTeamsUnlocked,
-                    child: _buildSessionStep(t, compact: compact),
-                  ),
-                  if (_error != null) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      _error!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontFamily: FfTokens.fontFamily,
-                        fontSize: 12,
-                        color: FfTokens.danger,
+                      const SizedBox(height: gap),
+                      Expanded(
+                        child: _setupGate(
+                          unlocked: _postTeamsUnlocked,
+                          child: ValueListenableBuilder<bool>(
+                            valueListenable: AdminService.previewAsNonAdmin,
+                            builder: (context, _, __) {
+                              final showAdminSave =
+                                  _postTeamsUnlocked &&
+                                  AdminService.isCurrentUserAdminSync();
+                              return _buildV4CaptionCard(
+                                showAdminSave: showAdminSave,
+                              );
+                            },
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
-                  const SizedBox(height: gap),
-                  _buildReadyBar(t, compact: compact),
-                ],
+                      const SizedBox(height: gap),
+                      _setupGate(
+                        unlocked: _postTeamsUnlocked,
+                        child: _buildSessionStep(t, compact: compact),
+                      ),
+                      if (_error != null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          _error!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontFamily: FfTokens.fontFamily,
+                            fontSize: 12,
+                            color: FfTokens.danger,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: gap),
+                      _buildReadyBar(t, compact: compact),
+                    ],
+                  ),
+                ),
               ),
             );
           },
@@ -1926,37 +1951,31 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                 ),
                 if (iptcNeedsAdd) ...[
                   const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      'Missing fields',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                        fontFamily: FfTokens.fontFamily,
-                        fontSize: 12,
-                        height: 1.1,
-                        fontWeight: FontWeight.w500,
-                        color: _missingCaptionIptc.isNotEmpty
-                            ? captionWarn
-                            : filingWarn,
-                      ),
+                  Text(
+                    'Missing fields',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 12,
+                      height: 1.1,
+                      fontWeight: FontWeight.w500,
+                      color: _missingCaptionIptc.isNotEmpty
+                          ? captionWarn
+                          : filingWarn,
                     ),
                   ),
                 ] else if (iptcComplete) ...[
                   const SizedBox(width: 8),
-                  const Flexible(
-                    child: Text(
-                      'Enough existing IPTC',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                        fontFamily: FfTokens.fontFamily,
-                        fontSize: 12,
-                        height: 1.1,
-                        color: FfTokens.sessionOk,
-                      ),
+                  const Text(
+                    'Enough existing IPTC',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 12,
+                      height: 1.1,
+                      color: FfTokens.sessionOk,
                     ),
                   ),
                 ] else if (chosen && _scanningIptc) ...[
@@ -2105,6 +2124,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
             _sport != 'soccer';
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             _buildV4FieldHeader(
               label: 'League',
@@ -2136,7 +2156,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
             _SessionSelect(
               value: _sport,
               hint: _leagueUnlocked
-                  ? 'Select league…'
+                  ? 'Select league'
                   : 'Pick a folder first',
               enabled: _leagueUnlocked,
               height: 38,
@@ -2230,6 +2250,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         _buildV4FieldHeader(
           label: 'Away  ·  Home',
@@ -2517,7 +2538,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
               _SessionSelect(
                 value: _sport,
                 hint: _leagueUnlocked
-                    ? 'Select league…'
+                    ? 'Select league'
                     : 'Pick a folder first',
                 enabled: _leagueUnlocked,
                 leading: PhosphorIcon(

@@ -17,7 +17,7 @@ Player player(String name, String number) => Player(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('Hallway custom verb writes against in pregame fold', () async {
+  test('Hallway Pre + team only uses before the game against', () async {
     SharedPreferences.setMockInitialValues({
       'custom_verbs_hockey': jsonEncode([
         {
@@ -42,9 +42,10 @@ void main() {
     controller
       ..sport = 'hockey'
       ..homeTeam = 'Toronto Maple Leafs'
-      ..awayTeam = 'Ottawa Senators'
-      ..captionTemplate = CaptionTemplate.getty().copyWith(
-        gameIdentifierText: 'in their NHL game',
+      ..awayTeam = 'Utah Mammoth'
+      ..captionTemplate = CaptionTemplate.applyGameIdentifierText(
+        CaptionTemplate.getty(),
+        'in their NHL game',
       );
     await controller.reloadVerbCatalog();
 
@@ -53,11 +54,191 @@ void main() {
     controller.setPre(true);
 
     final body = controller.buildCaptionBody();
-    expect(body, contains('walks the hallway tunnel against the Ottawa Senators'));
+    expect(
+      body,
+      contains(
+        'walks the hallway tunnel before the game against the Utah Mammoth',
+      ),
+    );
+    expect(body, isNot(contains('against the Utah Mammoth before the game')));
+    expect(
+      'before the game'.allMatches(body).length,
+      1,
+      reason: 'must not stack a second before the game after the opponent',
+    );
     expect(
       controller.buildCaptionSentence(),
-      contains('ahead of their NHL game'),
+      contains('before the game against the Utah Mammoth'),
     );
+    expect(
+      controller.buildCaptionSentence(),
+      contains('in their NHL game'),
+    );
+  });
+
+  test('Hallway Post + team only uses after the game against', () async {
+    SharedPreferences.setMockInitialValues({
+      'custom_verbs_hockey': jsonEncode([
+        {
+          'key': 'Hallway',
+          'label': 'Hallway',
+          'category': 'Non Game-Action',
+          'verbPhrase': 'walks the hallway tunnel',
+          'pluralPhrase': 'walk the hallway tunnel',
+          'wantsOpponent': true,
+          'omitAgainst': false,
+          'opponentJoiner': 'against',
+          'isCustom': true,
+        },
+      ]),
+      'verb_catalog_complete_hockey': true,
+      'current_sport': 'hockey',
+    });
+
+    final controller = CaptionV2Controller();
+    addTearDown(controller.dispose);
+    await controller.bootstrap();
+    controller
+      ..sport = 'hockey'
+      ..homeTeam = 'Toronto Maple Leafs'
+      ..awayTeam = 'Utah Mammoth'
+      ..captionTemplate = CaptionTemplate.applyGameIdentifierText(
+        CaptionTemplate.getty(),
+        'in their NHL game',
+      );
+    await controller.reloadVerbCatalog();
+
+    controller.selectPlayer(player('Sergei Bobrovsky', '72'), isHome: true);
+    controller.selectVerb('Hallway');
+    controller.setPost(true);
+
+    final body = controller.buildCaptionBody();
+    expect(
+      body,
+      contains(
+        'walks the hallway tunnel after the game against the Utah Mammoth',
+      ),
+    );
+    expect(body, isNot(contains('against the Utah Mammoth after the game')));
+    expect(body, isNot(contains('following the game')));
+    expect(
+      'after the game'.allMatches(body).length,
+      1,
+      reason: 'must not stack a second after the game after the opponent',
+    );
+    expect(
+      controller.buildCaptionSentence(),
+      contains('after the game against the Utah Mammoth'),
+    );
+    expect(
+      controller.buildCaptionSentence(),
+      contains('in their NHL game'),
+    );
+  });
+
+  test('Hallway Pre + opposing player skips against', () async {
+    SharedPreferences.setMockInitialValues({
+      'custom_verbs_hockey': jsonEncode([
+        {
+          'key': 'Hallway',
+          'label': 'Hallway',
+          'category': 'Non Game-Action',
+          'verbPhrase': 'walks the hallway tunnel',
+          'pluralPhrase': 'walk the hallway tunnel',
+          'wantsOpponent': true,
+          'omitAgainst': false,
+          'opponentJoiner': 'before playing',
+          'isCustom': true,
+        },
+      ]),
+      'verb_catalog_complete_hockey': true,
+      'current_sport': 'hockey',
+    });
+
+    final controller = CaptionV2Controller();
+    addTearDown(controller.dispose);
+    await controller.bootstrap();
+    controller
+      ..sport = 'hockey'
+      ..homeTeam = 'Toronto Maple Leafs'
+      ..awayTeam = 'Utah Mammoth'
+      ..captionTemplate = CaptionTemplate.getty().copyWith(
+        gameIdentifierText: '',
+        freeTextSnippets: const [''],
+      );
+    await controller.reloadVerbCatalog();
+
+    controller.selectPlayer(player('Sergei Bobrovsky', '72'), isHome: true);
+    controller.selectPlayer(player('Dylan Guenther', '11'), isHome: false);
+    controller.selectVerb('Hallway');
+    controller.setPre(true);
+
+    final body = controller.buildCaptionBody();
+    expect(
+      body,
+      contains(
+        'Sergei Bobrovsky #72 of the Toronto Maple Leafs and '
+        'Dylan Guenther #11 of the Utah Mammoth',
+      ),
+    );
+    expect(body, contains('walks the hallway tunnel before the game'));
+    expect(body, isNot(contains('against')));
+    expect(body, isNot(contains('before the game against')));
+    expect(body, isNot(contains('before playing')));
+    expect('before the game'.allMatches(body).length, 1);
+  });
+
+  test('Hallway Post + opposing player skips against', () async {
+    SharedPreferences.setMockInitialValues({
+      'custom_verbs_hockey': jsonEncode([
+        {
+          'key': 'Hallway',
+          'label': 'Hallway',
+          'category': 'Non Game-Action',
+          'verbPhrase': 'walks the hallway tunnel',
+          'pluralPhrase': 'walk the hallway tunnel',
+          'wantsOpponent': true,
+          'omitAgainst': false,
+          'opponentJoiner': 'after defeating',
+          'isCustom': true,
+        },
+      ]),
+      'verb_catalog_complete_hockey': true,
+      'current_sport': 'hockey',
+    });
+
+    final controller = CaptionV2Controller();
+    addTearDown(controller.dispose);
+    await controller.bootstrap();
+    controller
+      ..sport = 'hockey'
+      ..homeTeam = 'Toronto Maple Leafs'
+      ..awayTeam = 'Utah Mammoth'
+      ..captionTemplate = CaptionTemplate.getty().copyWith(
+        gameIdentifierText: '',
+        freeTextSnippets: const [''],
+      );
+    await controller.reloadVerbCatalog();
+
+    controller.selectPlayer(player('Sergei Bobrovsky', '72'), isHome: true);
+    controller.selectPlayer(player('Dylan Guenther', '11'), isHome: false);
+    controller.selectVerb('Hallway');
+    controller.setPost(true);
+
+    final body = controller.buildCaptionBody();
+    expect(
+      body,
+      contains(
+        'Sergei Bobrovsky #72 of the Toronto Maple Leafs and '
+        'Dylan Guenther #11 of the Utah Mammoth',
+      ),
+    );
+    expect(body, contains('walks the hallway tunnel after the game'));
+    expect(body, isNot(contains('against')));
+    expect(body, isNot(contains('after the game against')));
+    expect(body, isNot(contains('after defeating')));
+    expect(body, isNot(contains('following the game')));
+    expect('after the game'.allMatches(body).length, 1);
   });
 
   test('non-empty opponentJoiner implies wantsOpponent', () {
@@ -127,6 +308,49 @@ void main() {
     expect(catalog.byKey['Skates']?.opponentJoiner, isEmpty);
   });
 
+  test('pre with no opponent keeps before the game alone', () {
+    final controller = CaptionV2Controller()
+      ..sport = 'hockey'
+      ..homeTeam = 'Toronto Maple Leafs'
+      ..awayTeam = 'Utah Mammoth'
+      ..singleTeamMode = true
+      ..captionTemplate = CaptionTemplate.getty().copyWith(
+        gameIdentifierText: '',
+        freeTextSnippets: const [''],
+      );
+
+    controller.selectPlayer(player('Sergei Bobrovsky', '72'), isHome: true);
+    controller.selectVerb('Skates');
+    controller.setPre(true);
+
+    final body = controller.buildCaptionBody();
+    expect(body, contains('before the game'));
+    expect(body, isNot(contains('against')));
+    expect(body, isNot(contains('Utah Mammoth')));
+  });
+
+  test('post with no opponent keeps after the game alone', () {
+    final controller = CaptionV2Controller()
+      ..sport = 'hockey'
+      ..homeTeam = 'Toronto Maple Leafs'
+      ..awayTeam = 'Utah Mammoth'
+      ..singleTeamMode = true
+      ..captionTemplate = CaptionTemplate.getty().copyWith(
+        gameIdentifierText: '',
+        freeTextSnippets: const [''],
+      );
+
+    controller.selectPlayer(player('Sergei Bobrovsky', '72'), isHome: true);
+    controller.selectVerb('Skates');
+    controller.setPost(true);
+
+    final body = controller.buildCaptionBody();
+    expect(body, contains('after the game'));
+    expect(body, isNot(contains('following the game')));
+    expect(body, isNot(contains('against')));
+    expect(body, isNot(contains('Utah Mammoth')));
+  });
+
   test('Stands in Net caption includes against the other team', () async {
     SharedPreferences.setMockInitialValues({
       'verb_overrides_hockey': jsonEncode({
@@ -163,5 +387,4 @@ void main() {
     final body = controller.buildCaptionBody();
     expect(body, contains('stands in net against the Ottawa Senators'));
   });
-
 }

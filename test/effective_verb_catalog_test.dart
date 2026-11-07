@@ -157,4 +157,40 @@ void main() {
     expect(catalog.verbsByCategory['Offense']!.map((v) => v.key),
         contains('Shoots'));
   });
+
+  test('verbs can appear in multiple categories', () {
+    final catalog = EffectiveVerbCatalog.merge(
+      sport: 'hockey',
+      categoryOrder: const ['Offense', 'Defense', 'Goalie'],
+      verbOrder: const {
+        'Offense': ['Handles the Puck', 'Shoots'],
+        'Goalie': ['Saves', 'Handles the Puck'],
+      },
+      favorites: const {},
+      customVerbs: const [],
+      customWordings: const {},
+      overrides: const {
+        'Handles the Puck': {
+          'category': 'Goalie',
+          'categories': ['Offense', 'Goalie'],
+          'verbPhrase': 'handles the puck',
+        },
+      },
+      deletedVerbs: const {},
+      catalogComplete: true,
+    );
+
+    expect(
+      catalog.verbsByCategory['Offense']!.map((verb) => verb.key),
+      contains('Handles the Puck'),
+    );
+    expect(
+      catalog.verbsByCategory['Goalie']!.map((verb) => verb.key),
+      contains('Handles the Puck'),
+    );
+    expect(
+      catalog.byKey['Handles the Puck']!.categories,
+      containsAll(['Offense', 'Goalie']),
+    );
+  });
 }

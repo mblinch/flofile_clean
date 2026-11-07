@@ -186,11 +186,44 @@ class CaptionV2CaptionDomain {
     );
   }
 
+  /// Pre + opposing team (no named opposing player) folds timing into this
+  /// connector so captions do not stack a second "before the game".
+  static const preGameOpponentJoiner = 'before the game against';
+
+  /// Post + opposing team (no named opposing player) folds timing into this
+  /// connector so captions do not stack a second "after the game".
+  static const postGameOpponentJoiner = 'after the game against';
+
+  /// Whether Pre should use [preGameOpponentJoiner] for a team-only matchup.
+  ///
+  /// When named opposing players are already in the caption, skip the against
+  /// joiner — those names imply the matchup; timing is plain "before the game".
+  static bool usePreGameOpponentJoiner({
+    required bool preGame,
+    required bool hasNamedOpposingPlayers,
+  }) =>
+      preGame && !hasNamedOpposingPlayers;
+
+  /// Whether Post should use [postGameOpponentJoiner] for a team-only matchup.
+  ///
+  /// When named opposing players are already in the caption, skip the against
+  /// joiner — those names imply the matchup; timing is plain "after the game".
+  static bool usePostGameOpponentJoiner({
+    required bool postGame,
+    required bool hasNamedOpposingPlayers,
+  }) =>
+      postGame && !hasNamedOpposingPlayers;
+
   /// Joins an action to a selected opponent or the opposing team.
   ///
   /// V1 gives a few verbs a more precise participant role than "against".
   /// For the default case, [opponentJoiner] is used exactly (trimmed);
   /// empty means no joiner word. Defaults to `against`.
+  ///
+  /// When [preGame] / [postGame] is true and there are no named opposing
+  /// players, the default path forces the matching timing joiner. Callers
+  /// should skip this entirely when Pre/Post + named opposing players
+  /// (both teams selected).
   static String withOpponent({
     required String verb,
     required String action,
@@ -198,6 +231,8 @@ class CaptionV2CaptionDomain {
     String? opposingPlayers,
     bool omitAgainst = false,
     String opponentJoiner = 'against',
+    bool preGame = false,
+    bool postGame = false,
   }) {
     final named = opposingPlayers?.trim();
     final target = named != null && named.isNotEmpty
@@ -214,10 +249,13 @@ class CaptionV2CaptionDomain {
       case 'Contests':
         return '$action by $target';
       default:
-        // Legacy: omitAgainst with no joiner text → no connector.
-        final joiner = opponentJoiner.trim().isEmpty && omitAgainst
-            ? ''
-            : opponentJoiner;
+        final joiner = preGame
+            ? preGameOpponentJoiner
+            : postGame
+                ? postGameOpponentJoiner
+                : (opponentJoiner.trim().isEmpty && omitAgainst
+                    ? ''
+                    : opponentJoiner);
         return '$action${opponentConnector(opponentJoiner: joiner)} $target';
     }
   }

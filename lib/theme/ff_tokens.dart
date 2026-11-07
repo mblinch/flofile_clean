@@ -46,7 +46,9 @@ class FfTokens extends ThemeExtension<FfTokens> {
   static const nocturneAc = Color(0xFF4A7A96);
   static const accentHover = Color(0xFF5A8EAB);
   static const accent2 = Color(0xFFE8763A); // warm orange — labels, emphasis
-  static const gold = Color(0xFFE8C547); // admin / status badge
+  static const gold = Color(0xFFE8C547); // admin / status badge / date colour-code
+  /// Byline (Name / Credit) colour-code in Structure preview.
+  static const bylinePreview = Color(0xFF9CC3DA);
   static const inkOnGold = Color(0xFF1A1606);
 
   /// New Session screen — same Nocturne surfaces/accents as the rest of the app.

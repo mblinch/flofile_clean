@@ -2443,24 +2443,14 @@ class _TopChrome extends StatelessWidget {
           final compact = constraints.maxWidth < 420;
           return Row(
             children: [
-              if (c != null && onResetSession != null)
-                _SessionInfoBar(
+              if (c != null) ...[
+                _GameChip(
                   controller: c,
                   tokens: t,
-                  compact: compact,
-                  onNewSession: () async {
-                    final startNew = await showAppConfirmDialog(
-                      context: context,
-                      title: 'New session',
-                      message:
-                          'Leave this caption session and start a new one?',
-                      cancelLabel: 'Cancel',
-                      confirmLabel: 'New session',
-                    );
-                    if (startNew == true) onResetSession!();
-                  },
-                )
-              else if (onResetSession != null)
+                ),
+                if (onResetSession != null) const SizedBox(width: 8),
+              ],
+              if (onResetSession != null)
                 _NewSessionButton(
                   tokens: t,
                   compact: compact,
@@ -2768,114 +2758,55 @@ Future<void> _openGameGoogleSearch(CaptionV2Controller controller) async {
   }
 }
 
-/// Shared surface sized to content: session/matchup + Google, then New session.
-class _SessionInfoBar extends StatelessWidget {
-  const _SessionInfoBar({
-    required this.controller,
-    required this.tokens,
-    required this.onNewSession,
-    this.compact = false,
-  });
-
-  final CaptionV2Controller controller;
-  final FfTokens tokens;
-  final VoidCallback onNewSession;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 32,
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        borderRadius: BorderRadius.circular(9),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _GameChip(
-            controller: controller,
-            tokens: tokens,
-            embedded: true,
-          ),
-          Container(
-            width: 1,
-            height: 18,
-            color: tokens.divider,
-          ),
-          _NewSessionButton(
-            tokens: tokens,
-            compact: compact,
-            onTap: onNewSession,
-            embedded: true,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _NewSessionButton extends StatelessWidget {
   const _NewSessionButton({
     required this.tokens,
     required this.onTap,
     this.compact = false,
-    this.embedded = false,
   });
 
   final FfTokens tokens;
   final VoidCallback onTap;
   final bool compact;
-  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
     return Material(
       color: Colors.transparent,
-      borderRadius: BorderRadius.circular(embedded ? 0 : 9),
+      borderRadius: BorderRadius.circular(9),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(embedded ? 8 : 9),
+        borderRadius: BorderRadius.circular(9),
         hoverColor: tokens.hover,
-        child: Tooltip(
-          message: 'New session',
-          child: Container(
-            height: 32,
-            padding: EdgeInsets.fromLTRB(
-              embedded ? 4 : (compact ? 8 : 10),
-              0,
-              compact ? 8 : 10,
-              0,
-            ),
-            decoration: embedded
-                ? null
-                : BoxDecoration(
-                    color: tokens.surface,
-                    borderRadius: BorderRadius.circular(9),
+        child: Container(
+          height: 32,
+          padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 10),
+          decoration: BoxDecoration(
+            color: tokens.surface,
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                PhosphorIconsRegular.plusCircle,
+                size: 16,
+                color: tokens.textSecondary,
+              ),
+              if (!compact) ...[
+                const SizedBox(width: 6),
+                Text(
+                  'New session',
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    height: 1,
+                    color: tokens.text,
                   ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  PhosphorIconsRegular.plusCircle,
-                  size: 16,
-                  color: tokens.textSecondary,
                 ),
-                if (!compact) ...[
-                  const SizedBox(width: 6),
-                  Text(
-                    'New session',
-                    style: TextStyle(
-                      fontFamily: FfTokens.fontFamily,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      height: 1,
-                      color: tokens.text,
-                    ),
-                  ),
-                ],
               ],
-            ),
+            ],
           ),
         ),
       ),
@@ -2906,7 +2837,7 @@ class _GameChip extends StatelessWidget {
     final venue = controller.venue.trim();
     final labelStyle = TextStyle(
       fontFamily: FfTokens.fontFamily,
-      fontSize: 11,
+      fontSize: 13,
       fontWeight: FontWeight.w400,
       height: 1,
       color: tokens.text,
@@ -2949,7 +2880,10 @@ class _GameChip extends StatelessWidget {
                   const SizedBox(width: 5),
                 ],
                 Text(sessionBits.join(' · '), style: labelStyle),
-                const SizedBox(width: 6),
+                Text(
+                  ' · ',
+                  style: labelStyle.copyWith(color: tokens.textTertiary),
+                ),
                 PhosphorIcon(
                   PhosphorIconsRegular.magnifyingGlass,
                   size: 12,
@@ -2960,7 +2894,7 @@ class _GameChip extends StatelessWidget {
                   'Search game info',
                   style: TextStyle(
                     fontFamily: FfTokens.fontFamily,
-                    fontSize: 11,
+                    fontSize: 13,
                     fontWeight: FontWeight.w500,
                     height: 1,
                     color: searchColor,

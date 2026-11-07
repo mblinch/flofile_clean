@@ -49,4 +49,86 @@ void main() {
       'is hit by a pitch by Gerrit Cole #45 of the Yankees',
     );
   });
+
+  test('preGame forces before the game against joiner', () {
+    expect(
+      CaptionV2CaptionDomain.withOpponent(
+        verb: 'Hallway',
+        action: 'takes part in player introductions',
+        opponentTeam: 'Utah Mammoth',
+        opponentJoiner: 'before playing',
+        preGame: true,
+      ),
+      'takes part in player introductions before the game against the Utah Mammoth',
+    );
+    expect(
+      CaptionV2CaptionDomain.preGameOpponentJoiner,
+      'before the game against',
+    );
+  });
+
+  test('postGame forces after the game against joiner', () {
+    expect(
+      CaptionV2CaptionDomain.withOpponent(
+        verb: 'Hallway',
+        action: 'takes part in player introductions',
+        opponentTeam: 'Utah Mammoth',
+        opponentJoiner: 'after defeating',
+        postGame: true,
+      ),
+      'takes part in player introductions after the game against the Utah Mammoth',
+    );
+    expect(
+      CaptionV2CaptionDomain.postGameOpponentJoiner,
+      'after the game against',
+    );
+  });
+
+  test('usePreGameOpponentJoiner is false when named opposing players exist', () {
+    expect(
+      CaptionV2CaptionDomain.usePreGameOpponentJoiner(
+        preGame: true,
+        hasNamedOpposingPlayers: false,
+      ),
+      isTrue,
+    );
+    expect(
+      CaptionV2CaptionDomain.usePreGameOpponentJoiner(
+        preGame: true,
+        hasNamedOpposingPlayers: true,
+      ),
+      isFalse,
+    );
+    expect(
+      CaptionV2CaptionDomain.usePreGameOpponentJoiner(
+        preGame: false,
+        hasNamedOpposingPlayers: false,
+      ),
+      isFalse,
+    );
+  });
+
+  test('usePostGameOpponentJoiner is false when named opposing players exist', () {
+    expect(
+      CaptionV2CaptionDomain.usePostGameOpponentJoiner(
+        postGame: true,
+        hasNamedOpposingPlayers: false,
+      ),
+      isTrue,
+    );
+    expect(
+      CaptionV2CaptionDomain.usePostGameOpponentJoiner(
+        postGame: true,
+        hasNamedOpposingPlayers: true,
+      ),
+      isFalse,
+    );
+    expect(
+      CaptionV2CaptionDomain.usePostGameOpponentJoiner(
+        postGame: false,
+        hasNamedOpposingPlayers: false,
+      ),
+      isFalse,
+    );
+  });
 }

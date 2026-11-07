@@ -686,7 +686,10 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       final hasGameSegment = RegExp(
         r'\b(inning|innings|quarter|quarters|period|periods|halftime)\b|'
         r'\b(first|second)\s+half\b|'
-        r'\b(top|bottom)\s+of\s+the\b',
+        r'\b(top|bottom)\s+of\s+the\b|'
+        r'\b(before|following)\s+the\s+game\b|'
+        r'\b(ahead of|following)\s+their\b|'
+        r'\bahead of\s+(?:the\s+game|playing)\b',
         caseSensitive: false,
       ).hasMatch(sessionBody);
       if (hasGameSegment) return sessionBody;
@@ -6144,34 +6147,33 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
   }
 
   Widget _gettyPreviewToggle() {
+    // HTML top-bar `.sg` — sunken track, selected segment with accent soft fill.
     Widget pill(String label, bool selected, VoidCallback onTap) {
       return Material(
-        color: selected ? _t.sunken : Colors.transparent,
-        borderRadius: BorderRadius.circular(7),
+        color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(7),
-          child: Container(
-            height: 30,
-            padding: const EdgeInsets.symmetric(horizontal: 9),
+          borderRadius: BorderRadius.circular(6),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            height: 32,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(7),
-              border: Border.all(
-                color: selected
-                    ? _t.accent.withValues(alpha: 0.85)
-                    : _t.text.withValues(alpha: 0.16),
-                width: selected ? 1 : 0.5,
-              ),
+              color: selected ? _t.selected : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+              border: selected
+                  ? Border.all(color: _t.accentEdge)
+                  : Border.all(color: Colors.transparent),
             ),
             child: Text(
               label,
               style: TextStyle(
                 fontFamily: FfTokens.fontFamily,
-                fontSize: 11,
+                fontSize: 12,
                 height: 1,
                 fontWeight: FontWeight.w600,
-                color: selected ? _t.text : _t.text.withValues(alpha: 0.55),
+                color: selected ? _t.text : _t.textTertiary,
               ),
             ),
           ),
@@ -6180,17 +6182,23 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     }
 
     final isUsa = _selectedWire != WireStyle.gettyInternational;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        pill('USA', isUsa, () => _setGettyTerritory(unitedStates: true)),
-        const SizedBox(width: 4),
-        pill(
-          'International',
-          !isUsa,
-          () => _setGettyTerritory(unitedStates: false),
-        ),
-      ],
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: _t.sunken,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          pill('USA', isUsa, () => _setGettyTerritory(unitedStates: true)),
+          pill(
+            'International',
+            !isUsa,
+            () => _setGettyTerritory(unitedStates: false),
+          ),
+        ],
+      ),
     );
   }
 
@@ -6876,44 +6884,37 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
               ),
             ],
             const Spacer(),
+            // HTML `.gh` — ghost, no border until hover.
             Material(
-              color: FfTokens.card,
-              borderRadius: BorderRadius.circular(7),
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(9),
               child: InkWell(
                 onTap: _shuffleCaptionSample,
-                borderRadius: BorderRadius.circular(7),
+                borderRadius: BorderRadius.circular(9),
+                hoverColor: t.hover,
                 child: Tooltip(
                   message: 'Shuffle sample',
                   child: Container(
-                    height: 30,
+                    height: 36,
                     padding: EdgeInsets.symmetric(
                       horizontal: veryTight ? 8 : 12,
                     ),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(7),
-                      boxShadow: [
-                        BoxShadow(
-                          color: t.divider,
-                          blurRadius: 0,
-                          spreadRadius: 1,
-                        ),
-                      ],
-                    ),
+                    alignment: Alignment.center,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         PhosphorIcon(
                           PhosphorIconsRegular.shuffle,
-                          size: 14,
+                          size: 16,
                           color: t.textSecondary,
                         ),
                         if (!veryTight) ...[
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 7),
                           Text(
                             'Shuffle sample',
                             style: TextStyle(
                               fontFamily: FfTokens.fontFamily,
-                              fontSize: 12,
+                              fontSize: 13,
                               fontWeight: FontWeight.w600,
                               height: 1,
                               color: t.textSecondary,
@@ -7003,22 +7004,22 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
   }) {
     final t = _ffOf(context);
     return SizedBox(
-      height: 30,
+      height: 36,
       width: width,
       child: Stack(
         children: [
           Positioned.fill(
             child: IgnorePointer(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
+                padding: const EdgeInsets.fromLTRB(12, 0, 10, 0),
                 decoration: BoxDecoration(
                   color: t.sunken,
-                  borderRadius: BorderRadius.circular(7),
+                  borderRadius: BorderRadius.circular(9),
                 ),
                 child: Row(
                   children: [
-                    PhosphorIcon(icon, size: 14, color: t.textTertiary),
-                    const SizedBox(width: 5),
+                    PhosphorIcon(icon, size: 16, color: t.textTertiary),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         label,
@@ -7026,7 +7027,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontFamily: FfTokens.fontFamily,
-                          fontSize: 12,
+                          fontSize: 13,
                           fontWeight: FontWeight.w600,
                           height: 1,
                           color: t.text,
@@ -7061,16 +7062,16 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       _structureFormulaString,
       sport: _sessionSport,
     );
-    // Match StructureFormulaField body text (fontSize 16).
+    // Match StructureFormulaField body text.
     const fontSize = 16.0;
     const lineHeight = 22.0;
     return Container(
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(
-        embed ? 10 : 16,
-        embed ? 6 : 14,
-        embed ? 10 : 16,
-        embed ? 6 : 14,
+        embed ? 10 : 14,
+        embed ? 6 : 10,
+        embed ? 10 : 14,
+        embed ? 6 : 10,
       ),
       decoration: BoxDecoration(
         color: t.surface,
@@ -7095,7 +7096,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                 const Spacer(),
                 Material(
                   color: _structurePreviewColorCode
-                      ? t.sunken
+                      ? t.selected
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(6),
                   child: InkWell(
@@ -7112,31 +7113,41 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: _structurePreviewColorCode
-                              ? t.accent.withValues(alpha: 0.85)
-                              : t.text.withValues(alpha: 0.16),
-                          width: _structurePreviewColorCode ? 1 : 0.5,
-                        ),
+                        border: _structurePreviewColorCode
+                            ? Border.all(color: t.accentEdge)
+                            : null,
                       ),
-                      child: Text(
-                        'Colour code',
-                        style: TextStyle(
-                          fontFamily: FfTokens.fontFamily,
-                          fontSize: 11,
-                          height: 1,
-                          fontWeight: FontWeight.w600,
-                          color: _structurePreviewColorCode
-                              ? t.text
-                              : t.text.withValues(alpha: 0.55),
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          PhosphorIcon(
+                            PhosphorIconsRegular.palette,
+                            size: 13,
+                            color: _structurePreviewColorCode
+                                ? t.text
+                                : t.textSecondary,
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            'Colour code',
+                            style: TextStyle(
+                              fontFamily: FfTokens.fontFamily,
+                              fontSize: 11,
+                              height: 1,
+                              fontWeight: FontWeight.w600,
+                              color: _structurePreviewColorCode
+                                  ? t.text
+                                  : t.textSecondary,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 ),
               ],
             ),
-          if (!embed) const SizedBox(height: 8),
+          if (!embed) const SizedBox(height: 6),
           Builder(
             builder: (context) {
               // Resolve values, then emit with pending geo-glue so empty
@@ -7195,25 +7206,27 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                     }
                     flushGlue();
                     final hot = _structureHoverRef?.slot == ref.slot;
-                    final isCaption =
-                        StructureFormulaKeys.isCaption(key);
-                    // Off: plain white. On: Structure-chip colours
-                    // (orange caption, teal wash on other slots).
+                    // Colour code: date=gold, geo=green, by=blue, cap=orange
+                    // (HTML `.cap.cc .v[data-g=…]`). Hover only adds wash.
                     final Color labelColor;
                     final Color? labelBg;
                     if (!colorCode) {
                       labelColor = t.text;
                       labelBg = hot ? FfTokens.sessionHot : null;
-                    } else if (isCaption) {
-                      labelColor = FfTokens.accent2;
-                      labelBg = hot
-                          ? FfTokens.accent2.withValues(alpha: 0.28)
-                          : FfTokens.accent2.withValues(alpha: 0.16);
                     } else {
-                      labelColor = FfTokens.accentHover;
-                      labelBg = hot
-                          ? FfTokens.nocturneAccentDeep
-                          : FfTokens.sessionHot;
+                      switch (StructureFormulaKeys.previewColorGroup(key)) {
+                        case 'date':
+                          labelColor = FfTokens.gold;
+                        case 'geo':
+                          labelColor = FfTokens.sessionOk;
+                        case 'by':
+                          labelColor = FfTokens.bylinePreview;
+                        case 'cap':
+                          labelColor = FfTokens.accent2;
+                        default:
+                          labelColor = t.text;
+                      }
+                      labelBg = hot ? FfTokens.sessionHot : null;
                     }
                     // Keep leading/trailing spaces outside the highlight so
                     // you can see whether a variable ends with a space.
@@ -7253,7 +7266,9 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                     fontFamily: FfTokens.fontFamily,
                     fontSize: fontSize,
                     height: lineHeight / fontSize,
-                    color: t.text,
+                    // Literals stay muted; resolved slots paint as [t.text]
+                    // (or group colour when Colour code is on).
+                    color: t.textSecondary,
                   ),
                   children: spans,
                 ),
@@ -7710,7 +7725,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
   }
 
   List<Widget> _nocturnePlayerOutputOptionGroups({bool compact = false}) {
-    final gap = compact ? 2.0 : 6.0;
+    final gap = compact ? 2.0 : 8.0;
     final specs = _playerOutputToggleSpecs(compact: compact);
     if (compact) {
       // 2-col rows. When Team is Before, "Team's" sits beside Team so
@@ -7745,23 +7760,22 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       }
       return rows;
     }
+    // HTML v2: one option group for all player toggles, then IPTC toggles.
+    // Segmented controls are fixed 196px wide (HTML `.or .sg`).
+    Widget switchControl(List<(String, VoidCallback, bool)> options) {
+      return SizedBox(
+        width: 196,
+        child: _nocturneTwoOptionSwitch(options: options, expand: true),
+      );
+    }
+
     return [
       _nocturneOptionGroup(
         children: [
-          for (final spec in specs.take(4))
+          for (final spec in specs)
             _nocturneOptionRow(
               label: spec.$1,
-              control: _nocturneTwoOptionSwitch(options: spec.$2),
-            ),
-        ],
-      ),
-      SizedBox(height: gap),
-      _nocturneOptionGroup(
-        children: [
-          for (final spec in specs.skip(4))
-            _nocturneOptionRow(
-              label: spec.$1,
-              control: _nocturneTwoOptionSwitch(options: spec.$2),
+              control: switchControl(spec.$2),
             ),
         ],
       ),
@@ -7807,44 +7821,58 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     return Container(
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(
-        compact ? 10 : 14,
         compact ? 10 : 12,
-        compact ? 10 : 14,
+        compact ? 10 : 10,
         compact ? 10 : 12,
+        compact ? 10 : 10,
       ),
       decoration: BoxDecoration(
         color: t.surface,
         borderRadius: BorderRadius.horizontal(
-          left: Radius.circular(compact ? 0 : 14),
-          right: Radius.circular(compact ? 10 : 14),
+          left: Radius.circular(compact ? 0 : 12),
+          right: Radius.circular(compact ? 10 : 12),
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(
-                'PLAYER OUTPUT',
-                style: TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontSize: compact ? 10 : 11,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.1,
-                  color: t.textTertiary,
+          // Full editor: label only — sample lives in Preview.
+          // Session embed keeps the compact inline sample for a tight layout.
+          if (compact)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  'PLAYER OUTPUT',
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.1,
+                    color: t.textTertiary,
+                  ),
                 ),
-              ),
-              SizedBox(width: compact ? 8 : 10),
-              Expanded(
-                child: _nocturnePlayerSample(
-                  playerPreviewText,
-                  compact: compact,
-                  inline: true,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _nocturnePlayerSample(
+                    playerPreviewText,
+                    compact: true,
+                    inline: true,
+                  ),
                 ),
+              ],
+            )
+          else
+            Text(
+              'PLAYER OUTPUT',
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1.1,
+                color: t.textTertiary,
               ),
-            ],
-          ),
+            ),
           const SizedBox(height: 8),
           Expanded(
             child: SingleChildScrollView(
@@ -7948,27 +7976,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                   color: t.textTertiary,
                 ),
               ),
-              if (!embed) ...[
-                const SizedBox(width: 8),
-                Text(
-                  'One master per wire',
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: FfTokens.accentHover,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  'Type freely · pieces insert at the cursor',
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 10,
-                    color: t.textTertiary,
-                  ),
-                ),
-              ] else ...[
+              if (embed) ...[
                 // Keep + visible above the fold — chips scroll underneath.
                 const Spacer(),
                 _nocturneStructureAddPalette(),
@@ -7979,24 +7987,18 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
           Expanded(
             child: embed
                 ? _nocturneStructureFormulaField(expands: true)
-                : LayoutBuilder(
-                    builder: (context, constraints) {
-                      return SingleChildScrollView(
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            minHeight: constraints.maxHeight,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _nocturneStructureFormulaField(),
-                              const SizedBox(height: 8),
-                              _nocturneStructureAddPalette(),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
+                // Shrink-wrap the formula to content; palette sits directly under.
+                : Align(
+                    alignment: Alignment.topCenter,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _nocturneStructureFormulaField(),
+                        const SizedBox(height: 8),
+                        _nocturneStructureAddPalette(),
+                      ],
+                    ),
                   ),
           ),
         ],
@@ -8066,20 +8068,20 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     final dirty = _structureEditorDirty;
     return SizedBox(
       width: double.infinity,
-      height: 52,
+      height: 56,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: t.surface,
           border: Border(top: BorderSide(color: t.divider)),
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Row(
             children: [
               if (dirty) ...[
                 Container(
-                  width: 7,
-                  height: 7,
+                  width: 8,
+                  height: 8,
                   decoration: const BoxDecoration(
                     color: FfTokens.accent2,
                     shape: BoxShape.circle,
@@ -8090,14 +8092,14 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                   'Unsaved changes',
                   style: TextStyle(
                     fontFamily: FfTokens.fontFamily,
-                    fontSize: 12,
+                    fontSize: 13,
                     color: t.textSecondary,
                   ),
                 ),
               ] else ...[
                 PhosphorIcon(
                   PhosphorIconsFill.checkCircle,
-                  size: 14,
+                  size: 16,
                   color: FfTokens.sessionOk,
                 ),
                 const SizedBox(width: 8),
@@ -8105,56 +8107,67 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                   'Saved as default',
                   style: TextStyle(
                     fontFamily: FfTokens.fontFamily,
-                    fontSize: 12,
+                    fontSize: 13,
                     color: t.textSecondary,
                   ),
                 ),
               ],
               const Spacer(),
-              TextButton(
-                onPressed: dirty ? _discardStructureEdits : null,
-                style: TextButton.styleFrom(
-                  foregroundColor: t.textSecondary,
-                  disabledForegroundColor:
-                      t.textSecondary.withValues(alpha: 0.35),
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  minimumSize: const Size(0, 30),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(7),
+              // HTML `.ghost:disabled{display:none}` — hide Discard when clean.
+              if (dirty) ...[
+                TextButton(
+                  onPressed: _discardStructureEdits,
+                  style: TextButton.styleFrom(
+                    foregroundColor: t.textSecondary,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    minimumSize: const Size(0, 36),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                  ),
+                  child: const Text(
+                    'Discard',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
-                child: const Text(
-                  'Discard',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                ),
-              ),
-              const SizedBox(width: 6),
+                const SizedBox(width: 8),
+              ],
               Opacity(
-                opacity: dirty ? 1 : 0.35,
+                opacity: dirty ? 1 : 0.55,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(7),
-                    gradient: const LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Color(0xFF243848),
-                        Color(0xFF15242E),
-                        Color(0xFF0E181F),
-                      ],
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: t.accent.withValues(alpha: 0.95),
-                        blurRadius: 0,
-                        spreadRadius: 1,
-                      ),
-                      BoxShadow(
-                        color: t.accent.withValues(alpha: 0.22),
-                        blurRadius: 12,
-                      ),
-                    ],
+                    borderRadius: BorderRadius.circular(9),
+                    gradient: dirty
+                        ? const LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Color(0xFF243848),
+                              Color(0xFF15242E),
+                              Color(0xFF0E181F),
+                            ],
+                          )
+                        : null,
+                    border: dirty
+                        ? null
+                        : Border.all(color: t.divider),
+                    boxShadow: dirty
+                        ? [
+                            BoxShadow(
+                              color: t.accent.withValues(alpha: 0.95),
+                              blurRadius: 0,
+                              spreadRadius: 1,
+                            ),
+                            BoxShadow(
+                              color: t.accent.withValues(alpha: 0.25),
+                              blurRadius: 18,
+                            ),
+                          ]
+                        : null,
                   ),
                   child: Material(
                     color: Colors.transparent,
@@ -8162,18 +8175,18 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                       onTap: dirty
                           ? () => unawaited(_saveStructureAsDefault())
                           : null,
-                      borderRadius: BorderRadius.circular(7),
-                      child: const SizedBox(
-                        height: 30,
+                      borderRadius: BorderRadius.circular(9),
+                      child: SizedBox(
+                        height: 36,
                         child: Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16),
+                          padding: const EdgeInsets.symmetric(horizontal: 18),
                           child: Center(
                             child: Text(
                               'Save as default',
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: 13,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.white,
+                                color: dirty ? Colors.white : t.textTertiary,
                               ),
                             ),
                           ),
@@ -8203,9 +8216,9 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
           child: Padding(
             padding: EdgeInsets.fromLTRB(
               embed ? 4 : 12,
-              embed ? 2 : 12,
+              embed ? 2 : 10,
               embed ? 4 : 12,
-              embed ? 2 : 12,
+              embed ? 2 : 10,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -8213,22 +8226,25 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                 // New session hosts wire + shuffle on the step title row.
                 if (!embed) ...[
                   _nocturneTopBar(),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                 ],
                 _nocturnePreviewPanel(
                   sampleCaption: sampleCaption,
                   sampleAgency: sampleAgency,
                 ),
-                SizedBox(height: embed ? 4 : 10),
+                SizedBox(height: embed ? 4 : 8),
                 Expanded(
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Structure fills all leftover width; Player Output is a
-                      // fixed column so no dead gap between the boxes.
-                      Expanded(child: _nocturneStructurePanel()),
+                      // Structure fills leftover width; Player Output fixed.
+                      Expanded(
+                        flex: 155,
+                        child: _nocturneStructurePanel(),
+                      ),
+                      SizedBox(width: embed ? 0 : 8),
                       SizedBox(
-                        width: embed ? 400 : 440,
+                        width: embed ? 400 : 340,
                         child: _nocturnePlayerOutputPanel(
                           playerPreviewText,
                           compact: embed,

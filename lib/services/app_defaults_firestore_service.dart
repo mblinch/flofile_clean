@@ -112,7 +112,9 @@ class AppDefaultsCatalog {
 
   Map<String, dynamic>? sportVerbSettings(String sport) {
     final key = sport.toLowerCase().trim();
-    final raw = verbSettingsBySport[key];
+    final raw = verbSettingsBySport[key] ??
+        // WNBA shares the basketball verb catalog; no separate Firebase slice.
+        (key == 'wnba' ? verbSettingsBySport['basketball'] : null);
     if (raw == null) return null;
     return Map<String, dynamic>.from(raw);
   }
