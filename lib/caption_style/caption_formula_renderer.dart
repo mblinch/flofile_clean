@@ -1713,9 +1713,10 @@ class CaptionFormulaRenderer {
     String joined = '';
 
     if (hasGlueSegments) {
-      // Hold Structure glue across empty City/State/Country (and any other
-      // empty content) so "Toronto, , Canada" does not appear. Getty auto-adapt
-      // and Imagn Structure writing both need this.
+      // Hold only geo-style Structure glue ("," ";" "/" "-") across empty
+      // City/State/Country so "Toronto, , Canada" does not appear. Literals
+      // like "(Photo by " / ")" must emit immediately — otherwise a trailing
+      // ")" chip is held forever and never written to IPTC.
       final deferEmptyGeoGlue = _shouldDeferGlueForEmptyGeo(template);
       String? pendingGlue;
       for (var i = 0; i < n; i++) {
@@ -1730,11 +1731,19 @@ class CaptionFormulaRenderer {
             s == CaptionSegment.separator;
         if (isGlue) {
           if (part.isEmpty) continue;
-          if (deferEmptyGeoGlue) {
-            // Keep the latest glue before the next content piece so an empty
-            // geo field (auto-adapt) does not stack ", ," separators.
+          if (deferEmptyGeoGlue && _isDeferableGeoGlue(part)) {
+            // Keep the latest geo glue before the next content piece so an
+            // empty geo field (auto-adapt) does not stack ", ," separators.
             pendingGlue = part;
             continue;
+          }
+          if (deferEmptyGeoGlue &&
+              pendingGlue != null &&
+              pendingGlue.isNotEmpty) {
+            joined = joined.isEmpty
+                ? pendingGlue
+                : _joinWithoutDuplicateOverlap(joined, pendingGlue);
+            pendingGlue = null;
           }
           joined = joined.isEmpty
               ? part
@@ -1755,6 +1764,9 @@ class CaptionFormulaRenderer {
         joined =
             joined.isEmpty ? part : _joinWithoutDuplicateOverlap(joined, part);
       }
+      // Drop leftover geo glue after a trailing empty field (e.g. empty
+      // Country). Non-geo literals were already emitted above.
+      pendingGlue = null;
     } else {
       final gaps = effectiveSegmentGaps(template);
       for (var i = 0; i < n; i++) {
@@ -1795,6 +1807,15 @@ class CaptionFormulaRenderer {
     // Default captionSuffix / trailing glue literals / layoutSuffix can leave a
     // dangling space after the last content segment — strip only the end.
     return joined.trimRight();
+  }
+
+  /// True when [text] is only field glue that should drop with an empty
+  /// auto-adapted State/Country slot. Matches Structure PREVIEW's
+  /// `_isStructureGeoGlue` so credit literals like `)` are never deferred.
+  static bool _isDeferableGeoGlue(String text) {
+    final t = text.trim();
+    if (t.isEmpty) return true;
+    return RegExp(r'^[,;|/–—\-]+$').hasMatch(t);
   }
 
   /// Whether empty content should swallow adjacent Structure glue so

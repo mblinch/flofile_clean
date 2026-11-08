@@ -39,8 +39,98 @@ Future<void> showCaptionV2Zoom(
     context: context,
     barrierColor: Colors.black.withValues(alpha: 0.9),
     builder: (dialogContext) {
-      final t = Theme.of(dialogContext).extension<FfTokens>() ?? FfTokens.dark;
-      return Dialog(
+      return _CaptionV2ZoomDialog(imagePath: imagePath);
+    },
+  );
+}
+
+class _CaptionV2ZoomDialog extends StatefulWidget {
+  const _CaptionV2ZoomDialog({required this.imagePath});
+
+  final String imagePath;
+
+  @override
+  State<_CaptionV2ZoomDialog> createState() => _CaptionV2ZoomDialogState();
+}
+
+class _CaptionV2ZoomDialogState extends State<_CaptionV2ZoomDialog> {
+  static const double _minScale = 0.8;
+  static const double _maxScale = 8.0;
+  static const double _zoomStep = 1.35;
+
+  final TransformationController _transform = TransformationController();
+  final FocusNode _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focus.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    _transform.dispose();
+    super.dispose();
+  }
+
+  void _zoomBy(double factor) {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final size = box.size;
+    final focal = Offset(size.width / 2, size.height / 2);
+    final sceneFocal = _transform.toScene(focal);
+    final current = _transform.value.getMaxScaleOnAxis();
+    final next = (current * factor).clamp(_minScale, _maxScale);
+    if ((next - current).abs() < 0.001) return;
+    final ratio = next / current;
+    final updated = Matrix4.identity()
+      ..translate(focal.dx, focal.dy)
+      ..scale(ratio)
+      ..translate(-sceneFocal.dx, -sceneFocal.dy);
+    _transform.value = updated;
+  }
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final keys = HardwareKeyboard.instance;
+    if (keys.isMetaPressed || keys.isControlPressed || keys.isAltPressed) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.keyZ) {
+      _zoomBy(keys.isShiftPressed ? (1 / _zoomStep) : _zoomStep);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.equal ||
+        key == LogicalKeyboardKey.numpadAdd) {
+      _zoomBy(_zoomStep);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.minus ||
+        key == LogicalKeyboardKey.numpadSubtract) {
+      _zoomBy(1 / _zoomStep);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.escape) {
+      Navigator.of(context).pop();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    return Focus(
+      focusNode: _focus,
+      autofocus: true,
+      onKeyEvent: _onKey,
+      child: Dialog(
         insetPadding: const EdgeInsets.all(20),
         backgroundColor: t.sunken,
         shape: RoundedRectangleBorder(
@@ -52,12 +142,13 @@ Future<void> showCaptionV2Zoom(
           children: [
             Positioned.fill(
               child: InteractiveViewer(
-                minScale: 0.8,
-                maxScale: 8,
+                transformationController: _transform,
+                minScale: _minScale,
+                maxScale: _maxScale,
                 boundaryMargin: const EdgeInsets.all(240),
                 child: Center(
                   child: OrientedFilePreview(
-                    path: imagePath,
+                    path: widget.imagePath,
                     fit: BoxFit.contain,
                     cacheWidth: 4096,
                     filterQuality: FilterQuality.high,
@@ -69,7 +160,8 @@ Future<void> showCaptionV2Zoom(
               left: 14,
               bottom: 12,
               child: _OverlayLabel(
-                label: '${p.basename(imagePath)}  ·  scroll or pinch to zoom',
+                label:
+                    '${p.basename(widget.imagePath)}  ·  Z to zoom in  ·  scroll or pinch',
                 tokens: t,
               ),
             ),
@@ -77,7 +169,7 @@ Future<void> showCaptionV2Zoom(
               right: 12,
               top: 12,
               child: IconButton.filledTonal(
-                onPressed: () => Navigator.of(dialogContext).pop(),
+                onPressed: () => Navigator.of(context).pop(),
                 icon: const PhosphorIcon(PhosphorIconsRegular.x),
                 tooltip: 'Close',
                 style: IconButton.styleFrom(
@@ -89,9 +181,9 @@ Future<void> showCaptionV2Zoom(
             ),
           ],
         ),
-      );
-    },
-  );
+      ),
+    );
+  }
 }
 
 Future<void> showCaptionV2PhotoMenu({

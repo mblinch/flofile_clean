@@ -2511,14 +2511,12 @@ class CaptionV2Controller extends ChangeNotifier {
 
   Map<String, String> captionValues() {
     final caption = buildCaptionSentence();
-    return {
+    final values = <String, String>{
       'IPTC:Caption-Abstract': caption,
       'Caption-Abstract': caption,
       'IPTC:Description': caption,
       'Description': caption,
       'XMP:Description': caption,
-      'XMP-getty:Personality': personality,
-      'Personality': personality,
       'IPTC:Headline': headline,
       'Headline': headline,
       'XMP:Headline': headline,
@@ -2527,6 +2525,14 @@ class CaptionV2Controller extends ChangeNotifier {
       'XMP:Subject': keywords,
       'XMP-dc:Subject': keywords,
     };
+    // When Write to IPTC Personality is off, leave the file tag alone
+    // (do not re-stamp Photo Mechanic placeholders). When on, always include
+    // the keys so an empty value can clear the tag on save.
+    if (showPersonalityField) {
+      values['XMP-getty:Personality'] = personality;
+      values['Personality'] = personality;
+    }
+    return values;
   }
 
   String _playerLead(CaptionTemplate template) {
@@ -4992,30 +4998,20 @@ class CaptionV2Controller extends ChangeNotifier {
       merged.add(trimmed);
     }
 
-    final rosterKeys = <String>{
-      for (final player in homeRoster) player.fullName.trim().toLowerCase(),
-      for (final player in awayRoster) player.fullName.trim().toLowerCase(),
-    };
-    final selectedKeys = <String>{
-      for (final row in selectedPlayers)
-        row.player.fullName.trim().toLowerCase(),
-    };
-
-    // Once captioning / Firebar selection is active, personality only keeps
-    // people who are currently selected (roster button or typed+selected chip).
-    // Roster names left over from IPTC or a prior pick must leave.
+    // Once FloFile captioning is active, Personality is the selected players
+    // only — same as classic V1. Do not keep IPTC leftovers such as Photo
+    // Mechanic's "PLAYERS IN FRAME" reminder text.
     if (captionSelectionStarted || selectedPlayers.isNotEmpty) {
-      _basePersonalityNames.removeWhere((name) {
-        final key = name.trim().toLowerCase();
-        return rosterKeys.contains(key) && !selectedKeys.contains(key);
-      });
+      _basePersonalityNames.clear();
+      for (final row in selectedPlayers) {
+        add(row.player.fullName);
+      }
+      personality = merged.join(';');
+      return;
     }
 
     for (final name in _basePersonalityNames) {
       add(name);
-    }
-    for (final row in selectedPlayers) {
-      add(row.player.fullName);
     }
     personality = merged.join(';');
   }
@@ -5570,6 +5566,9 @@ class CaptionV2Controller extends ChangeNotifier {
     postGame = false;
     manualCaptionOverride = null;
     personality = originalPersonality;
+    _basePersonalityNames
+      ..clear()
+      ..addAll(_parseMetadataList(originalPersonality));
     statusMessage = null;
     notifyListeners();
   }
@@ -5631,6 +5630,7 @@ class CaptionV2Controller extends ChangeNotifier {
     customVerbPhrase = '';
     celebrationType = null;
     personality = '';
+    _basePersonalityNames.clear();
     manualCaptionOverride = null;
     rbi = 0;
     selectedBase = null;

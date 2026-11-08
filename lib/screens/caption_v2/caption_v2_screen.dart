@@ -395,6 +395,9 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         folderPath: c.sessionFolderPath,
         enableWriting: true,
         populateFromFolder: true,
+        initialMissingHighlight: c.missingCaptionIptcLabels.isNotEmpty
+            ? IptcMissingHighlight.caption
+            : null,
       );
       if (!mounted || summary == null) return;
 

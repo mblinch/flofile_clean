@@ -18,6 +18,10 @@ class IptcCaptionWriter {
       if (_isKeywordKey(key)) return;
       if (value.trim().isNotEmpty) {
         tagAndFlags.add('-$key=$value');
+      } else if (_isClearableWhenEmpty(key)) {
+        // Empty Personality must clear Photo Mechanic placeholders rather
+        // than omitting the tag and leaving the old value on disk.
+        tagAndFlags.add('-$key=');
       }
     });
 
@@ -51,6 +55,10 @@ class IptcCaptionWriter {
         key == 'Subject' ||
         key == 'XMP:Subject' ||
         key == 'XMP-dc:Subject';
+  }
+
+  static bool _isClearableWhenEmpty(String key) {
+    return key == 'Personality' || key == 'XMP-getty:Personality';
   }
 
   static void _appendKeywords(List<String> args, String? keywordsValue) {

@@ -1208,6 +1208,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     bool populateFromFolder = false,
     bool enableWriting = false,
     String? focusField,
+    IptcMissingHighlight? missingHighlight,
   }) async {
     final summary = await showCaptionV2IptcDialog(
       context,
@@ -1217,6 +1218,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       populateFromFolder: _folderChosen || populateFromFolder,
       captionTemplate: _captionTemplate,
       initialFocusField: focusField,
+      initialMissingHighlight: missingHighlight,
     );
     if (!mounted || summary == null) return;
     await _prefs?.saveIptcApplyMode(summary.mode);
@@ -1226,6 +1228,23 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       _iptcStatus = summary.statusLine;
     });
     await _refreshIptcCaptionWarning();
+  }
+
+  /// Prefer red caption gaps; otherwise yellow filing gaps.
+  IptcMissingHighlight? get _preferredMissingHighlight {
+    if (_missingCaptionIptc.isNotEmpty) return IptcMissingHighlight.caption;
+    if (_missingFilingIptc.isNotEmpty) return IptcMissingHighlight.filing;
+    return null;
+  }
+
+  Future<void> _openIptcForMissingFields({
+    IptcMissingHighlight? highlight,
+  }) {
+    return _openIptc(
+      populateFromFolder: true,
+      enableWriting: true,
+      missingHighlight: highlight ?? _preferredMissingHighlight,
+    );
   }
 
   /// Opens IPTC when the Caption style box is reached (or wire changes) and
@@ -1951,19 +1970,12 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                 ),
                 if (iptcNeedsAdd) ...[
                   const SizedBox(width: 8),
-                  Text(
-                    'Missing fields',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: FfTokens.fontFamily,
-                      fontSize: 12,
-                      height: 1.1,
-                      fontWeight: FontWeight.w500,
-                      color: _missingCaptionIptc.isNotEmpty
-                          ? captionWarn
-                          : filingWarn,
-                    ),
+                  _MissingFieldsLink(
+                    label: 'Missing fields',
+                    color: _missingCaptionIptc.isNotEmpty
+                        ? captionWarn
+                        : filingWarn,
+                    onTap: () => unawaited(_openIptcForMissingFields()),
                   ),
                 ] else if (iptcComplete) ...[
                   const SizedBox(width: 8),
@@ -2102,10 +2114,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
               onPressed: enabled
                   ? () => unawaited(
                         needsAdd
-                            ? _openIptc(
-                                populateFromFolder: true,
-                                enableWriting: true,
-                              )
+                            ? _openIptcForMissingFields()
                             : _openIptc(),
                       )
                   : null,
@@ -3205,36 +3214,44 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         children: [
           Expanded(
             child: noteIsWarning
-                ? Text.rich(
-                    TextSpan(
-                      style: const TextStyle(
-                        fontFamily: FfTokens.fontFamily,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      children: [
-                        if (_missingCaptionIptc.isNotEmpty)
-                          const TextSpan(
-                            text:
-                                'IPTC Warning - Missing Fields to Build Caption',
-                            style: TextStyle(color: captionWarn),
+                ? Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      if (_missingCaptionIptc.isNotEmpty)
+                        _MissingFieldsLink(
+                          label:
+                              'IPTC Warning - Missing Fields to Build Caption',
+                          color: captionWarn,
+                          onTap: () => unawaited(
+                            _openIptcForMissingFields(
+                              highlight: IptcMissingHighlight.caption,
+                            ),
                           ),
-                        if (_missingCaptionIptc.isNotEmpty &&
-                            _missingFilingIptc.isNotEmpty)
-                          const TextSpan(
-                            text: '  ·  ',
-                            style: TextStyle(color: FfTokens.sessionT3),
+                        ),
+                      if (_missingCaptionIptc.isNotEmpty &&
+                          _missingFilingIptc.isNotEmpty)
+                        const Text(
+                          '·',
+                          style: TextStyle(
+                            fontFamily: FfTokens.fontFamily,
+                            fontSize: 12,
+                            color: FfTokens.sessionT3,
                           ),
-                        if (_missingFilingIptc.isNotEmpty)
-                          TextSpan(
-                            text:
-                                'IPTC Warning - Missing Fields to File to $_filingWireLabel',
-                            style: const TextStyle(color: filingWarn),
+                        ),
+                      if (_missingFilingIptc.isNotEmpty)
+                        _MissingFieldsLink(
+                          label:
+                              'IPTC Warning - Missing Fields to File to $_filingWireLabel',
+                          color: filingWarn,
+                          onTap: () => unawaited(
+                            _openIptcForMissingFields(
+                              highlight: IptcMissingHighlight.filing,
+                            ),
                           ),
-                      ],
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
                   )
                 : Wrap(
                     spacing: 14,
@@ -5254,6 +5271,46 @@ class _GoTimeButtonState extends State<_GoTimeButton> {
                 ),
               ],
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MissingFieldsLink extends StatelessWidget {
+  const _MissingFieldsLink({
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Open IPTC and highlight missing fields',
+      waitDuration: const Duration(milliseconds: 350),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: color,
+              decoration: TextDecoration.underline,
+              decorationColor: color,
+            ),
           ),
         ),
       ),

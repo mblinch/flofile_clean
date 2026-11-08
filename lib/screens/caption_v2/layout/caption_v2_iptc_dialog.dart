@@ -17,6 +17,7 @@ import '../../../theme/ff_tokens.dart';
 import '../../../utils/native_file_picker.dart';
 import '../../../widgets/app_styled_dialogs.dart';
 import 'iptc_template_editor.dart';
+export 'iptc_template_editor.dart' show IptcMissingHighlight;
 
 /// Result summary shown on the V2 startup form after closing the dialog.
 class CaptionV2IptcSummary {
@@ -53,6 +54,7 @@ Future<CaptionV2IptcSummary?> showCaptionV2IptcDialog(
   bool populateFromFolder = false,
   CaptionTemplate? captionTemplate,
   String? initialFocusField,
+  IptcMissingHighlight? initialMissingHighlight,
 }) {
   return showDialog<CaptionV2IptcSummary>(
     context: context,
@@ -63,6 +65,7 @@ Future<CaptionV2IptcSummary?> showCaptionV2IptcDialog(
       populateFromFolder: populateFromFolder,
       captionTemplate: captionTemplate,
       initialFocusField: initialFocusField,
+      initialMissingHighlight: initialMissingHighlight,
     ),
   );
 }
@@ -75,6 +78,7 @@ class CaptionV2IptcDialog extends StatefulWidget {
     this.populateFromFolder = false,
     this.captionTemplate,
     this.initialFocusField,
+    this.initialMissingHighlight,
   });
 
   final String? folderPath;
@@ -92,6 +96,9 @@ class CaptionV2IptcDialog extends StatefulWidget {
 
   /// IPTC panel storage key to focus after open (e.g. City, Credit).
   final String? initialFocusField;
+
+  /// Highlight blank caption (red) or filing (yellow) fields on open.
+  final IptcMissingHighlight? initialMissingHighlight;
 
   @override
   State<CaptionV2IptcDialog> createState() => _CaptionV2IptcDialogState();
@@ -151,33 +158,23 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
       }
     }
 
+    final panelWire = selected?.wireStyle ??
+        _panelWireForCaption(captionTemplate.wireStyle);
     setState(() {
       _mode = mode;
       _visibleTemplates = catalog;
       _selectedTemplateId = pickId;
-      _wire = selected?.wireStyle ??
-          _panelWireForCaption(captionTemplate.wireStyle);
+      _wire = panelWire;
       _captionTemplate = captionTemplate;
       _captionStyleLabel = styleCatalog.labelFor(styleCatalog.activeToken);
-      _values = selected == null
-          ? const {}
-          : _withDefaultUrgency(
-              IptcTemplateApplyService.denormalizeForPanel(
-                Map<String, String>.from(selected.preset),
-              ),
-            );
       _clearedFields = selected?.clearedFields.toSet() ?? {};
       _loading = false;
     });
 
-    if (selected == null) {
-      await _loadPresetForWire(
-        _panelWireForCaption(captionTemplate.wireStyle),
-        forceReplace: true,
-      );
-    } else if (selected.preset.isEmpty) {
-      await _loadPresetForWire(selected.wireStyle, forceReplace: true);
-    }
+    // Done persists to the wire preset — always reopen from that draft so
+    // typed missing fields survive. Named templates are applied when picked
+    // from the dropdown (or used as fallback when the wire draft is empty).
+    await _loadPresetForWire(panelWire, forceReplace: true);
 
     if (widget.populateFromFolder) {
       await _loadOriginalFromFolder();
@@ -619,9 +616,9 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
           mergedRaw.putIfAbsent(k, () => v);
         });
       }
-      // Show fields from the photos. Caption is omitted from the pad — it is
+      // Fields present on the photos. Caption is omitted from the pad — it is
       // never written on load and stays on each photo until the session.
-      final merged = IptcTemplateApplyService.panelValuesFromImportedTemplate(
+      final fromFiles = IptcTemplateApplyService.panelValuesFromImportedTemplate(
         mergedRaw,
         _wire,
       );
@@ -632,18 +629,36 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
             k == 'Caption') {
           return;
         }
-        merged.putIfAbsent(k, () => trimmed);
+        fromFiles.putIfAbsent(k, () => trimmed);
       });
-      merged.removeWhere(
+      fromFiles.removeWhere(
         (k, _) =>
             IptcTemplateApplyService.toPresetKey(k) == 'Caption' ||
             k == 'Caption',
       );
       final foundInFiles = <String>{};
-      for (final e in merged.entries) {
+      for (final e in fromFiles.entries) {
         if (e.value.trim().isEmpty) continue;
         foundInFiles.add(e.key);
       }
+
+      // Photos first, then keep the saved wire/template draft in any blank
+      // slots. A hard replace was wiping values typed on a prior Done that
+      // are not yet on disk (Missing fields → fill → reopen).
+      final merged = Map<String, String>.from(fromFiles);
+      _values.forEach((k, v) {
+        final trimmed = v.trim();
+        if (trimmed.isEmpty) return;
+        if (IptcTemplateApplyService.isInAppGeneratedPlaceholder(trimmed)) {
+          return;
+        }
+        if (IptcTemplateApplyService.toPresetKey(k) == 'Caption' ||
+            k == 'Caption') {
+          return;
+        }
+        merged.putIfAbsent(k, () => trimmed);
+      });
+
       if (!mounted) return;
       setState(() {
         _values = _withDefaultUrgency(merged);
@@ -768,6 +783,39 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
     );
     if (_selectedTemplateId.isNotEmpty) {
       await _prefs.setSelectedIptcTemplateId(_selectedTemplateId);
+      // Keep the named template body in sync with Done so picking it later
+      // does not resurrect a stale empty draft.
+      final locals = await _prefs.getLocalIptcTemplates();
+      final idx = locals.indexWhere((t) => t.id == _selectedTemplateId);
+      if (idx >= 0) {
+        final prior = locals[idx];
+        final cleared = _clearedFields.toList();
+        locals[idx] = IptcTemplateCatalogEntry(
+          id: prior.id,
+          wireStyle: _wire,
+          displayName: prior.displayName,
+          preset: preset,
+          clearedFields: cleared,
+        );
+        await _prefs.saveLocalIptcTemplates(locals);
+        if (mounted) {
+          setState(() {
+            _visibleTemplates = [
+              for (final t in _visibleTemplates)
+                if (t.id == prior.id)
+                  IptcTemplateCatalogEntry(
+                    id: prior.id,
+                    wireStyle: _wire,
+                    displayName: t.displayName,
+                    preset: preset,
+                    clearedFields: cleared,
+                  )
+                else
+                  t,
+            ];
+          });
+        }
+      }
     }
     await _prefs.saveIptcApplyMode(_mode);
   }
@@ -845,6 +893,7 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
                   captionStyleLabel: _captionStyleLabel,
                   wireLabels: Map<WireStyle, String>.from(_wireLabels),
                   initialFocusField: widget.initialFocusField,
+                  initialMissingHighlight: widget.initialMissingHighlight,
                   onCancel: () => Navigator.of(context).pop(),
                   onDone: _done,
                 ),

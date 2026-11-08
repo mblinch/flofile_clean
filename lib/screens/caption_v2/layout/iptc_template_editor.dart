@@ -40,6 +40,9 @@ String _listMergeTip(String field) {
 
 enum _LegendFocus { none, caption, filing }
 
+/// Opens the IPTC editor with caption (red) or filing (yellow) fields highlighted.
+enum IptcMissingHighlight { caption, filing }
+
 /// Shared tap group: fields + legend buttons. Outside taps dismiss focus mode.
 const Object _legendFocusTapGroup = Object();
 
@@ -122,6 +125,7 @@ class _LegendFocusHost extends StatefulWidget {
   const _LegendFocusHost({
     required this.child,
     this.initialFocusField,
+    this.initialMissingHighlight,
   });
 
   final Widget child;
@@ -129,14 +133,32 @@ class _LegendFocusHost extends StatefulWidget {
   /// IPTC panel storage key / tab id to focus once fields register.
   final String? initialFocusField;
 
+  /// When set (e.g. from startup “Missing fields”), enter legend highlight
+  /// mode and focus the first blank field in that group.
+  final IptcMissingHighlight? initialMissingHighlight;
+
   @override
   State<_LegendFocusHost> createState() => _LegendFocusHostState();
 }
 
 class _LegendFocusHostState extends State<_LegendFocusHost> {
-  _LegendFocus _focus = _LegendFocus.none;
+  late _LegendFocus _focus;
   final List<_IptcTabField> _tabFields = [];
   bool _didInitialFocus = false;
+  bool _didInitialLegendFocus = false;
+
+  @override
+  void initState() {
+    super.initState();
+    switch (widget.initialMissingHighlight) {
+      case IptcMissingHighlight.caption:
+        _focus = _LegendFocus.caption;
+      case IptcMissingHighlight.filing:
+        _focus = _LegendFocus.filing;
+      case null:
+        _focus = _LegendFocus.none;
+    }
+  }
 
   void _toggle(_LegendFocus target) {
     final next = _focus == target ? _LegendFocus.none : target;
@@ -144,17 +166,21 @@ class _LegendFocusHostState extends State<_LegendFocusHost> {
     if (next == _LegendFocus.none) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _focus != next) return;
-      final sorted = [..._tabFields]..sort((a, b) => a.order.compareTo(b.order));
-      for (final field in sorted) {
-        final needed = next == _LegendFocus.caption
-            ? field.needsCaptionFill()
-            : field.needsFilingFill();
-        if (needed) {
-          field.node.requestFocus();
-          return;
-        }
-      }
+      _focusFirstNeeded(next);
     });
+  }
+
+  void _focusFirstNeeded(_LegendFocus mode) {
+    final sorted = [..._tabFields]..sort((a, b) => a.order.compareTo(b.order));
+    for (final field in sorted) {
+      final needed = mode == _LegendFocus.caption
+          ? field.needsCaptionFill()
+          : field.needsFilingFill();
+      if (needed) {
+        field.node.requestFocus();
+        return;
+      }
+    }
   }
 
   void _dismissFocus() {
@@ -166,12 +192,24 @@ class _LegendFocusHostState extends State<_LegendFocusHost> {
     _tabFields.removeWhere((e) => e.node == field.node || e.id == field.id);
     _tabFields.add(field);
     final target = widget.initialFocusField?.trim();
-    if (_didInitialFocus || target == null || target.isEmpty) return;
-    if (field.id != target) return;
-    _didInitialFocus = true;
+    if (!_didInitialFocus && target != null && target.isNotEmpty) {
+      if (field.id == target) {
+        _didInitialFocus = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          field.node.requestFocus();
+        });
+      }
+    }
+    if (_didInitialLegendFocus || _focus == _LegendFocus.none) return;
+    final needed = _focus == _LegendFocus.caption
+        ? field.needsCaptionFill()
+        : field.needsFilingFill();
+    if (!needed) return;
+    _didInitialLegendFocus = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      field.node.requestFocus();
+      if (!mounted || _focus == _LegendFocus.none) return;
+      _focusFirstNeeded(_focus);
     });
   }
 
@@ -320,6 +358,7 @@ class IptcTemplateEditor extends StatelessWidget {
     this.captionStyleLabel,
     this.wireLabels = const {},
     this.initialFocusField,
+    this.initialMissingHighlight,
   });
 
   final WireStyle wire;
@@ -356,6 +395,9 @@ class IptcTemplateEditor extends StatelessWidget {
   /// IPTC panel field id to focus when the editor first builds (e.g. City).
   final String? initialFocusField;
 
+  /// Highlight blank caption (red) or filing (yellow) fields on open.
+  final IptcMissingHighlight? initialMissingHighlight;
+
   /// When set, shows Apply on load / save / FTP under the header.
   final IptcApplyMode? applyMode;
   final ValueChanged<IptcApplyMode>? onApplyModeChanged;
@@ -391,6 +433,7 @@ class IptcTemplateEditor extends StatelessWidget {
       colors: colors,
       child: _LegendFocusHost(
         initialFocusField: initialFocusField,
+        initialMissingHighlight: initialMissingHighlight,
         child: LayoutBuilder(
         builder: (context, constraints) {
           // Match IPTC Editor v2.html breakpoints.

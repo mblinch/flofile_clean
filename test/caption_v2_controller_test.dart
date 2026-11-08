@@ -824,19 +824,33 @@ void main() {
     expect(values['XMP-dc:Subject'], 'manual, action');
   });
 
-  test('personality selection preserves unrelated embedded names', () {
+  test('personality selection overwrites IPTC leftovers like PLAYERS IN FRAME',
+      () {
     final controller = CaptionV2Controller()..showPersonalityField = true;
-    controller.setPersonality('Embedded Person;Manual Person');
+    // Simulate Photo Mechanic reminder text loaded from the file.
+    controller.setPersonality('PLAYERS IN FRAME');
+    expect(controller.personality, 'PLAYERS IN FRAME');
 
-    final selected = player('Selected Player', '9');
+    final selected = player('Owen Beck', '62');
     controller.selectPlayer(selected, isHome: true);
-    expect(
-      controller.personality,
-      'Embedded Person;Manual Person;Selected Player',
-    );
+    expect(controller.personality, 'Owen Beck');
+    expect(controller.personality, isNot(contains('PLAYERS IN FRAME')));
 
-    controller.selectPlayer(selected, isHome: true);
-    expect(controller.personality, 'Embedded Person;Manual Person');
+    controller.selectPlayer(selected, isHome: true); // toggle off
+    expect(controller.personality, isEmpty);
+
+    final values = controller.captionValues();
+    expect(values['Personality'], '');
+    expect(values['XMP-getty:Personality'], '');
+  });
+
+  test('personality write toggle off omits Personality tags', () {
+    final controller = CaptionV2Controller()
+      ..showPersonalityField = false
+      ..personality = 'PLAYERS IN FRAME';
+    final values = controller.captionValues();
+    expect(values.containsKey('Personality'), isFalse);
+    expect(values.containsKey('XMP-getty:Personality'), isFalse);
   });
 
   test('keyword automation preserves manual values and dedupes case', () {
