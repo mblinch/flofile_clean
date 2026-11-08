@@ -10229,7 +10229,7 @@ class CaptionV2Controller extends ChangeNotifier {
         (!hasVerbSelection || pinDefersCaptionUntilPlayer) &&
         manualCaptionOverride == null;
     if (captionUnchanged && !metadataDirty && originalCaption.trim().isEmpty) {
-      statusMessage = 'Select a player and verb first';
+      statusMessage = 'Select a player first';
       notifyListeners();
       return CaptionSaveResult(
         requestedPaths: targets,
@@ -10238,17 +10238,9 @@ class CaptionV2Controller extends ChangeNotifier {
     }
 
     final manualCaption = manualCaptionOverride?.trim().isNotEmpty == true;
-    // A player without a verb writes an incomplete sentence and is not marked
-    // captioned, so Needs caption keeps showing the photo after "Saved".
-    if (hasCaptionSubject && !hasVerbSelection && !manualCaption) {
-      _warnStatus('Select a verb before saving');
-      return CaptionSaveResult(
-        requestedPaths: targets,
-        succeededPaths: const [],
-      );
-    }
-
-    final generatedCaption = hasCaptionSubject && hasVerbSelection;
+    // Player-only captions (no verb yet) are allowed — the style wraps the
+    // incomplete body the same way as a full sentence.
+    final generatedCaption = hasCaptionSubject;
     if (generatedCaption && selectedVerb != null) rememberCombo();
     final openPath = currentPath;
     if (openPath != null && targets.contains(openPath)) {

@@ -1665,7 +1665,7 @@ void main() {
     expect(highlights.first.toLowerCase(), contains('matthews'));
   });
 
-  test('save with a player and no verb warns and does not write', () async {
+  test('save with a player and no verb writes incomplete caption', () async {
     final writer = _FakeCaptionWriter({'/one.jpg'});
     final controller = CaptionV2Controller(writer: writer)
       ..imagePaths = ['/one.jpg']
@@ -1675,14 +1675,13 @@ void main() {
 
     final result = await controller.savePaths(['/one.jpg']);
 
-    expect(result.anySucceeded, isFalse);
-    expect(writer.calls, 0);
-    expect(controller.captionedImages, isEmpty);
-    expect(controller.savedImages, isEmpty);
-    expect(controller.statusMessage, 'Select a verb before saving');
-
-    await controller.savePaths(['/one.jpg']);
-    expect(controller.statusMessage, 'Select a verb before saving');
+    expect(result.anySucceeded, isTrue);
+    expect(writer.calls, 1);
+    expect(controller.captionedImages, {'/one.jpg'});
+    expect(controller.savedImages, {'/one.jpg'});
+    expect(controller.statusMessage, 'Saved');
+    final caption = writer.lastValues?['IPTC:Caption-Abstract'] ?? '';
+    expect(caption.toLowerCase(), contains('bichette'));
   });
 
   test('bulk manual save marks only successful paths captioned', () async {

@@ -2351,15 +2351,26 @@ class _GettyEditorsNoteDropdown extends StatelessWidget {
   final FfTokens tokens;
   final void Function(GettyEditorsNote? note, {String? customText}) onChanged;
 
+  static const _clearToken = '__none__';
+
   Future<void> _handleSelected(
     BuildContext context,
-    GettyEditorsNote? value,
+    String token,
   ) async {
+    // PopupMenuButton ignores null item values (treats them as dismiss), so
+    // "None" uses a non-null token instead.
+    if (token == _clearToken) {
+      onChanged(null);
+      return;
+    }
+
+    final value = GettyEditorsNote.values.firstWhere(
+      (note) => note.name == token,
+    );
+
     // Presets: clicking the active option again clears it.
     // Custom always reopens the editor dialog.
-    if (value != null &&
-        value == selected &&
-        value != GettyEditorsNote.custom) {
+    if (value == selected && value != GettyEditorsNote.custom) {
       onChanged(null);
       return;
     }
@@ -2418,13 +2429,13 @@ class _GettyEditorsNoteDropdown extends StatelessWidget {
     // Extra slack covers PopupMenuItem ink/padding chrome.
     final menuWidth = labelWidth + itemPadding.horizontal + 8;
 
-    PopupMenuItem<GettyEditorsNote?> item({
-      required GettyEditorsNote? value,
+    PopupMenuItem<String> item({
+      required String value,
       required String label,
       required bool active,
       Color? color,
     }) {
-      return PopupMenuItem<GettyEditorsNote?>(
+      return PopupMenuItem<String>(
         value: value,
         height: 28,
         padding: itemPadding,
@@ -2442,7 +2453,7 @@ class _GettyEditorsNoteDropdown extends StatelessWidget {
       );
     }
 
-    return PopupMenuButton<GettyEditorsNote?>(
+    return PopupMenuButton<String>(
       tooltip: tooltip.isEmpty ? 'Add Editors Note' : tooltip,
       padding: EdgeInsets.zero,
       menuPadding: const EdgeInsets.symmetric(vertical: 4),
@@ -2460,14 +2471,14 @@ class _GettyEditorsNoteDropdown extends StatelessWidget {
       itemBuilder: (context) => [
         if (hasSelection)
           item(
-            value: null,
+            value: _clearToken,
             label: 'None',
             active: false,
             color: tokens.textSecondary,
           ),
         for (final note in GettyEditorsNote.values)
           item(
-            value: note,
+            value: note.name,
             label: note.menuLabel,
             active: selected == note,
             color: selected == note ? tokens.accent : tokens.text,
