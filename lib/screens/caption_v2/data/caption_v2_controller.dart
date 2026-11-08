@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../caption_style/caption_formula_renderer.dart';
 import '../../../caption_style/caption_session_context.dart';
 import '../../../caption_style/caption_style_catalog.dart';
+import '../../../caption_style/getty_editors_note.dart';
 import '../../../caption_style/getty_note_variant.dart';
 import '../../../caption_style/caption_template.dart';
 import '../../../caption_style/caption_text_normalize.dart';
@@ -642,6 +643,21 @@ class CaptionV2Controller extends ChangeNotifier {
 
   /// Getty note to user includes the NBAE copyright line.
   bool gettyNoteIsNbae = false;
+
+  /// Optional Getty editors note inserted before the caption body.
+  GettyEditorsNote? gettyEditorsNote;
+
+  /// Body text for [GettyEditorsNote.custom] (without the `EDITORS NOTE:` prefix).
+  String gettyEditorsNoteCustomText = '';
+
+  /// Resolved parenthetical to insert, or null when none / custom is empty.
+  String? get resolvedGettyEditorsNoteText {
+    final note = gettyEditorsNote;
+    if (note == null) return null;
+    final text = note.captionTextFor(gettyEditorsNoteCustomText).trim();
+    return text.isEmpty ? null : text;
+  }
+
   CaptionStyleCatalog? _captionStyleCatalog;
   String _activeCaptionStyleToken = CaptionStyleCatalog.tokGetty;
 
@@ -653,6 +669,11 @@ class CaptionV2Controller extends ChangeNotifier {
 
   String get homeAbbr => mlbTeamAbbreviation(homeTeam);
   String get awayAbbr => mlbTeamAbbreviation(awayTeam);
+
+  bool get isGettyWire {
+    final w = captionTemplate.wireStyle;
+    return w == WireStyle.getty || w == WireStyle.gettyInternational;
+  }
 
   String get captionStyleLabel =>
       WireIptcSpecs.displayWireLabel(captionTemplate.wireStyle, null);
@@ -2380,7 +2401,7 @@ class CaptionV2Controller extends ChangeNotifier {
   String buildCaptionSentence() {
     final manual = manualCaptionOverride;
     if (manual != null) return manual;
-    final body = buildCaptionBody();
+    var body = buildCaptionBody();
     if (body.isEmpty) {
       // No players yet — keep a light chip-friendly preview only.
       final parts = <String>[
@@ -2395,6 +2416,13 @@ class CaptionV2Controller extends ChangeNotifier {
 
     final game = currentGameInfoForCaption();
     final territoryTemplate = captionTemplateForGame(game);
+
+    final editorsNoteText = resolvedGettyEditorsNoteText;
+    final gettyWire = territoryTemplate.wireStyle == WireStyle.getty ||
+        territoryTemplate.wireStyle == WireStyle.gettyInternational;
+    if (gettyWire && editorsNoteText != null) {
+      body = '$editorsNoteText $body';
+    }
 
     CreditSampleAgency agency;
     switch (territoryTemplate.wireStyle) {
@@ -6352,6 +6380,31 @@ class CaptionV2Controller extends ChangeNotifier {
     preGame = false;
     postGame = false;
     mlbTimestampMatchedPath = null;
+    notifyListeners();
+  }
+
+  void setGettyEditorsNote(GettyEditorsNote? note, {String? customText}) {
+    if (note == GettyEditorsNote.custom) {
+      final text = (customText ?? gettyEditorsNoteCustomText).trim();
+      if (text.isEmpty) {
+        if (gettyEditorsNote == null && gettyEditorsNoteCustomText.isEmpty) {
+          return;
+        }
+        gettyEditorsNote = null;
+        gettyEditorsNoteCustomText = '';
+      } else {
+        if (gettyEditorsNote == GettyEditorsNote.custom &&
+            gettyEditorsNoteCustomText == text) {
+          return;
+        }
+        gettyEditorsNote = GettyEditorsNote.custom;
+        gettyEditorsNoteCustomText = text;
+      }
+    } else {
+      if (gettyEditorsNote == note && customText == null) return;
+      gettyEditorsNote = note;
+    }
+    manualCaptionOverride = null;
     notifyListeners();
   }
 

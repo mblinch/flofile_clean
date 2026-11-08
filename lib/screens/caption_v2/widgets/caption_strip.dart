@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
+import '../../../caption_style/getty_editors_note.dart';
 import '../../../services/mac_spell_check_service.dart';
 import '../../../services/preferences_service.dart';
 import '../../../theme/ff_tokens.dart';
+import '../../../widgets/ff_menu.dart';
 import '../data/caption_v2_controller.dart' show CaptionProvenanceSpan;
 
 /// One editable value chip inside [CaptionStrip].
@@ -65,6 +67,10 @@ class CaptionStrip extends StatelessWidget {
     this.mlbTimestampLoading = false,
     this.mlbTimestampMatched = false,
     this.onMlbTimestampTap,
+    this.showGettyEditorsNotes = false,
+    this.selectedGettyEditorsNote,
+    this.gettyEditorsNoteCustomText = '',
+    this.onGettyEditorsNoteChanged,
     this.personality,
     this.onPersonalityChanged,
     this.headline,
@@ -160,6 +166,14 @@ class CaptionStrip extends StatelessWidget {
   final bool mlbTimestampLoading;
   final bool mlbTimestampMatched;
   final VoidCallback? onMlbTimestampTap;
+
+  /// Getty-only "Add Editors Note" dropdown on the right of the period bar.
+  final bool showGettyEditorsNotes;
+  final GettyEditorsNote? selectedGettyEditorsNote;
+  final String gettyEditorsNoteCustomText;
+  final void Function(GettyEditorsNote? note, {String? customText})?
+      onGettyEditorsNoteChanged;
+
   final String? personality;
   final ValueChanged<String>? onPersonalityChanged;
   final String? headline;
@@ -336,7 +350,10 @@ class CaptionStrip extends StatelessWidget {
           )
         else
           text,
-        if (inningLabel != null || onPreTap != null || onPostTap != null) ...[
+        if (inningLabel != null ||
+            onPreTap != null ||
+            onPostTap != null ||
+            showGettyEditorsNotes) ...[
           const SizedBox(height: 8),
           _InningCard(
             inningLabel: inningLabel,
@@ -368,6 +385,10 @@ class CaptionStrip extends StatelessWidget {
             mlbTimestampLoading: mlbTimestampLoading,
             mlbTimestampMatched: mlbTimestampMatched,
             onMlbTimestampTap: onMlbTimestampTap,
+            showGettyEditorsNotes: showGettyEditorsNotes,
+            selectedGettyEditorsNote: selectedGettyEditorsNote,
+            gettyEditorsNoteCustomText: gettyEditorsNoteCustomText,
+            onGettyEditorsNoteChanged: onGettyEditorsNoteChanged,
             stepperOnly: inningStepperOnly,
             tokens: t,
           ),
@@ -507,7 +528,8 @@ class _CompactCaptionStrip extends StatelessWidget {
         ),
         if (strip.inningLabel != null ||
             strip.onPreTap != null ||
-            strip.onPostTap != null) ...[
+            strip.onPostTap != null ||
+            strip.showGettyEditorsNotes) ...[
           const SizedBox(height: 8),
           _InningCard(
             inningLabel: strip.inningLabel,
@@ -538,6 +560,10 @@ class _CompactCaptionStrip extends StatelessWidget {
             mlbTimestampLoading: strip.mlbTimestampLoading,
             mlbTimestampMatched: strip.mlbTimestampMatched,
             onMlbTimestampTap: strip.onMlbTimestampTap,
+            showGettyEditorsNotes: strip.showGettyEditorsNotes,
+            selectedGettyEditorsNote: strip.selectedGettyEditorsNote,
+            gettyEditorsNoteCustomText: strip.gettyEditorsNoteCustomText,
+            onGettyEditorsNoteChanged: strip.onGettyEditorsNoteChanged,
             stepperOnly: strip.inningStepperOnly,
             tokens: tokens,
           ),
@@ -1261,7 +1287,7 @@ class _BurstApplyButton extends StatelessWidget {
         ? 'Apply to next image'
         : 'Apply to next $count images';
     return Tooltip(
-      message: 'Choose which burst frames get this caption',
+      message: 'Write this caption to chosen burst frames now',
       child: TextButton(
         onPressed: onPressed,
         style: TextButton.styleFrom(
@@ -1388,6 +1414,10 @@ class _InningCard extends StatefulWidget {
     required this.mlbTimestampLoading,
     required this.mlbTimestampMatched,
     required this.onMlbTimestampTap,
+    this.showGettyEditorsNotes = false,
+    this.selectedGettyEditorsNote,
+    this.gettyEditorsNoteCustomText = '',
+    this.onGettyEditorsNoteChanged,
     this.stepperOnly = false,
     required this.tokens,
   });
@@ -1419,6 +1449,11 @@ class _InningCard extends StatefulWidget {
   final bool mlbTimestampLoading;
   final bool mlbTimestampMatched;
   final VoidCallback? onMlbTimestampTap;
+  final bool showGettyEditorsNotes;
+  final GettyEditorsNote? selectedGettyEditorsNote;
+  final String gettyEditorsNoteCustomText;
+  final void Function(GettyEditorsNote? note, {String? customText})?
+      onGettyEditorsNoteChanged;
   final bool stepperOnly;
   final FfTokens tokens;
 
@@ -1591,6 +1626,23 @@ class _InningCardState extends State<_InningCard> {
               ),
             ),
           ),
+          if (widget.showGettyEditorsNotes &&
+              widget.onGettyEditorsNoteChanged != null) ...[
+            const SizedBox(width: 10),
+            Text(
+              'ADD EDITORS NOTE',
+              maxLines: 1,
+              softWrap: false,
+              style: FfTokens.panelLabel(color: t.textSecondary),
+            ),
+            const SizedBox(width: 6),
+            _GettyEditorsNoteDropdown(
+              selected: widget.selectedGettyEditorsNote,
+              customText: widget.gettyEditorsNoteCustomText,
+              tokens: t,
+              onChanged: widget.onGettyEditorsNoteChanged!,
+            ),
+          ],
           if (widget.onQuarterModeChanged != null)
             Padding(
               padding: const EdgeInsets.only(left: 8),
@@ -2280,6 +2332,176 @@ class _MlbTimestampChip extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GettyEditorsNoteDropdown extends StatelessWidget {
+  const _GettyEditorsNoteDropdown({
+    required this.selected,
+    required this.customText,
+    required this.tokens,
+    required this.onChanged,
+  });
+
+  final GettyEditorsNote? selected;
+  final String customText;
+  final FfTokens tokens;
+  final void Function(GettyEditorsNote? note, {String? customText}) onChanged;
+
+  Future<void> _handleSelected(
+    BuildContext context,
+    GettyEditorsNote? value,
+  ) async {
+    // Presets: clicking the active option again clears it.
+    // Custom always reopens the editor dialog.
+    if (value != null &&
+        value == selected &&
+        value != GettyEditorsNote.custom) {
+      onChanged(null);
+      return;
+    }
+    if (value == GettyEditorsNote.custom) {
+      final result = await showGettyCustomEditorsNoteDialog(
+        context: context,
+        initialText: customText,
+      );
+      if (result == null) return;
+      if (result.isEmpty) {
+        onChanged(null);
+        return;
+      }
+      onChanged(GettyEditorsNote.custom, customText: result);
+      return;
+    }
+    onChanged(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasSelection = selected != null;
+    final label = selected?.chipLabel;
+    final tooltip = selected == null
+        ? 'Add Editors Note'
+        : selected!.captionTextFor(customText);
+    TextStyle itemStyle({
+      required bool active,
+      Color? color,
+    }) =>
+        TextStyle(
+          fontFamily: FfTokens.fontFamily,
+          fontSize: 11,
+          height: 1.1,
+          fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+          color: color,
+        );
+
+    // Measure the widest label (bold + text scale) so the menu never clips.
+    final menuLabels = <String>[
+      if (hasSelection) 'None',
+      for (final note in GettyEditorsNote.values) note.menuLabel,
+    ];
+    var labelWidth = 0.0;
+    final scaler = MediaQuery.textScalerOf(context);
+    for (final labelText in menuLabels) {
+      final painter = TextPainter(
+        text: TextSpan(text: labelText, style: itemStyle(active: true)),
+        maxLines: 1,
+        textDirection: TextDirection.ltr,
+        textScaler: scaler,
+      )..layout();
+      if (painter.width > labelWidth) labelWidth = painter.width;
+    }
+    const itemPadding = EdgeInsets.symmetric(horizontal: 12);
+    // Extra slack covers PopupMenuItem ink/padding chrome.
+    final menuWidth = labelWidth + itemPadding.horizontal + 8;
+
+    PopupMenuItem<GettyEditorsNote?> item({
+      required GettyEditorsNote? value,
+      required String label,
+      required bool active,
+      Color? color,
+    }) {
+      return PopupMenuItem<GettyEditorsNote?>(
+        value: value,
+        height: 28,
+        padding: itemPadding,
+        child: Align(
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            maxLines: 1,
+            softWrap: false,
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.visible,
+            style: itemStyle(active: active, color: color),
+          ),
+        ),
+      );
+    }
+
+    return PopupMenuButton<GettyEditorsNote?>(
+      tooltip: tooltip.isEmpty ? 'Add Editors Note' : tooltip,
+      padding: EdgeInsets.zero,
+      menuPadding: const EdgeInsets.symmetric(vertical: 4),
+      offset: const Offset(0, 28),
+      color: tokens.elevated,
+      surfaceTintColor: Colors.transparent,
+      elevation: 12,
+      shadowColor: FfTokens.sessionMenuShadow,
+      shape: FfMenuSurface.shape,
+      constraints: BoxConstraints(
+        minWidth: menuWidth,
+        maxWidth: menuWidth,
+      ),
+      onSelected: (value) => _handleSelected(context, value),
+      itemBuilder: (context) => [
+        if (hasSelection)
+          item(
+            value: null,
+            label: 'None',
+            active: false,
+            color: tokens.textSecondary,
+          ),
+        for (final note in GettyEditorsNote.values)
+          item(
+            value: note,
+            label: note.menuLabel,
+            active: selected == note,
+            color: selected == note ? tokens.accent : tokens.text,
+          ),
+      ],
+      child: Container(
+        height: 24,
+        padding: const EdgeInsets.only(left: 8, right: 6),
+        decoration: BoxDecoration(
+          color: hasSelection ? tokens.hover : Colors.transparent,
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(color: tokens.inputBorder),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label ?? 'Select',
+              maxLines: 1,
+              softWrap: false,
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 12,
+                fontWeight: hasSelection ? FontWeight.w600 : FontWeight.w400,
+                color: hasSelection ? tokens.text : tokens.textSecondary,
+              ),
+            ),
+            const SizedBox(width: 4),
+            PhosphorIcon(
+              PhosphorIconsRegular.caretDown,
+              size: 12,
+              color: tokens.textSecondary,
+            ),
+          ],
         ),
       ),
     );

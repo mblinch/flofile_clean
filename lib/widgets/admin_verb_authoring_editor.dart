@@ -674,14 +674,15 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
   void _ensureSelection() {
     final categories = _categories;
     if (categories.isEmpty) return;
-    // The editor no longer has an "All" chip (search replaces it), so a
-    // leftover All selection falls back to the first real category.
-    if (!categories.contains(_selectedCategory)) {
+    if (_selectedCategory != _kAllVerbsCategory &&
+        !categories.contains(_selectedCategory)) {
       _selectedCategory = categories.first;
     }
-    final visible = _allVerbs
-        .where((verb) => verb.category == _selectedCategory)
-        .toList();
+    final visible = _selectedCategory == _kAllVerbsCategory
+        ? _allVerbs
+        : _allVerbs
+            .where((verb) => verb.category == _selectedCategory)
+            .toList();
     if (!visible.any((verb) => verb.key == _selectedKey)) {
       _selectedKey = visible.isEmpty ? null : visible.first.key;
     }
@@ -1704,7 +1705,11 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
 
   Future<void> _startRenameCategory() async {
     final current = _selectedCategory;
-    if (current == null || current == 'Favorites') return;
+    if (current == null ||
+        current == 'Favorites' ||
+        current == _kAllVerbsCategory) {
+      return;
+    }
     setState(() {
       _renamingCategory = true;
       _categoryRenameController.text = current;
@@ -1835,99 +1840,74 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
     });
   }
 
-  Widget _categoryChip(
-    FfTokens t, {
-    required String name,
-    required int count,
-    required bool selected,
-    required bool dimmed,
-  }) {
-    return Opacity(
-      opacity: dimmed ? 0.55 : 1,
-      child: Material(
-        color: selected ? t.selected : FfTokens.card,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(7),
-          side: selected ? BorderSide(color: t.accentEdge) : BorderSide.none,
+  Widget _categoryDropdown(FfTokens t, String? category) {
+    if (_renamingCategory && !_searching) {
+      return CategoryRenameField(
+        tokens: t,
+        controller: _categoryRenameController,
+        onSubmit: _commitRenameCategory,
+        onCancel: _cancelRenameCategory,
+      );
+    }
+    final hiddenNames = _hiddenCategories.map((c) => c.toLowerCase()).toSet();
+    final value = category == _kAllVerbsCategory ||
+            (category != null && _categories.contains(category))
+        ? category
+        : (_categories.isEmpty ? null : _categories.first);
+    return SizedBox(
+      height: 32,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: t.sunken,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: FfTokens.panelOutline, width: 0.5),
         ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(7),
-          hoverColor: t.hover,
-          onTap: widget.busy ? null : () => _pickCategoryChip(name),
-          child: Container(
-            height: 24,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            alignment: Alignment.center,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  name,
-                  softWrap: false,
-                  style: t.metaStyle.copyWith(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: selected ? t.text : t.textSecondary,
-                  ),
-                ),
-                const SizedBox(width: 5),
-                Text(
-                  '$count',
-                  softWrap: false,
-                  style: t.metaStyle.copyWith(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                    color: selected ? FfTokens.accentHover : t.textTertiary,
-                  ),
-                ),
-              ],
-            ),
+        child: FfDropdownButton<String>(
+          value: value,
+          isExpanded: true,
+          menuColor: t.surface,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          style: t.metaStyle.copyWith(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: t.text,
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _addCategoryChip(FfTokens t) {
-    return Tooltip(
-      message: 'Add category',
-      child: Material(
-        color: Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(6),
-          side: BorderSide(color: t.divider),
-        ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(6),
-          hoverColor: t.hover,
-          onTap: widget.busy ? null : () => unawaited(_addCategory()),
-          child: SizedBox(
-            width: 28,
-            height: 24,
-            child: Center(
-              child: PhosphorIcon(
-                PhosphorIconsBold.plus,
-                size: 12,
-                color: t.textTertiary,
+          items: [
+            const DropdownMenuItem(
+              value: _kAllVerbsCategory,
+              child: Text(
+                'All',
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-          ),
+            for (final c in _categories)
+              DropdownMenuItem(
+                value: c,
+                child: Opacity(
+                  opacity: hiddenNames.contains(c.toLowerCase()) ? 0.55 : 1,
+                  child: Text(
+                    c,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+          ],
+          onChanged: widget.busy || _categories.isEmpty
+              ? null
+              : (picked) {
+                  if (picked != null) _pickCategoryChip(picked);
+                },
         ),
       ),
     );
   }
 
   Widget _verbRow(FfTokens t, _VerbDraft item, {required bool selected}) {
-    final searching = _searching;
+    final showCategory =
+        _searching || _selectedCategory == _kAllVerbsCategory;
     final label = item.label.trim().isEmpty ? 'Untitled' : item.label;
-    Widget flag(IconData icon, bool on, String tip) => Tooltip(
-          message: tip,
-          child: PhosphorIcon(
-            icon,
-            size: 12,
-            color: t.textTertiary.withValues(alpha: on ? 1 : 0.25),
-          ),
-        );
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: Material(
@@ -1942,7 +1922,7 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
               Container(
                 key: selected ? _selectedRowKey : null,
                 constraints: const BoxConstraints(minHeight: 28),
-                padding: const EdgeInsets.fromLTRB(8, 0, 4, 0),
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
                 child: Row(
                   children: [
                     if (widget.personalMode) ...[
@@ -1962,8 +1942,8 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    if (searching)
+                    if (showCategory) ...[
+                      const SizedBox(width: 8),
                       Text(
                         item.category,
                         maxLines: 1,
@@ -1972,24 +1952,8 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
                           fontSize: 11,
                           color: t.textTertiary,
                         ),
-                      )
-                    else
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          flag(
-                            PhosphorIconsRegular.usersThree,
-                            item.usePluralPhrase,
-                            'Two or more',
-                          ),
-                          const SizedBox(width: 4),
-                          flag(
-                            PhosphorIconsRegular.smiley,
-                            item.subOptions.celebrationEnabled,
-                            'Reaction',
-                          ),
-                        ],
                       ),
+                    ],
                   ],
                 ),
               ),
@@ -2010,22 +1974,28 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
 
   Widget _buildLeftPanel(FfTokens t, String? category) {
     final searching = _searching;
-    final all = _allVerbs;
     final list = _visibleVerbs;
     final hiddenNames = _hiddenCategories.map((c) => c.toLowerCase()).toSet();
     final categoryHidden =
         category != null && hiddenNames.contains(category.toLowerCase());
-    final canRename = category != null &&
-        category != 'Favorites' &&
-        !_renamingCategory &&
-        !widget.busy;
+    final realCategory = category != null &&
+        category != _kAllVerbsCategory &&
+        category != 'Favorites';
+    final canRename =
+        realCategory && !_renamingCategory && !widget.busy;
     final canDelete =
-        category != null && _categories.length > 1 && !widget.busy;
+        realCategory && _categories.length > 1 && !widget.busy;
     final personalDefault = widget.personalMode &&
-        category != null &&
+        realCategory &&
         _isDefaultCategory(category);
 
     final tools = <Widget>[
+      _VerbToolButton(
+        tokens: t,
+        icon: PhosphorIconsRegular.plus,
+        tooltip: 'Add category',
+        onPressed: widget.busy ? null : () => unawaited(_addCategory()),
+      ),
       _VerbToolButton(
         tokens: t,
         icon: PhosphorIconsRegular.dotsSixVertical,
@@ -2076,7 +2046,7 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
             child: Row(
               children: [
                 Text(
-                  searching ? 'RESULTS' : 'CATEGORIES',
+                  searching ? 'RESULTS' : 'CATEGORY',
                   style: verbEditorPanelTitle(t),
                 ),
                 const Spacer(),
@@ -2085,34 +2055,8 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
             ),
           ),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 5,
-            runSpacing: 5,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              for (final c in _categories)
-                if (_renamingCategory && !searching && c == category)
-                  SizedBox(
-                    width: 170,
-                    child: CategoryRenameField(
-                      tokens: t,
-                      controller: _categoryRenameController,
-                      onSubmit: _commitRenameCategory,
-                      onCancel: _cancelRenameCategory,
-                    ),
-                  )
-                else
-                  _categoryChip(
-                    t,
-                    name: c,
-                    count: all.where((v) => v.category == c).length,
-                    selected: !searching && c == category,
-                    dimmed: hiddenNames.contains(c.toLowerCase()),
-                  ),
-              _addCategoryChip(t),
-            ],
-          ),
-          const SizedBox(height: 8),
+          if (!searching) _categoryDropdown(t, category),
+          if (!searching) const SizedBox(height: 8),
           Expanded(
             child: Container(
               padding: const EdgeInsets.all(3),
@@ -2432,17 +2376,21 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
                           ? Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                Expanded(flex: 10, child: left),
+                                Expanded(flex: 8, child: left),
                                 const SizedBox(height: 8),
-                                Expanded(flex: 17, child: right),
+                                Expanded(flex: 20, child: right),
                               ],
                             )
                           : Row(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                Expanded(flex: 10, child: left),
+                                SizedBox(
+                                  width: (constraints.maxWidth * 0.28)
+                                      .clamp(200.0, 260.0),
+                                  child: left,
+                                ),
                                 const SizedBox(width: 8),
-                                Expanded(flex: 17, child: right),
+                                Expanded(child: right),
                               ],
                             ),
                     ),
@@ -2768,7 +2716,6 @@ class _OrderBoardDialogState extends State<_OrderBoardDialog> {
         onReorder: _reorderCategories,
         itemBuilder: (context, index) {
           final category = _categories[index];
-          final count = _verbs[category]?.length ?? 0;
           final selected = category == _selected;
           final hover = category == _hoverCategory;
           return DragTarget<String>(
@@ -2821,13 +2768,6 @@ class _OrderBoardDialogState extends State<_OrderBoardDialog> {
                                   ? FontWeight.w600
                                   : FontWeight.w500,
                             ),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.only(right: 10),
-                          child: Text(
-                            '$count',
-                            style: t.metaStyle.copyWith(color: t.textSecondary),
                           ),
                         ),
                       ],

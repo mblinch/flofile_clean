@@ -896,9 +896,9 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     await _saveInDirection(next: false);
   }
 
-  /// Open the burst picker and mark frames for the next caption Save.
+  /// Open the burst picker and write the current caption to the chosen frames.
   Future<void> _applyCaptionToBurst() async {
-    if (_burstSaveDialogOpen) return;
+    if (_burstSaveDialogOpen || _saveInFlight) return;
     final chain = _controller.forwardBurstChain;
     if (chain.length < 2) return;
 
@@ -913,7 +913,25 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
             if (_controller.currentPath != null) _controller.currentPath!,
           ]
         : decision.paths;
-    _controller.setSelectedImagePaths(paths);
+    if (paths.isEmpty) return;
+
+    _saveInFlight = true;
+    try {
+      final result = await _controller.savePaths(paths);
+      if (!mounted) return;
+      _controller.setSelectedImagePaths(result.failedPaths);
+      if (result.anySucceeded) {
+        _clearPendingBurst();
+        _controller.advanceAfterBurstSelection(
+          chain: chain,
+          savedPaths: result.succeededPaths.toSet(),
+          keepSearchOpen: _controller.searchOpen,
+        );
+      }
+      setState(() {});
+    } finally {
+      _saveInFlight = false;
+    }
   }
 
   Future<void> _saveTransmitAndNext() async {
@@ -1136,8 +1154,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                         const SizedBox(height: 6),
                         Text(
                           selectionOnly
-                              ? 'Choose which burst frames should get the caption '
-                                  'when you Save. Nothing is written until then.'
+                              ? 'Choose which burst frames should get this caption. '
+                                  'They will be written now.'
                               : fromSelection
                                   ? 'Your selection is part of a ${chain.length}-frame '
                                       'burst. Save the selection only, or choose frames '
@@ -1361,7 +1379,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                                   selected.isEmpty ? null : confirmSelected,
                               child: Text(
                                 selectionOnly
-                                    ? 'Apply to these photos (${selected.length})'
+                                    ? 'Write to these photos (${selected.length})'
                                     : 'Save selected (${selected.length})',
                               ),
                             ),
@@ -2113,6 +2131,10 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       mlbTimestampLoading: c.mlbTimestampLoading,
       mlbTimestampMatched: c.mlbTimestampMatched,
       onMlbTimestampTap: c.toggleMlbTimestamp,
+      showGettyEditorsNotes: c.isGettyWire,
+      selectedGettyEditorsNote: c.gettyEditorsNote,
+      gettyEditorsNoteCustomText: c.gettyEditorsNoteCustomText,
+      onGettyEditorsNoteChanged: c.setGettyEditorsNote,
     );
   }
 
