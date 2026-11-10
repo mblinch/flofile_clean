@@ -829,9 +829,8 @@ class PreferencesService {
     final normalized = sport.toLowerCase().trim();
     await prefs.setString(_keyCurrentSport, normalized);
 
-    // Built-in wires get the per-sport game-ID overlay. Custom / named styles
-    // keep their authored text — rewriting them here was wiping Done edits
-    // every time CaptionStyleCatalog.load ran.
+    // Built-in wires refresh from admin Structure masters (no league-phrase
+    // overlay). Custom / named styles keep their authored free-text.
     final active =
         CaptionTemplate.tryDecode(prefs.getString(_keyCaptionTemplateJson));
     if (active != null && !active.isUserAuthoredCaptionStyle) {
@@ -839,16 +838,15 @@ class PreferencesService {
         sport: normalized,
       )[active.wireStyle];
       final updated = admin == null
-          ? CaptionTemplate.applyGameIdentifierText(
-              active,
-              await resolveGameIdentifierText(active.wireStyle, normalized),
-            )
-          : admin.copyWith(
-              wireStyle: active.wireStyle,
-              includeTimingPhrase: active.includeTimingPhrase,
-              showKeywordsField: active.showKeywordsField,
-              showPersonalityField: active.showPersonalityField,
-            );
+          ? active.stripGameIdentifierForWireMaster()
+          : admin
+              .stripGameIdentifierForWireMaster()
+              .copyWith(
+                wireStyle: active.wireStyle,
+                includeTimingPhrase: active.includeTimingPhrase,
+                showKeywordsField: active.showKeywordsField,
+                showPersonalityField: active.showPersonalityField,
+              );
       if (updated.encode() != active.encode()) {
         await prefs.setString(_keyCaptionTemplateJson, updated.encode());
       }
@@ -923,7 +921,8 @@ class PreferencesService {
     await saveGameIdentifierByWireAndSport(map);
   }
 
-  /// Local overlay → Firebase catalog → [defaultGameIdentifierText].
+  /// Local overlay → Firebase catalog. Factory league phrases are no longer
+  /// used — Structure free-text is the source of truth.
   Future<String> resolveGameIdentifierText(
     WireStyle wire,
     String sport,
@@ -931,11 +930,20 @@ class PreferencesService {
     final normalizedSport = sport.toLowerCase().trim();
     final local = await getGameIdentifierByWireAndSport();
     final fromLocal = local[wire.name]?[normalizedSport]?.trim();
-    if (fromLocal != null && fromLocal.isNotEmpty) return fromLocal;
-    return AppDefaultsFirestoreService.resolveGameIdentifierText(
+    if (fromLocal != null &&
+        fromLocal.isNotEmpty &&
+        !kKnownGameIdentifierDefaults.contains(fromLocal)) {
+      return fromLocal;
+    }
+    final fromCatalog = await AppDefaultsFirestoreService.resolveGameIdentifierText(
       wire,
       normalizedSport,
     );
+    if (fromCatalog.isNotEmpty &&
+        !kKnownGameIdentifierDefaults.contains(fromCatalog)) {
+      return fromCatalog;
+    }
+    return '';
   }
 
   Future<CaptionTemplate> applyGameIdentifierForSport(
@@ -943,8 +951,7 @@ class PreferencesService {
     WireStyle wire,
     String sport,
   ) async {
-    // Named / Custom styles keep authored game-identifier text. Only fill when
-    // empty so sport changes don't invent a blank slot.
+    // Named / Custom styles keep authored Structure free-text as-is.
     if (template.isUserAuthoredCaptionStyle) {
       return CaptionTemplate.withSportGameIdentifierDefault(
         template,
@@ -952,8 +959,8 @@ class PreferencesService {
         replaceKnownDefaults: false,
       );
     }
-    final text = await resolveGameIdentifierText(wire, sport);
-    return CaptionTemplate.applyGameIdentifierText(template, text);
+    // Built-in wires: never inject league phrases; strip any leftover defaults.
+    return template.stripGameIdentifierForWireMaster();
   }
 
   Future<String> getCurrentSport() async {
@@ -2919,8 +2926,8 @@ class PreferencesService {
 
   /// Full caption wire template (presets + custom). Migrates legacy order/flavor once if needed.
   ///
-  /// Built-in wire masters get the per-sport game-identifier overlay. Custom and
-  /// named library styles keep their authored [CaptionTemplate.gameIdentifierText].
+  /// Built-in wire masters stay Structure-only (no league-phrase overlay). Custom
+  /// and named library styles keep their authored free-text.
   Future<CaptionTemplate> getCaptionTemplate() async {
     final sport = await getCurrentSport();
     var template = await getCaptionTemplateRaw();

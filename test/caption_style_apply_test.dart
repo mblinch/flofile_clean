@@ -34,7 +34,7 @@ void main() {
     expect(exportedRaw.gameIdentifierText, 'during training camp');
   });
 
-  test('built-in wire styles still receive sport game identifier overlay',
+  test('built-in wire styles do not receive sport game identifier overlay',
       () async {
     final prefs = await PreferencesService.getInstance();
     await prefs.saveCurrentSport('hockey');
@@ -46,7 +46,12 @@ void main() {
 
     final loaded = await prefs.getCaptionTemplate();
     expect(loaded.isUserAuthoredCaptionStyle, isFalse);
-    expect(loaded.gameIdentifierText, 'in their NHL game');
+    expect(loaded.gameIdentifierText, isEmpty);
+    final frees = loaded.freeTextSnippets ?? const <String>[];
+    expect(
+      frees.every((s) => !kKnownGameIdentifierDefaults.contains(s.trim())),
+      isTrue,
+    );
   });
 
   test('catalog marks saved library entry as active and preserves text',

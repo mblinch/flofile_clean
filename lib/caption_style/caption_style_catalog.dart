@@ -315,10 +315,8 @@ class CaptionStyleCatalog {
   }
 
   CaptionTemplate _withSport(CaptionTemplate t) {
-    // Wire masters stay bare in Structure; start screen adds Game ID later.
-    // Keep gameIdentifierText on the side for when startup applies it.
-    final gid = gameIdByWire[t.wireStyle] ?? defaultGameIdentifierText(sport);
-    return t.stripGameIdentifierForWireMaster().copyWith(gameIdentifierText: gid);
+    // Wire masters stay Structure-only — no hidden league-phrase overlay.
+    return t.stripGameIdentifierForWireMaster();
   }
 
   CaptionTemplate _wiredBaseline(WireStyle wire) {

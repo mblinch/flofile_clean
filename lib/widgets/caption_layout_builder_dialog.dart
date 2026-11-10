@@ -6292,12 +6292,12 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     unawaited(() async {
       await _loadGameIdByWire();
       if (!mounted) return;
-      final gid = _gameIdByWire[_selectedWire] ??
-          defaultGameIdentifierText(next);
+      // Do not inject league phrases on sport change — Structure free-text only.
+      final stripped = _template.stripGameIdentifierForWireMaster();
       setState(() {
-        _template = _template.copyWith(gameIdentifierText: gid);
-        if (_gameIdentifierCtrl.text != gid) {
-          _gameIdentifierCtrl.text = gid;
+        _template = stripped;
+        if (_gameIdentifierCtrl.text != stripped.gameIdentifierText) {
+          _gameIdentifierCtrl.text = stripped.gameIdentifierText;
         }
       });
     }());

@@ -496,7 +496,9 @@ class LocationLineOptions {
 /// Jersey / roster number style in the dynamic caption sample.
 enum NumberFormatStyle { hash, parens }
 
-/// Built-in game-identifier phrases per league (see [defaultGameIdentifierText]).
+/// Built-in game-identifier phrases that used to be auto-injected per league.
+/// Kept so we can strip them from older templates; Structure free-text is now
+/// the only source of truth for caption body copy.
 const Set<String> kKnownGameIdentifierDefaults = {
   'in their MLB game',
   'in their NHL game',
@@ -505,27 +507,10 @@ const Set<String> kKnownGameIdentifierDefaults = {
   'in their MLS match',
 };
 
-/// Default [CaptionTemplate.gameIdentifierText] for the active sport.
-String defaultGameIdentifierText(String? sport) {
-  switch ((sport ?? 'baseball').toLowerCase()) {
-    case 'baseball':
-    case 'mlb':
-      return 'in their MLB game';
-    case 'hockey':
-    case 'nhl':
-      return 'in their NHL game';
-    case 'basketball':
-    case 'nba':
-      return 'in their NBA game';
-    case 'wnba':
-      return 'in their WNBA game';
-    case 'soccer':
-    case 'mls':
-      return 'in their MLS match';
-    default:
-      return '';
-  }
-}
+/// Former per-sport game-identifier defaults. Always empty now — captions only
+/// include what is authored in Structure (free-text / literals).
+// ignore: avoid_unused_parameter
+String defaultGameIdentifierText(String? sport) => '';
 
 /// Whether the club appears before or after the player in the dynamic caption
 /// sentence (preview + default caption slot when no override is supplied).
@@ -1107,7 +1092,7 @@ class CaptionTemplate {
           ', ',
           '. ',
         ],
-        // Filled per sport via [applyGameIdentifierText] ("in their NHL game", …).
+        // Optional Structure free-text slot (empty by default — not auto-filled).
         freeTextSnippets: const [''],
         freeTextSuffixes: const [''],
         locationOptionsByOccurrence: [
@@ -2457,28 +2442,19 @@ class CaptionTemplate {
       id.startsWith('saved_') ||
       id.startsWith('saved:');
 
-  /// Fills game-id typed free text from [defaultGameIdentifierText] when empty,
-  /// or when [replaceKnownDefaults] and the current text is another sport’s default.
+  /// Structure free-text is the source of truth. No longer injects league
+  /// phrases. When [replaceKnownDefaults] is true, strips factory phrases that
+  /// were previously auto-filled onto wire layouts.
   static CaptionTemplate withSportGameIdentifierDefault(
     CaptionTemplate template,
     String? sport, {
     bool replaceKnownDefaults = true,
   }) {
-    final next = defaultGameIdentifierText(sport);
-    if (next.isEmpty) return template;
+    // [sport] retained for call-site compatibility.
+    final _ = sport;
     final t = template.migrateGameIdentifierToFreeText();
-    final current = t.gameIdentifierText.trim();
-    final snippets = t.freeTextSnippets ?? const <String>[];
-    final hasReplaceableFree = snippets.any((s) {
-      final cur = s.trim();
-      return cur.isEmpty || kKnownGameIdentifierDefaults.contains(cur);
-    });
-    final shouldSet = current.isEmpty ||
-        (replaceKnownDefaults &&
-            kKnownGameIdentifierDefaults.contains(current)) ||
-        (replaceKnownDefaults && hasReplaceableFree);
-    if (!shouldSet) return t;
-    return applyGameIdentifierText(t, next);
+    if (!replaceKnownDefaults) return t;
+    return t.stripGameIdentifierForWireMaster();
   }
 
   /// Applies an explicit per-wire-per-sport game identifier into typed free text

@@ -352,15 +352,17 @@ class AppDefaultsFirestoreService {
     }
   }
 
-  /// Resolves game identifier: catalog overlay → [defaultGameIdentifierText].
+  /// Resolves game identifier from the published catalog only. Factory league
+  /// phrases are no longer used — Structure free-text is the source of truth.
   static Future<String> resolveGameIdentifierText(
     WireStyle wire,
     String sport,
   ) async {
     await loadCacheFromDisk();
-    final fromCatalog = _memoryCache?.gameIdentifierText(wire, sport);
-    if (fromCatalog != null && fromCatalog.isNotEmpty) return fromCatalog;
-    return defaultGameIdentifierText(sport);
+    final fromCatalog = _memoryCache?.gameIdentifierText(wire, sport)?.trim();
+    if (fromCatalog == null || fromCatalog.isEmpty) return '';
+    if (kKnownGameIdentifierDefaults.contains(fromCatalog)) return '';
+    return fromCatalog;
   }
 
   /// Applies catalog/local game ID overlay for [sport] onto a wire layout template.
@@ -374,7 +376,7 @@ class AppDefaultsFirestoreService {
   }
 
   /// Caption Structures from cache for [sport] (per-sport override, else wire
-  /// master). [gameIdentifierText] is attached for the start screen to apply.
+  /// master). League phrases are not attached — Structure free-text only.
   static Map<WireStyle, CaptionTemplate> mergedCaptionWireDefaults({
     String sport = 'baseball',
   }) {
@@ -385,9 +387,7 @@ class AppDefaultsFirestoreService {
       final base = (catalog?.captionForWireAndSport(wire, sportKey) ??
               factoryCaptionForWire(wire))
           .stripGameIdentifierForWireMaster();
-      final gid = catalog?.gameIdentifierText(wire, sportKey) ??
-          defaultGameIdentifierText(sportKey);
-      out[wire] = base.copyWith(gameIdentifierText: gid);
+      out[wire] = base;
     }
     return out;
   }

@@ -2951,9 +2951,8 @@ class CaptionV2Controller extends ChangeNotifier {
         refForCustom: captionTemplate,
       );
     } else {
-      // Wire / custom working copy: fill empty game-ID, and swap known sport
-      // defaults (MLB → NHL) without clobbering authored free-text.
-      // Custom / named styles: only fill when empty (never replace authored text).
+      // Wire layouts: strip leftover factory league phrases. Named / custom
+      // styles keep authored Structure free-text.
       captionTemplate = CaptionTemplate.withSportGameIdentifierDefault(
         captionTemplate,
         sport,

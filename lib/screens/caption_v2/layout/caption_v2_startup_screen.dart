@@ -214,6 +214,10 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     '.png',
   };
 
+  /// Shared stage size for wire / setup / caption steps.
+  static const double _stageWidth = 1270;
+  static const double _stageHeight = 670;
+
   bool get _sportChosen => _sport != null && _sport!.isNotEmpty;
   bool get _folderChosen => _folderPath != null && _folderPath!.isNotEmpty;
 
@@ -2254,32 +2258,38 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
-              child: switch (_setupStep) {
-                1 => _buildV5WireStep(),
-                2 => LayoutBuilder(
-                    builder: (context, constraints) {
-                      return SingleChildScrollView(
-                        padding:
-                            const EdgeInsets.fromLTRB(24, 8, 24, 12),
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            minHeight: math.max(
-                              0,
-                              constraints.maxHeight - 20,
-                            ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 12, 24, 12),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final w = math.min(_stageWidth, constraints.maxWidth);
+                    final h = math.min(_stageHeight, constraints.maxHeight);
+                    return Center(
+                      child: SizedBox(
+                        width: w,
+                        height: h,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: FfTokens.sessionPanel,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: FfTokens.sessionLn),
                           ),
-                          child: Align(
-                            alignment: Alignment.topCenter,
-                            child: _buildV5SetupPanel(
-                              stackTeams: stackTeams,
-                            ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(14),
+                            child: switch (_setupStep) {
+                              1 => _buildV5WireStep(),
+                              2 => _buildV5SetupPanel(
+                                  stackTeams: stackTeams,
+                                ),
+                              _ => _buildV5CaptionStep(t),
+                            },
                           ),
                         ),
-                      );
-                    },
-                  ),
-                _ => _buildV5CaptionStep(t),
-              },
+                      ),
+                    );
+                  },
+                ),
+              ),
             ),
             if (_error != null)
               Padding(
@@ -2303,10 +2313,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   }
 
   Widget _buildV5CaptionStep(FfTokens t) {
-    // Flex layout (not scroll+fixed height) so Structure / Player Output
-    // always receive a real height budget.
+    // Fills the shared stage frame so Structure / Player Output get height.
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -2324,6 +2333,13 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
           ),
           const SizedBox(height: 12),
           _buildSessionStep(t, compact: true),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: _buildStepBackButton(
+              onPressed: _going ? null : () => _showSetupStep(2),
+            ),
+          ),
         ],
       ),
     );
@@ -2353,140 +2369,125 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       }
     }
 
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 920),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(28, 28, 28, 22),
-            decoration: BoxDecoration(
-              color: FfTokens.sessionPanel,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: FfTokens.sessionLn),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  'Choose your wire',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: FfTokens.sessionTx,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'This sets the caption layout and IPTC fields for the session.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 13,
-                    color: FfTokens.sessionT2,
-                  ),
-                ),
-                const SizedBox(height: 28),
-                if (_loadingStyles)
-                  const Center(
-                    child: SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                else
-                  Row(
-                    children: [
-                      for (var i = 0; i < options.length; i++) ...[
-                        if (i > 0) const SizedBox(width: 12),
-                        Expanded(
-                          child: _Pressable(
-                            height: 132,
-                            radius: 12,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 16,
-                            ),
-                            color: options[i].$1 == current
-                                ? FfTokens.nocturneAccentSoft
-                                : FfTokens.nocturneSf,
-                            borderColor: options[i].$1 == current
-                                ? FfTokens.nocturneAccentEdge
-                                : FfTokens.sessionLn,
-                            borderWidth: options[i].$1 == current ? 1.4 : 1,
-                            hoverColor: FfTokens.sessionHv,
-                            onPressed: () =>
-                                unawaited(_selectStyle(options[i].$1)),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                PhosphorIcon(
-                                  iconFor(options[i].$1),
-                                  size: 28,
-                                  color: options[i].$1 == current
-                                      ? FfTokens.nocturneAc
-                                      : FfTokens.sessionT2,
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  options[i].$2,
-                                  textAlign: TextAlign.center,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontFamily: FfTokens.fontFamily,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                    color: options[i].$1 == current
-                                        ? FfTokens.sessionTx
-                                        : FfTokens.sessionT2,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                const SizedBox(height: 24),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: _GoTimeButton(
-                    enabled: _canContinueFromWire,
-                    loading: false,
-                    compact: false,
-                    label: 'Continue',
-                    shortcut: '↵',
-                    onPressed: () => unawaited(_continueFromWire()),
-                  ),
-                ),
-              ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(40, 36, 40, 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Spacer(flex: 2),
+          const Text(
+            'Choose your wire',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: FfTokens.sessionTx,
             ),
           ),
-        ),
+          const SizedBox(height: 8),
+          const Text(
+            'This sets the caption layout and IPTC fields for the session.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 13,
+              color: FfTokens.sessionT2,
+            ),
+          ),
+          const SizedBox(height: 36),
+          if (_loadingStyles)
+            const Center(
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          else
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 920),
+                child: Row(
+                  children: [
+                    for (var i = 0; i < options.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 12),
+                      Expanded(
+                        child: _Pressable(
+                          height: 132,
+                          radius: 12,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 16,
+                          ),
+                          color: options[i].$1 == current
+                              ? FfTokens.nocturneAccentSoft
+                              : FfTokens.nocturneSf,
+                          borderColor: options[i].$1 == current
+                              ? FfTokens.nocturneAccentEdge
+                              : FfTokens.sessionLn,
+                          borderWidth: options[i].$1 == current ? 1.4 : 1,
+                          hoverColor: FfTokens.sessionHv,
+                          onPressed: () =>
+                              unawaited(_selectStyle(options[i].$1)),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              PhosphorIcon(
+                                iconFor(options[i].$1),
+                                size: 28,
+                                color: options[i].$1 == current
+                                    ? FfTokens.nocturneAc
+                                    : FfTokens.sessionT2,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                options[i].$2,
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontFamily: FfTokens.fontFamily,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: options[i].$1 == current
+                                      ? FfTokens.sessionTx
+                                      : FfTokens.sessionT2,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          const Spacer(flex: 3),
+          Align(
+            alignment: Alignment.centerRight,
+            child: _GoTimeButton(
+              enabled: _canContinueFromWire,
+              loading: false,
+              compact: false,
+              label: 'Continue',
+              shortcut: '↵',
+              onPressed: () => unawaited(_continueFromWire()),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  /// Step 2 — centered setup panel (Images / IPTC / League / Teams).
+  /// Step 2 — setup panel (Images / IPTC / League / Teams).
   Widget _buildV5SetupPanel({required bool stackTeams}) {
-    return SizedBox(
-      width: 1270,
-      height: 670,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-        decoration: BoxDecoration(
-          color: FfTokens.sessionPanel,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
             // Images + League + Teams on one row.
             Container(
               padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
@@ -2547,41 +2548,84 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                 ],
               ),
             ),
-            // Full-width IPTC builder fills remaining panel height.
+            // IPTC template only after both teams are chosen.
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(10, 6, 10, 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text('IPTC', style: _kSectionLabel),
-                    const SizedBox(height: 6),
-                    Expanded(
-                      child: _setupGate(
-                        unlocked: _folderChosen,
-                        child: _buildV5IptcSourceField(),
+                child: _bothTeamsChosen
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text('IPTC', style: _kSectionLabel),
+                          const SizedBox(height: 6),
+                          Expanded(child: _buildV5IptcSourceField()),
+                        ],
+                      )
+                    : const Center(
+                        child: Text(
+                          'Select away and home teams to set up IPTC',
+                          style: TextStyle(
+                            fontFamily: FfTokens.fontFamily,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: FfTokens.sessionT3,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
               ),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 4, 10, 6),
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: _GoTimeButton(
-                  enabled: _canContinue,
-                  loading: false,
-                  compact: false,
-                  label: 'Continue',
-                  shortcut: '↵',
-                  onPressed: () => unawaited(_continueToCaptionStep()),
-                ),
+              child: Row(
+                children: [
+                  _buildStepBackButton(
+                    onPressed: () => _showSetupStep(1),
+                  ),
+                  const Spacer(),
+                  _GoTimeButton(
+                    enabled: _canContinue,
+                    loading: false,
+                    compact: false,
+                    label: 'Continue',
+                    shortcut: '↵',
+                    onPressed: () => unawaited(_continueToCaptionStep()),
+                  ),
+                ],
               ),
             ),
           ],
         ),
+    );
+  }
+
+  Widget _buildStepBackButton({required VoidCallback? onPressed}) {
+    return _Pressable(
+      height: 38,
+      radius: 9,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      color: Colors.transparent,
+      hoverColor: onPressed == null ? Colors.transparent : FfTokens.sessionHv,
+      hoverForeground: onPressed != null,
+      foreground: onPressed == null
+          ? FfTokens.sessionT3.withValues(alpha: 0.35)
+          : FfTokens.sessionT2,
+      onPressed: onPressed,
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          PhosphorIcon(PhosphorIconsRegular.arrowLeft, size: 15),
+          SizedBox(width: 8),
+          Text(
+            'Back',
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          SizedBox(width: 8),
+          _KbdHint('Esc'),
+        ],
       ),
     );
   }
@@ -4622,9 +4666,8 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       );
     }
 
-    // Steps 1–2: status (+ Back on setup). Continue lives on each panel.
-    // Step 3: Back + Go time.
-    if (_setupStep == 1) {
+    // Back lives on each stage panel. Footer: status (+ Go time on step 3).
+    if (_setupStep != 3) {
       return Container(
         padding: const EdgeInsets.fromLTRB(24, 10, 24, 10),
         decoration: const BoxDecoration(
@@ -4632,48 +4675,6 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
           border: Border(top: BorderSide(color: FfTokens.sessionLn)),
         ),
         child: status,
-      );
-    }
-
-    if (_setupStep == 2) {
-      return Container(
-        padding: const EdgeInsets.fromLTRB(24, 10, 24, 10),
-        decoration: const BoxDecoration(
-          color: FfTokens.sessionPanel,
-          border: Border(top: BorderSide(color: FfTokens.sessionLn)),
-        ),
-        child: Row(
-          children: [
-            Expanded(child: status),
-            _Pressable(
-              height: 38,
-              radius: 9,
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              color: Colors.transparent,
-              hoverColor: FfTokens.sessionHv,
-              hoverForeground: true,
-              foreground: FfTokens.sessionT2,
-              onPressed: () => _showSetupStep(1),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  PhosphorIcon(PhosphorIconsRegular.arrowLeft, size: 15),
-                  SizedBox(width: 8),
-                  Text(
-                    'Back',
-                    style: TextStyle(
-                      fontFamily: FfTokens.fontFamily,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  SizedBox(width: 8),
-                  _KbdHint('Esc'),
-                ],
-              ),
-            ),
-          ],
-        ),
       );
     }
 
@@ -4686,34 +4687,6 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       child: Row(
         children: [
           Expanded(child: status),
-          _Pressable(
-            height: 38,
-            radius: 9,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            color: Colors.transparent,
-            hoverColor: FfTokens.sessionHv,
-            hoverForeground: true,
-            foreground: FfTokens.sessionT2,
-            onPressed: _going ? null : () => _showSetupStep(2),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                PhosphorIcon(PhosphorIconsRegular.arrowLeft, size: 15),
-                SizedBox(width: 8),
-                Text(
-                  'Back',
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                SizedBox(width: 8),
-                _KbdHint('Esc'),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
           _GoTimeButton(
             enabled: _canGo,
             loading: _going,
@@ -4951,19 +4924,14 @@ class _CaptionPreviewLive extends StatelessWidget {
     final awayFilled = away != _awayPlaceholder;
     final homeFilled = home != _homePlaceholder;
 
-    final leagueId = hasSport
-        ? defaultGameIdentifierText(sportKey)
-        : 'in their $_leaguePlaceholder';
     final timing = hasSport
         ? CaptionFormulaRenderer.previewTimePhraseForSport(sportKey)
         : 'in the $_periodPlaceholder';
 
     final game = gameInfo;
     final agency = _agencyFor(tpl.wireStyle);
-    // Force sport-correct game identifier even if the stored template is stale.
-    final previewTemplate = hasSport
-        ? CaptionTemplate.applyGameIdentifierText(tpl, leagueId)
-        : tpl.copyWith(gameIdentifierText: leagueId);
+    // Structure free-text only — do not inject a hidden league phrase.
+    final previewTemplate = tpl.stripGameIdentifierForWireMaster();
 
     final String body;
     if (previewPlayers.isNotEmpty) {
@@ -4976,8 +4944,7 @@ class _CaptionPreviewLive extends StatelessWidget {
     } else if (awayFilled || homeFilled) {
       body = 'Loading ${awayFilled ? away : home} roster…';
     } else {
-      body =
-          '$away player against the $home $timing ahead of their ${leagueId.replaceFirst('in their ', '')}';
+      body = '$away player against the $home $timing';
     }
 
     // Prefer a full formula render when we have a template; fall back to body.

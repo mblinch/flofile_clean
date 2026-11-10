@@ -508,13 +508,10 @@ class StructureFormula {
           var body = freeI < frees.length ? frees[freeI] : '';
           final suf = freeI < freeSuf.length ? freeSuf[freeI] : '';
           freeI++;
-          // Sport Game ID phrases are start-screen only — omit from Structure.
-          final asGameId = _isGameIdentifierPhrase(
-                body,
-                template.gameIdentifierText,
-              ) ||
-              (body.trim().isEmpty && freeTextIsGameIdSlot(si));
-          if (asGameId) break;
+          // Empty free-text after Caption is an unused optional slot — hide it.
+          // Non-empty free-text (including former league phrases) stays visible
+          // so Structure matches what the caption writes.
+          if (body.trim().isEmpty && freeTextIsGameIdSlot(si)) break;
           buf.write(body);
           buf.write(suf);
         case CaptionSegment.customText:
@@ -553,15 +550,6 @@ class StructureFormula {
       }
     }
     return ensureCaption(buf.toString());
-  }
-
-  /// True when [body] is the sport game-identifier phrase (not wire layout).
-  static bool _isGameIdentifierPhrase(String body, String gameIdentifierText) {
-    final t = body.trim();
-    if (t.isEmpty) return false;
-    final gid = gameIdentifierText.trim();
-    if (gid.isNotEmpty && t == gid) return true;
-    return kKnownGameIdentifierDefaults.contains(t);
   }
 
   /// Apply a formula onto [base], keeping wire/id/player-output settings.
@@ -923,12 +911,8 @@ class StructureFormula {
           weekdayTokensByOccurrence:
               weekdayTok.isEmpty ? null : weekdayTok,
           locationOptionsByOccurrence: locOpts.isEmpty ? null : locOpts,
-          // Keep host/sport overlay; fall back to sport default for preview.
-          gameIdentifierText: () {
-            final existing = base.gameIdentifierText.trim();
-            if (existing.isNotEmpty) return existing;
-            return defaultGameIdentifierText(sport);
-          }(),
+          // Keep authored game-identifier / free-text; do not invent a league phrase.
+          gameIdentifierText: base.gameIdentifierText,
         )
         .normalizePerOccurrenceLists();
   }
