@@ -1466,7 +1466,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 24),
                         child: Text(
-                          'Are you sure you want to delete $selectedCount images?\n\nThis action cannot be undone.',
+                          'Are you sure you want to delete $selectedCount images?\n\nThey will be moved to the ${trashBinLabel()}.',
                           textAlign: TextAlign.center,
                           style: const TextStyle(fontSize: 14),
                         ),
@@ -1482,7 +1482,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                           ),
                           const SizedBox(width: 16),
                           ElevatedGreyButton(
-                            label: 'Delete',
+                            label: 'Move to ${trashBinLabel()}',
                             fontSize: 11,
                             isDanger: true,
                             onPressed: () {
@@ -1527,7 +1527,11 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Deleted $deletedCount images'),
+          content: Text(
+            deletedCount == 1
+                ? 'Moved 1 image to the ${trashBinLabel()}'
+                : 'Moved $deletedCount images to the ${trashBinLabel()}',
+          ),
           backgroundColor: Colors.green,
           duration: const Duration(seconds: 2),
         ),
@@ -1705,7 +1709,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 24),
                         child: Text(
-                          'Are you sure you want to delete "${p.basename(imagePath)}"?\n\nThis action cannot be undone.',
+                          'Are you sure you want to delete "${p.basename(imagePath)}"?\n\nIt will be moved to the ${trashBinLabel()}.',
                           textAlign: TextAlign.center,
                           style: const TextStyle(fontSize: 14),
                         ),
@@ -1721,7 +1725,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                           ),
                           const SizedBox(width: 16),
                           ElevatedGreyButton(
-                            label: 'Delete',
+                            label: 'Move to ${trashBinLabel()}',
                             fontSize: 11,
                             isDanger: true,
                             onPressed: () {
@@ -1814,7 +1818,9 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Deleted: ${p.basename(imagePath)}'),
+            content: Text(
+              'Moved ${p.basename(imagePath)} to the ${trashBinLabel()}',
+            ),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 2),
           ),
@@ -1822,7 +1828,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
       }
 
       widget.onImageDeleted?.call(imagePath);
-      print('Successfully deleted: $imagePath');
+      print('Successfully moved to trash: $imagePath');
     } on FileSystemException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1830,7 +1836,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
             content: Text(
               e.message == 'File not found'
                   ? 'File not found'
-                  : 'Error deleting file: ${e.message}',
+                  : 'Error moving file to the ${trashBinLabel()}: ${e.message}',
             ),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 3),

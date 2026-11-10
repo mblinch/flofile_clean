@@ -10,6 +10,7 @@ import '../../../services/iptc_template_import_service.dart';
 import '../../../services/preferences_service.dart';
 import '../../../theme/ff_tokens.dart';
 import '../../../utils/exiftool_helper.dart';
+import '../../../utils/image_file_operations.dart';
 import '../../../widgets/app_styled_dialogs.dart';
 import '../../../widgets/ff_menu.dart';
 import '../../../widgets/oriented_file_preview.dart';
@@ -470,25 +471,26 @@ Future<void> _deleteImages(
   final paths = imagePaths.toSet().toList(growable: false);
   if (paths.isEmpty) return;
   final n = paths.length;
+  final trash = trashBinLabel();
   final confirmed = await _showConfirmDialog(
     context,
     title: n == 1 ? 'Delete image?' : 'Delete $n images?',
     body: n == 1
-        ? '${p.basename(paths.first)} will be permanently deleted.'
-        : '$n selected photos will be permanently deleted.',
-    confirmLabel: 'Delete',
+        ? '${p.basename(paths.first)} will be moved to the $trash.'
+        : '$n selected photos will be moved to the $trash.',
+    confirmLabel: 'Move to $trash',
   );
   if (!confirmed) return;
   final deleted = await controller.deleteImages(paths);
   if (!context.mounted) return;
   if (deleted == 0) {
-    _message(context, 'Could not delete images');
+    _message(context, 'Could not move images to the $trash');
   } else if (deleted == 1 && n == 1) {
-    _message(context, 'Image deleted');
+    _message(context, 'Image moved to the $trash');
   } else if (deleted == n) {
-    _message(context, '$deleted images deleted');
+    _message(context, '$deleted images moved to the $trash');
   } else {
-    _message(context, 'Deleted $deleted of $n images');
+    _message(context, 'Moved $deleted of $n images to the $trash');
   }
 }
 

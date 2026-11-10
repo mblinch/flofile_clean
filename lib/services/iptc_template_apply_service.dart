@@ -721,10 +721,13 @@ class IptcTemplateApplyService {
   }
 
   static bool _fieldNeedsWrite(
-      String presetKey, String expected, String existing) {
+      String presetKey, String expected, String existing,
+      {bool fillEmptyOnly = false}) {
     final e = expected.trim();
     if (e.isEmpty) return false;
     final x = existing.trim();
+    // Fill gaps: never overwrite a value already on the file.
+    if (fillEmptyOnly && x.isNotEmpty) return false;
     if (presetKey == 'Urgency') {
       return normalizeUrgencyValue(e) != normalizeUrgencyValue(x);
     }
@@ -745,15 +748,16 @@ class IptcTemplateApplyService {
     int? imageIndex,
     Set<String>? fieldsToClear,
     bool skipKeywords = false,
+    bool fillEmptyOnly = false,
   }) {
     final existing =
         IptcTemplateImportService.panelValuesFromExiftool(existingMeta);
     final changed = <String, String>{};
 
     // Determine which supp cat slots actually need clearing (file has a value
-    // but template is blank for that slot).
+    // but template is blank for that slot). Skip clears in fill-gaps mode.
     final suppCatsToClear = <String>{};
-    if (fieldsToClear != null) {
+    if (!fillEmptyOnly && fieldsToClear != null) {
       for (var i = 1; i <= 3; i++) {
         final key = 'Supp Cat $i';
         if (fieldsToClear.contains(key)) {
@@ -770,7 +774,12 @@ class IptcTemplateApplyService {
         final key = 'Supp Cat $i';
         final v = preset[key]?.trim();
         if (v == null || v.isEmpty) continue;
-        if (_fieldNeedsWrite(key, v, existing[key] ?? '')) {
+        if (_fieldNeedsWrite(
+          key,
+          v,
+          existing[key] ?? '',
+          fillEmptyOnly: fillEmptyOnly,
+        )) {
           anySuppOutOfSync = true;
           break;
         }
@@ -780,7 +789,11 @@ class IptcTemplateApplyService {
       for (var i = 1; i <= 3; i++) {
         final key = 'Supp Cat $i';
         final v = preset[key]?.trim() ?? '';
-        if (v.isNotEmpty) changed[key] = v;
+        if (v.isNotEmpty) {
+          if (!fillEmptyOnly || (existing[key] ?? '').trim().isEmpty) {
+            changed[key] = v;
+          }
+        }
       }
     }
 
@@ -797,14 +810,21 @@ class IptcTemplateApplyService {
         return;
       }
       final existingVal = existing[key] ?? '';
-      if (_fieldNeedsWrite(key, v, existingVal)) {
+      if (_fieldNeedsWrite(
+        key,
+        v,
+        existingVal,
+        fillEmptyOnly: fillEmptyOnly,
+      )) {
         changed[key] = v;
       }
     });
 
     final keywordsRaw = skipKeywords ? '' : (preset['Keywords']?.trim() ?? '');
+    final existingKw = existing['Keywords'] ?? '';
     final keywords = keywordsRaw.isNotEmpty &&
-            !_keywordsMatch(keywordsRaw, existing['Keywords'] ?? '')
+            !(fillEmptyOnly && existingKw.trim().isNotEmpty) &&
+            !_keywordsMatch(keywordsRaw, existingKw)
         ? keywordsRaw
         : null;
 
@@ -819,6 +839,7 @@ class IptcTemplateApplyService {
               'Object Name',
               resolvedObjectName,
               existing['Object Name'] ?? '',
+              fillEmptyOnly: fillEmptyOnly,
             )
         ? resolvedObjectName
         : null;
@@ -1023,6 +1044,9 @@ class IptcTemplateApplyService {
   /// then the full template is written. On session load ([preserveOnLoad]),
   /// Caption is never written. Personality / Keywords are always merged onto
   /// existing values (never overwritten); duplicates are skipped.
+  ///
+  /// When [fillEmptyOnly] is true, non-empty file fields are left alone (no
+  /// replace wipe). Template values are written only into blank slots.
   static Future<IptcApplyToImageResult> applyToImage(
     String imagePath,
     Map<String, String> template, {
@@ -1032,7 +1056,12 @@ class IptcTemplateApplyService {
     Set<String>? fieldsToClear,
     bool replaceExisting = false,
     bool preserveOnLoad = false,
+    bool fillEmptyOnly = false,
   }) async {
+    if (fillEmptyOnly) {
+      replaceExisting = false;
+      fieldsToClear = null;
+    }
     if (replaceExisting && !preserveOnLoad) {
       skipInAppGenerated = false;
       fieldsToClear = null;
@@ -1122,6 +1151,7 @@ class IptcTemplateApplyService {
         imageIndex: imageIndex,
         fieldsToClear: fieldsToClear,
         skipKeywords: preserveOnLoad,
+        fillEmptyOnly: fillEmptyOnly,
       );
       fieldsToWrite = Map<String, String>.from(plan.presetFields);
       keywordsToWrite = plan.keywords;

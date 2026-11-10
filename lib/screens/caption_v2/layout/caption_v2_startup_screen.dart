@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:desktop_drop/desktop_drop.dart';
@@ -38,6 +39,9 @@ import '../data/team_abbrev.dart';
 import 'caption_v2_iptc_dialog.dart';
 import 'roster_import_dialog.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
+
+/// New Session IPTC source — maps onto apply-mode + fill-gaps + elsewhere prefs.
+enum _IptcSourceMode { apply, fill, files }
 
 /// Result handed from the V2 startup screen into the caption session.
 class CaptionV2StartupResult {
@@ -140,10 +144,23 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   bool _useOfficialLeagueApis = false;
   IptcApplyMode _iptcMode = IptcApplyMode.none;
   String _iptcStatus = 'Off';
+  /// When true, FloFile will not write IPTC and will not block Go Time on
+  /// missing caption/filing fields (handled in Photo Mechanic / elsewhere).
+  bool _iptcAppliedElsewhere = false;
+  /// When writing IPTC on ingest, only fill empty file fields (keep existing).
+  bool _iptcFillGapsOnly = false;
   List<String> _missingCaptionIptc = const [];
   List<String> _missingFilingIptc = const [];
   bool _scanningIptc = false;
   int _iptcScanGen = 0;
+  /// Folder scan: files that already have City + Date (for "Already in files").
+  int _iptcScanWithCityDate = 0;
+  int _iptcScanTotal = 0;
+
+  /// Step 1 = Setup panel; Step 2 = summary + Caption + Session options.
+  int _setupStep = 1;
+  /// Which setup field to focus when returning from the summary strip.
+  String? _setupFocusTarget;
 
   /// Latest folder + template IPTC panel values (for caption / structure preview).
   Map<String, String> _iptcPanelForPreview = const {};
@@ -202,11 +219,21 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   bool get _bothTeamsChosen =>
       _homeFilled && _awayFilled && _homeTeam != _awayTeam;
 
-  /// Go Time requires folder + sport + both teams (per redesign).
+  /// Continue (step 1) / Go Time (step 2) require folder + sport + both teams.
   bool get _canGo =>
       _sportChosen && _folderChosen && _bothTeamsChosen && !_going;
 
+  bool get _canContinue =>
+      _folderChosen && _sportChosen && _bothTeamsChosen && !_going;
+
   bool get _writeIptc => _iptcMode != IptcApplyMode.none;
+
+  /// Visual IPTC source for the 3-way control.
+  _IptcSourceMode get _iptcSource {
+    if (_iptcAppliedElsewhere) return _IptcSourceMode.files;
+    if (_writeIptc && _iptcFillGapsOnly) return _IptcSourceMode.fill;
+    return _IptcSourceMode.apply;
+  }
 
   bool get _tank01Supported => _sport != null && tank01SupportsSport(_sport!);
 
@@ -259,7 +286,15 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   }
 
   String get _goHint {
-    if (_canGo) return 'Press Enter to start';
+    if (_setupStep == 1) {
+      if (_canContinue) return 'Press Enter to continue';
+      if (!_folderChosen) return 'Choose an images folder';
+      if (!_sportChosen) return 'Pick a league to continue';
+      if (!_awayFilled || !_homeFilled) return 'Pick both teams to continue';
+      if (_homeTeam == _awayTeam) return 'Home and away must be different';
+      return 'Complete setup to continue';
+    }
+    if (_canGo) return 'Ready';
     // One step at a time: folder → league → teams.
     if (!_folderChosen) return 'Choose an images folder to start';
     if (!_sportChosen) return 'Choose a league to start';
@@ -316,15 +351,25 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   }
 
   bool get _hasIptcFieldWarnings =>
-      _missingCaptionIptc.isNotEmpty || _missingFilingIptc.isNotEmpty;
+      !_iptcAppliedElsewhere &&
+      (_missingCaptionIptc.isNotEmpty || _missingFilingIptc.isNotEmpty);
 
   /// Caption structure fields are filled (does not require wire filing fields).
+  /// [ _iptcAppliedElsewhere ] also counts as ready so Go Time is not blocked.
   bool get _captionIptcReady =>
-      _folderChosen && !_scanningIptc && _missingCaptionIptc.isEmpty;
+      _iptcAppliedElsewhere ||
+      (_folderChosen && !_scanningIptc && _missingCaptionIptc.isEmpty);
 
-  /// Caption + wire filing fields are filled.
+  /// Caption + wire filing fields are filled (not used when applied elsewhere).
   bool get _iptcComplete =>
-      _captionIptcReady && _missingFilingIptc.isEmpty;
+      !_iptcAppliedElsewhere &&
+      _folderChosen &&
+      !_scanningIptc &&
+      _missingCaptionIptc.isEmpty &&
+      _missingFilingIptc.isEmpty;
+
+  /// Filing gaps stay muted grey; caption gaps stay red.
+  static const Color _filingWarnColor = FfTokens.sessionT2;
 
   @override
   void initState() {
@@ -382,10 +427,12 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       // users get Firebase verbs, caption styles, IPTC catalog, game IDs.
       await _prefs!.ensureAppDefaultsHydrated();
       _useOfficialLeagueApis = await _prefs!.getUseOfficialLeagueApis();
-      // Write IPTC starts off every visit. It turns on only after the user
-      // opens the IPTC dialog from the switch and finishes it.
+      // Write IPTC starts off every visit unless "Already in files" is sticky.
+      // The 3-way control turns writing on (Apply / Fill gaps) or keeps it off.
       _iptcMode = IptcApplyMode.none;
       await _prefs!.saveIptcApplyMode(_iptcMode);
+      _iptcAppliedElsewhere = await _prefs!.getIptcAppliedElsewhere();
+      _iptcFillGapsOnly = await _prefs!.getIptcFillGapsOnly();
       _iptcStatus = await _iptcStatusFromPrefs();
       _ftpModeEnabled = await _prefs!.getFtpModeEnabled();
       _fileRenamingEnabled = await _prefs!.getFileRenamingEnabled();
@@ -933,14 +980,103 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   /// Startup strip toggle: write the IPTC template when the session opens.
   Future<void> _setApplyIptcOnIngest(bool enabled) async {
     if (enabled == _iptcMode.appliesOnLoad) return;
-    final mode = enabled ? IptcApplyMode.onImport : IptcApplyMode.none;
-    await _prefs?.saveIptcApplyMode(mode);
-    if (!mounted) return;
-    setState(() {
-      _iptcMode = mode;
-      _iptcStatus = enabled ? 'On load' : 'Off';
-    });
+    await _setIptcSource(
+      enabled
+          ? (_iptcFillGapsOnly ? _IptcSourceMode.fill : _IptcSourceMode.apply)
+          : _IptcSourceMode.files,
+    );
+  }
+
+  /// IPTC is handled outside FloFile — do not write or block on missing fields.
+  Future<void> _setIptcAppliedElsewhere(bool enabled) async {
+    if (enabled == _iptcAppliedElsewhere) return;
+    await _setIptcSource(
+      enabled ? _IptcSourceMode.files : _IptcSourceMode.apply,
+    );
+  }
+
+  /// Maps the 3-way IPTC source control onto apply-mode + fill-gaps + elsewhere.
+  Future<void> _setIptcSource(_IptcSourceMode source) async {
+    if (source == _iptcSource &&
+        (source != _IptcSourceMode.apply || _writeIptc) &&
+        (source != _IptcSourceMode.fill || (_writeIptc && _iptcFillGapsOnly))) {
+      // Allow re-selecting Apply/Fill when write is still off (fresh visit).
+      if (source == _IptcSourceMode.files || _writeIptc) return;
+    }
+    switch (source) {
+      case _IptcSourceMode.apply:
+        await _prefs?.saveIptcApplyMode(IptcApplyMode.onImport);
+        await _prefs?.saveIptcAppliedElsewhere(false);
+        await _prefs?.saveIptcFillGapsOnly(false);
+        if (!mounted) return;
+        setState(() {
+          _iptcMode = IptcApplyMode.onImport;
+          _iptcAppliedElsewhere = false;
+          _iptcFillGapsOnly = false;
+          _iptcStatus = 'On load';
+        });
+      case _IptcSourceMode.fill:
+        await _prefs?.saveIptcApplyMode(IptcApplyMode.onImport);
+        await _prefs?.saveIptcAppliedElsewhere(false);
+        await _prefs?.saveIptcFillGapsOnly(true);
+        if (!mounted) return;
+        setState(() {
+          _iptcMode = IptcApplyMode.onImport;
+          _iptcAppliedElsewhere = false;
+          _iptcFillGapsOnly = true;
+          _iptcStatus = 'Fill gaps';
+        });
+      case _IptcSourceMode.files:
+        await _prefs?.saveIptcApplyMode(IptcApplyMode.none);
+        await _prefs?.saveIptcAppliedElsewhere(true);
+        await _prefs?.saveIptcFillGapsOnly(false);
+        if (!mounted) return;
+        setState(() {
+          _iptcMode = IptcApplyMode.none;
+          _iptcAppliedElsewhere = true;
+          _iptcFillGapsOnly = false;
+          _iptcStatus = 'Elsewhere';
+        });
+    }
     await _refreshIptcCaptionWarning();
+  }
+
+  void _showSetupStep(int step, {String? focus}) {
+    setState(() {
+      _setupStep = step;
+      _setupFocusTarget = step == 1 ? focus : null;
+    });
+    if (step == 1 && focus != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        switch (focus) {
+          case 'away':
+            _awayFocus.requestFocus();
+          case 'home':
+            _homeFocus.requestFocus();
+          default:
+            _rootFocus.requestFocus();
+        }
+      });
+    }
+  }
+
+  Future<void> _continueToStep2() async {
+    if (!_canContinue || _setupStep == 2) return;
+    // Defer past pointer-up. Any setState during the Continue gesture
+    // (including IPTC sync) disposes the button under the cursor and
+    // blanks Step 2 via MouseTracker asserts.
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    if (!mounted || _setupStep == 2) return;
+
+    // Fresh visit leaves write off — sync the visible Apply/Fill choice on.
+    if (!_iptcAppliedElsewhere && !_writeIptc) {
+      await _setIptcSource(
+        _iptcFillGapsOnly ? _IptcSourceMode.fill : _IptcSourceMode.apply,
+      );
+      if (!mounted || _setupStep == 2) return;
+    }
+    _showSetupStep(2);
   }
 
   Future<void> _refreshIptcCaptionWarning() async {
@@ -952,6 +1088,8 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       setState(() {
         _missingCaptionIptc = const [];
         _missingFilingIptc = const [];
+        _iptcScanWithCityDate = 0;
+        _iptcScanTotal = 0;
         _scanningIptc = false;
       });
       return;
@@ -992,12 +1130,41 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         }
       }
 
-      // 1) Scan a sample of images from the chosen folder.
+      // 1) Scan images from the chosen folder (sample for template gaps;
+      //    full folder for city+date coverage when reading from files).
       final files = await _imageFilesInFolder(folder);
       if (gen != _iptcScanGen) return;
       final sample = files.take(8).toList();
       final fromFiles = <String, String>{};
-      if (sample.isNotEmpty) {
+      var withCityDate = 0;
+      if (files.isNotEmpty) {
+        // Cap the coverage scan so huge folders stay responsive.
+        final coverage = files.length <= 80 ? files : files.take(80).toList();
+        final batch =
+            await IptcTemplateImportService.readMetadataBatch(coverage);
+        if (gen != _iptcScanGen) return;
+        for (final path in coverage) {
+          final meta = batch[path];
+          if (meta == null) continue;
+          final panel = IptcTemplateImportService.panelValuesFromExiftool(meta);
+          panel.forEach((k, v) {
+            final trimmed = v.trim();
+            if (trimmed.isEmpty) return;
+            if (IptcTemplateApplyService.isInAppGeneratedPlaceholder(trimmed)) {
+              return;
+            }
+            fromFiles.putIfAbsent(k, () => trimmed);
+          });
+          final city = (panel['City'] ?? '').trim();
+          final date = (panel['Date'] ?? panel['Time and Date'] ?? '').trim();
+          if (city.isNotEmpty && date.isNotEmpty) withCityDate++;
+        }
+        // Scale the sample count up when we only scanned a subset.
+        if (coverage.length < files.length && coverage.isNotEmpty) {
+          withCityDate =
+              ((withCityDate / coverage.length) * files.length).round();
+        }
+      } else if (sample.isNotEmpty) {
         final batch =
             await IptcTemplateImportService.readMetadataBatch(sample);
         if (gen != _iptcScanGen) return;
@@ -1057,6 +1224,8 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         _iptcPanelForPreview = previewPanel;
         _missingCaptionIptc = missing;
         _missingFilingIptc = filingMissing;
+        _iptcScanWithCityDate = withCityDate;
+        _iptcScanTotal = files.length;
         _scanningIptc = false;
       });
     } catch (_) {
@@ -1064,6 +1233,8 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       setState(() {
         _missingCaptionIptc = const [];
         _missingFilingIptc = const [];
+        _iptcScanWithCityDate = 0;
+        _iptcScanTotal = 0;
         _scanningIptc = false;
       });
     }
@@ -1222,15 +1393,21 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     );
     if (!mounted || summary == null) return;
     await _prefs?.saveIptcApplyMode(summary.mode);
+    if (summary.mode != IptcApplyMode.none) {
+      await _prefs?.saveIptcAppliedElsewhere(false);
+    }
     if (!mounted) return;
     setState(() {
       _iptcMode = summary.mode;
       _iptcStatus = summary.statusLine;
+      if (summary.mode != IptcApplyMode.none) {
+        _iptcAppliedElsewhere = false;
+      }
     });
     await _refreshIptcCaptionWarning();
   }
 
-  /// Prefer red caption gaps; otherwise yellow filing gaps.
+  /// Prefer red caption gaps; otherwise grey filing gaps.
   IptcMissingHighlight? get _preferredMissingHighlight {
     if (_missingCaptionIptc.isNotEmpty) return IptcMissingHighlight.caption;
     if (_missingFilingIptc.isNotEmpty) return IptcMissingHighlight.filing;
@@ -1251,6 +1428,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   /// caption fields are still missing. Folder pick alone must not open the pad.
   Future<void> _maybeOpenIptcAfterWirePick() async {
     if (!_postTeamsUnlocked || !_folderChosen) return;
+    if (_iptcAppliedElsewhere) return;
     final token = _selectedStyleToken;
     if (token == null || _captionTemplate == null) return;
 
@@ -1282,8 +1460,10 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   }
 
   /// Opens IPTC when caption fields are missing. Returns true only when
-  /// everything needed for captions is present (folder and/or template).
+  /// everything needed for captions is present (folder and/or template), or
+  /// when the user marked IPTC as applied elsewhere.
   Future<bool> _ensureCaptionIptcReady() async {
+    if (_iptcAppliedElsewhere) return true;
     if (_scanningIptc) {
       await _refreshIptcCaptionWarning();
       if (!mounted) return false;
@@ -1441,8 +1621,12 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     }
 
     await _prefs?.saveIptcApplyMode(IptcApplyMode.none);
+    await _prefs?.saveIptcAppliedElsewhere(false);
+    await _prefs?.saveIptcFillGapsOnly(false);
     if (!mounted) return;
     setState(() {
+      _setupStep = 1;
+      _setupFocusTarget = null;
       _folderPath = null;
       _imageCount = 0;
       _pickingFolder = false;
@@ -1459,9 +1643,13 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       _going = false;
       _error = null;
       _iptcMode = IptcApplyMode.none;
+      _iptcAppliedElsewhere = false;
+      _iptcFillGapsOnly = false;
       _iptcStatus = 'Off';
       _missingCaptionIptc = const [];
       _missingFilingIptc = const [];
+      _iptcScanWithCityDate = 0;
+      _iptcScanTotal = 0;
       _scanningIptc = false;
       _iptcPanelForPreview = const {};
       _iptcOpenedForStyleToken = null;
@@ -1553,13 +1741,36 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (event.logicalKey != LogicalKeyboardKey.enter &&
-        event.logicalKey != LogicalKeyboardKey.numpadEnter) {
+
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      if (_setupStep == 2 && _openMenuId == null) {
+        _showSetupStep(1);
+        return KeyEventResult.handled;
+      }
       return KeyEventResult.ignored;
     }
+
+    final isEnter = event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter;
+    if (!isEnter) return KeyEventResult.ignored;
+
+    final mods = HardwareKeyboard.instance.logicalKeysPressed;
+    final chord = mods.contains(LogicalKeyboardKey.meta) ||
+        mods.contains(LogicalKeyboardKey.control);
+
     if (_awayFocus.hasFocus || _homeFocus.hasFocus || _openMenuId != null) {
       return KeyEventResult.ignored;
     }
+
+    if (_setupStep == 1) {
+      if (chord) return KeyEventResult.ignored;
+      if (!_canContinue) return KeyEventResult.ignored;
+      unawaited(_continueToStep2());
+      return KeyEventResult.handled;
+    }
+
+    // Step 2: ⌘/Ctrl+Enter starts the session.
+    if (!chord) return KeyEventResult.ignored;
     if (!_canGo) return KeyEventResult.ignored;
     unawaited(_goTime());
     return KeyEventResult.handled;
@@ -1708,6 +1919,8 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    final stackTeams =
+        MediaQuery.sizeOf(context).width <= 620;
 
     return Focus(
       focusNode: _rootFocus,
@@ -1715,148 +1928,175 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       onKeyEvent: _onKey,
       child: ColoredBox(
         color: FfTokens.sessionBg,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final width =
-                constraints.maxWidth > 1270 ? 1270.0 : constraints.maxWidth;
-            const compact = true;
-            final stackTeams = width <= 1000;
-            const padH = 20.0;
-            const padV = 10.0;
-            const gap = 8.0;
-            return Align(
-              alignment: Alignment.center,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1270, maxHeight: 730),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(padH, padV, padH, padV),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildV4SetupCard(
-                        t,
-                        compact: compact,
-                        stackTeams: stackTeams,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: _setupStep == 1
+                  ? SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+                      child: Center(
+                        child: _buildV5SetupPanel(stackTeams: stackTeams),
                       ),
-                      const SizedBox(height: gap),
-                      Expanded(
-                        child: _setupGate(
-                          unlocked: _postTeamsUnlocked,
-                          child: ValueListenableBuilder<bool>(
-                            valueListenable: AdminService.previewAsNonAdmin,
-                            builder: (context, _, __) {
-                              final showAdminSave =
-                                  _postTeamsUnlocked &&
-                                  AdminService.isCurrentUserAdminSync();
-                              return _buildV4CaptionCard(
-                                showAdminSave: showAdminSave,
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: gap),
-                      _setupGate(
-                        unlocked: _postTeamsUnlocked,
-                        child: _buildSessionStep(t, compact: compact),
-                      ),
-                      if (_error != null) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          _error!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontFamily: FfTokens.fontFamily,
-                            fontSize: 12,
-                            color: FfTokens.danger,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: gap),
-                      _buildReadyBar(t, compact: compact),
-                    ],
+                    )
+                  : _buildV5Step2(t),
+            ),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 6),
+                child: Text(
+                  _error!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    color: FfTokens.danger,
                   ),
                 ),
               ),
-            );
-          },
+            _buildV5Footer(t),
+          ],
         ),
       ),
     );
   }
 
-  /// v4: single setup card — Images | League | Away·Home.
-  Widget _buildV4SetupCard(
-    FfTokens t, {
-    required bool compact,
-    required bool stackTeams,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: FfTokens.sessionPanel,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: stackTeams
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(flex: 3, child: _buildV4ImagesField()),
-                      _v4FieldDivider(),
-                      Expanded(
-                        flex: 2,
-                        child: _setupGate(
-                          unlocked: _leagueUnlocked,
-                          child: _buildV4LeagueField(),
-                        ),
-                      ),
-                    ],
-                  ),
+  Widget _buildV5Step2(FfTokens t) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Concrete height so the embed dialog (infinity shell) always has
+        // a tight parent — Expanded-in-scroll and infinity-SizedBox combos
+        // were collapsing the caption editor to nothing.
+        final captionH = math.max(380.0, constraints.maxHeight - 220.0);
+        return SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildV5SummaryStrip(),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: captionH,
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: AdminService.previewAsNonAdmin,
+                  builder: (context, _, __) {
+                    final showAdminSave =
+                        AdminService.isCurrentUserAdminSync();
+                    return _buildV4CaptionCard(showAdminSave: showAdminSave);
+                  },
                 ),
-                const SizedBox(height: 8),
-                _setupGate(
-                  unlocked: _teamsUnlocked,
-                  child: _buildV4TeamsField(stack: true),
-                ),
-              ],
-            )
-          : IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(flex: 14, child: _buildV4ImagesField()),
-                  _v4FieldDivider(),
-                  Expanded(
-                    flex: 7,
-                    child: _setupGate(
-                      unlocked: _leagueUnlocked,
-                      child: _buildV4LeagueField(),
-                    ),
-                  ),
-                  _v4FieldDivider(),
-                  Expanded(
-                    flex: 21,
-                    child: _setupGate(
-                      unlocked: _teamsUnlocked,
-                      child: _buildV4TeamsField(stack: false),
-                    ),
-                  ),
-                ],
               ),
-            ),
+              const SizedBox(height: 12),
+              _buildSessionStep(t, compact: true),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  Widget _v4FieldDivider() {
+  /// v5 step 1 — centered setup panel (Images / IPTC / League / Teams).
+  Widget _buildV5SetupPanel({required bool stackTeams}) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 760),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+        decoration: BoxDecoration(
+          color: FfTokens.sessionPanel,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildV5SetupRow(
+              label: 'Images',
+              child: _buildV5ImagesField(),
+            ),
+            _buildV5SetupRow(
+              label: 'IPTC',
+              child: _buildV5IptcSourceField(),
+            ),
+            _buildV5SetupRow(
+              label: 'League',
+              child: _setupGate(
+                unlocked: _leagueUnlocked,
+                child: _buildV5LeagueField(),
+              ),
+            ),
+            _buildV5SetupRow(
+              label: 'Teams',
+              child: _setupGate(
+                unlocked: _teamsUnlocked,
+                child: _buildV5TeamsField(stack: stackTeams),
+              ),
+              showDivider: false,
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: _GoTimeButton(
+                  enabled: _canContinue,
+                  loading: false,
+                  compact: false,
+                  label: 'Continue',
+                  shortcut: '↵',
+                  onPressed: () => unawaited(_continueToStep2()),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildV5SetupRow({
+    required String label,
+    required Widget child,
+    bool showDivider = true,
+  }) {
     return Container(
-      width: 1,
-      margin: const EdgeInsets.symmetric(horizontal: 12),
-      color: FfTokens.sessionLn,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+      decoration: showDivider
+          ? const BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: FfTokens.sessionLn),
+              ),
+            )
+          : null,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final stacked = constraints.maxWidth < 520;
+          if (stacked) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(label, style: _kSectionLabel),
+                const SizedBox(height: 6),
+                child,
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 96,
+                height: 40,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(label, style: _kSectionLabel),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(child: child),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -1910,6 +2150,564 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     );
   }
 
+  Widget _buildV5ImagesField() {
+    final chosen = _folderChosen;
+    final title = chosen ? p.basename(_folderPath!) : 'Choose a folder…';
+    final subtitle = chosen
+        ? (_imageCount == 1 ? '1 photo' : '$_imageCount photos')
+        : '';
+    return DropTarget(
+      onDragEntered: (_) => setState(() => _folderDragOver = true),
+      onDragExited: (_) => setState(() => _folderDragOver = false),
+      onDragDone: _onFolderDropped,
+      child: _Pressable(
+        height: 40,
+        radius: 9,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        color: _folderDragOver
+            ? FfTokens.sessionOnSoft
+            : FfTokens.sessionEl,
+        hoverColor: FfTokens.sessionHv,
+        borderColor: _folderDragOver ? FfTokens.sessionOn : Colors.transparent,
+        borderWidth: _folderDragOver ? 1 : 0,
+        onPressed: _pickingFolder ? null : _pickFolder,
+        child: Row(
+          children: [
+            PhosphorIcon(
+              chosen
+                  ? PhosphorIconsRegular.folder
+                  : PhosphorIconsRegular.folderSimpleDashed,
+              size: 17,
+              color: FfTokens.sessionT3,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                _pickingFolder ? 'Opening…' : title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 14,
+                  fontWeight: chosen ? FontWeight.w600 : FontWeight.w500,
+                  color: chosen ? FfTokens.sessionTx : FfTokens.sessionT3,
+                ),
+              ),
+            ),
+            if (subtitle.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: FfTokens.sessionT3,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildV5IptcSourceField() {
+    final source = _iptcSource;
+    final missingCount =
+        _missingCaptionIptc.length + _missingFilingIptc.length;
+    final wireLabel = _filingWireLabel;
+    final scanning = _folderChosen && _scanningIptc;
+
+    Widget note;
+    if (source == _IptcSourceMode.files) {
+      final ok = _iptcScanWithCityDate;
+      final total = _iptcScanTotal;
+      final scanColor = total > 0 && ok < total
+          ? FfTokens.sessionWarn
+          : FfTokens.sessionOk;
+      note = _V5IptcNote(
+        icon: PhosphorIconsRegular.fileMagnifyingGlass,
+        iconColor: FfTokens.sessionOk,
+        child: Text.rich(
+          TextSpan(
+            style: const TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 13,
+              height: 19 / 13,
+              color: FfTokens.sessionT2,
+            ),
+            children: [
+              const TextSpan(
+                text:
+                    'Captions read place and date from each photo’s own IPTC. ',
+              ),
+              const TextSpan(
+                text: 'Nothing is written',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: FfTokens.sessionTx,
+                ),
+              ),
+              const TextSpan(text: ' except the caption. '),
+              if (scanning)
+                const TextSpan(text: 'Scanning…')
+              else if (total > 0)
+                TextSpan(
+                  text: '$ok of $total have city and date.',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: scanColor,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    } else {
+      final fill = source == _IptcSourceMode.fill;
+      final complete = _folderChosen && !_scanningIptc && missingCount == 0;
+      note = _V5IptcNote(
+        icon: complete
+            ? PhosphorIconsFill.checkCircle
+            : PhosphorIconsFill.warningCircle,
+        iconColor: complete ? FfTokens.sessionOk : FfTokens.sessionWarn,
+        action: _folderChosen
+            ? () => unawaited(
+                  _hasIptcFieldWarnings
+                      ? _openIptcForMissingFields()
+                      : _openIptc(),
+                )
+            : null,
+        child: Text.rich(
+          TextSpan(
+            style: const TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 13,
+              height: 19 / 13,
+              color: FfTokens.sessionT2,
+            ),
+            children: [
+              TextSpan(
+                text: fill
+                    ? 'Fills empty fields only — anything already in a file is kept. '
+                    : 'Your template is written to every photo on ingest. ',
+              ),
+              if (!_folderChosen)
+                const TextSpan(text: 'Choose a folder to check the template.')
+              else if (scanning)
+                const TextSpan(text: 'Scanning…')
+              else if (missingCount > 0)
+                TextSpan(
+                  text: '$missingCount fields missing for $wireLabel.',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: FfTokens.sessionWarn,
+                  ),
+                )
+              else
+                const TextSpan(
+                  text: 'Template complete.',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: FfTokens.sessionOk,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _V5Segmented<_IptcSourceMode>(
+          value: source,
+          onChanged: (next) => unawaited(_setIptcSource(next)),
+          options: const [
+            (_IptcSourceMode.apply, 'Apply my template'),
+            (_IptcSourceMode.fill, 'Fill gaps only'),
+            (_IptcSourceMode.files, 'Already in files'),
+          ],
+        ),
+        const SizedBox(height: 8),
+        note,
+      ],
+    );
+  }
+
+  Widget _buildV5LeagueField() {
+    return ValueListenableBuilder<bool>(
+      valueListenable: AdminService.previewAsNonAdmin,
+      builder: (context, _, __) {
+        return _SessionSelect(
+          value: _sport,
+          hint: _leagueUnlocked ? 'Select league' : 'Pick a folder first',
+          enabled: _leagueUnlocked,
+          height: 40,
+          fontSize: 14,
+          leading: PhosphorIcon(
+            _sportIcon(_sport),
+            size: 17,
+            color: FfTokens.sessionT3,
+          ),
+          options: [
+            for (final sport in _sports) (sport, _leagueLabel(sport)),
+          ],
+          onChanged: _selectSport,
+        );
+      },
+    );
+  }
+
+  Widget _buildV5TeamsField({required bool stack}) {
+    final away = _TeamDropdown(
+      menuId: 0,
+      openMenuId: _openMenuId,
+      label: 'Away',
+      value: _awayTeam,
+      teams: _sortedTeams(exclude: _homeTeam),
+      enabled: _teamsUnlocked && !_loadingTeams,
+      sideFavorite: _favoriteAway,
+      favoriteNames: _favoriteTeamNames,
+      focusNode: _awayFocus,
+      hideLabel: true,
+      fieldHeight: 40,
+      hintText: !_folderChosen
+          ? 'Pick a folder first'
+          : (_sportChosen ? 'Select team' : 'Pick a league first'),
+      onChanged: _setAwayTeam,
+      onToggleFavorite: (team) =>
+          unawaited(_toggleFavoriteTeam(team, isHome: false)),
+      onMenuOpenChanged: (open) => setState(() {
+        _openMenuId = open ? 0 : (_openMenuId == 0 ? null : _openMenuId);
+      }),
+    );
+    final home = _TeamDropdown(
+      menuId: 1,
+      openMenuId: _openMenuId,
+      label: 'Home',
+      value: _homeTeam,
+      teams: _sortedTeams(exclude: _awayTeam),
+      enabled: _teamsUnlocked && !_loadingTeams,
+      sideFavorite: _favoriteHome,
+      favoriteNames: _favoriteTeamNames,
+      focusNode: _homeFocus,
+      hideLabel: true,
+      fieldHeight: 40,
+      hintText: !_folderChosen
+          ? 'Pick a folder first'
+          : (_sportChosen ? 'Select team' : 'Pick a league first'),
+      onChanged: _setHomeTeam,
+      onToggleFavorite: (team) =>
+          unawaited(_toggleFavoriteTeam(team, isHome: true)),
+      onMenuOpenChanged: (open) => setState(() {
+        _openMenuId = open ? 1 : (_openMenuId == 1 ? null : _openMenuId);
+      }),
+    );
+    final swap = _Pressable(
+      height: 32,
+      width: 32,
+      radius: 8,
+      padding: EdgeInsets.zero,
+      color: Colors.transparent,
+      hoverColor: FfTokens.sessionHv,
+      onPressed: _teamsUnlocked ? _swapTeams : null,
+      child: PhosphorIcon(
+        PhosphorIconsRegular.arrowsLeftRight,
+        size: 16,
+        color: FfTokens.sessionT3,
+      ),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (stack)
+          Column(
+            children: [
+              away,
+              const SizedBox(height: 6),
+              Transform.rotate(angle: 1.5708, child: swap),
+              const SizedBox(height: 6),
+              home,
+            ],
+          )
+        else
+          Row(
+            children: [
+              Expanded(child: away),
+              const SizedBox(width: 6),
+              swap,
+              const SizedBox(width: 6),
+              Expanded(child: home),
+            ],
+          ),
+        const SizedBox(height: 8),
+        const Row(
+          children: [
+            Text(
+              'Away',
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 12,
+                color: FfTokens.sessionT3,
+              ),
+            ),
+            Spacer(),
+            Text(
+              'Home',
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 12,
+                color: FfTokens.sessionT3,
+              ),
+            ),
+          ],
+        ),
+        if (_loadingTeams && availableTeamsEmpty) ...[
+          const SizedBox(height: 6),
+          const Text(
+            'Loading team list…',
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 12,
+              color: FfTokens.sessionT3,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildV5SummaryStrip() {
+    final folderName =
+        _folderChosen ? p.basename(_folderPath!) : 'No folder';
+    final countLabel =
+        _imageCount == 1 ? '1' : '$_imageCount';
+    final srcLabel = switch (_iptcSource) {
+      _IptcSourceMode.apply => 'My template',
+      _IptcSourceMode.fill => 'Fill gaps',
+      _IptcSourceMode.files => 'From files',
+    };
+    final iptcDot = _iptcSource != _IptcSourceMode.files &&
+            _hasIptcFieldWarnings
+        ? FfTokens.sessionWarn
+        : FfTokens.sessionOk;
+    final awayAbbr = mlbTeamAbbreviation(_awayTeam ?? '');
+    final homeAbbr = mlbTeamAbbreviation(_homeTeam ?? '');
+    final venue = (_previewHomeVenue ?? '').trim();
+
+    Widget chip({
+      required String focus,
+      required Widget child,
+    }) {
+      return _Pressable(
+        height: 32,
+        radius: 8,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        color: Colors.transparent,
+        hoverColor: FfTokens.sessionHv,
+        onPressed: () => _showSetupStep(1, focus: focus),
+        child: child,
+      );
+    }
+
+    Widget divider() => Container(
+          width: 1,
+          height: 18,
+          color: FfTokens.sessionLn,
+        );
+
+    return Container(
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: FfTokens.sessionPanel,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          chip(
+            focus: 'folder',
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const PhosphorIcon(
+                  PhosphorIconsRegular.folder,
+                  size: 15,
+                  color: FfTokens.sessionT3,
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  folderName,
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: FfTokens.sessionTx,
+                  ),
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  countLabel,
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: FfTokens.sessionT3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          divider(),
+          chip(
+            focus: 'src',
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: iptcDot,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 7),
+                const Text(
+                  'IPTC',
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: FfTokens.sessionTx,
+                  ),
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  srcLabel,
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: FfTokens.sessionT3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          divider(),
+          chip(
+            focus: 'league',
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                PhosphorIcon(
+                  _sportIcon(_sport),
+                  size: 15,
+                  color: FfTokens.sessionT3,
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  _sportChosen ? _leagueLabel(_sport!) : 'League',
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: FfTokens.sessionTx,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          divider(),
+          chip(
+            focus: 'away',
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  awayAbbr.isEmpty ? '—' : awayAbbr,
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: FfTokens.sessionTx,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Text(
+                  'at',
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: FfTokens.sessionT3,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  homeAbbr.isEmpty ? '—' : homeAbbr,
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: FfTokens.sessionTx,
+                  ),
+                ),
+                if (venue.isNotEmpty) ...[
+                  const SizedBox(width: 7),
+                  Text(
+                    venue,
+                    style: const TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: FfTokens.sessionT3,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          _Pressable(
+            height: 32,
+            radius: 8,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            color: Colors.transparent,
+            hoverColor: FfTokens.sessionHv,
+            hoverForeground: true,
+            foreground: FfTokens.sessionT2,
+            onPressed: () => _showSetupStep(1),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                PhosphorIcon(PhosphorIconsRegular.pencilSimple, size: 14),
+                SizedBox(width: 6),
+                Text(
+                  'Edit setup',
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                SizedBox(width: 6),
+                _KbdHint('Esc'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Legacy v4 images field kept for older step builders still in this file.
   Widget _buildV4ImagesField() {
     final chosen = _folderChosen;
     final title = chosen ? p.basename(_folderPath!) : 'Drop a folder here';
@@ -1917,7 +2715,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         ? (_imageCount == 1 ? '1 photo' : '$_imageCount photos')
         : 'Choose a folder';
     const captionWarn = FfTokens.danger;
-    const filingWarn = Color(0xFFE8B547);
+    const filingWarn = _filingWarnColor;
     final showIptcTip = chosen && !_pickingFolder && !_scanningIptc;
     final iptcNeedsAdd = showIptcTip && _hasIptcFieldWarnings;
     final iptcComplete = showIptcTip && _iptcComplete;
@@ -1968,7 +2766,21 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                     ),
                   ),
                 ),
-                if (iptcNeedsAdd) ...[
+                if (_iptcAppliedElsewhere && showIptcTip) ...[
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Applied elsewhere',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 12,
+                      height: 1.1,
+                      fontWeight: FontWeight.w500,
+                      color: FfTokens.sessionT2,
+                    ),
+                  ),
+                ] else if (iptcNeedsAdd) ...[
                   const SizedBox(width: 8),
                   _MissingFieldsLink(
                     label: 'Missing fields',
@@ -2024,7 +2836,8 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     final scanning = enabled && _scanningIptc;
     final needsAdd = enabled && !scanning && _hasIptcFieldWarnings;
     const captionWarn = FfTokens.danger;
-    const filingWarn = Color(0xFFE8B547);
+    const filingWarn = _filingWarnColor;
+    final elsewhere = _iptcAppliedElsewhere;
 
     final Widget statusIcon;
     if (!enabled) {
@@ -2039,11 +2852,13 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         height: 15,
         child: CircularProgressIndicator(strokeWidth: 1.5),
       );
-    } else if (complete) {
-      statusIcon = const PhosphorIcon(
-        PhosphorIconsFill.checkCircle,
+    } else if (elsewhere || complete) {
+      statusIcon = PhosphorIcon(
+        elsewhere
+            ? PhosphorIconsRegular.arrowSquareOut
+            : PhosphorIconsFill.checkCircle,
         size: 15,
-        color: FfTokens.sessionOk,
+        color: elsewhere ? FfTokens.sessionT2 : FfTokens.sessionOk,
       );
     } else {
       statusIcon = PhosphorIcon(
@@ -2059,12 +2874,12 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         height: 34,
         padding: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
-          color: complete
+          color: complete && !elsewhere
               ? FfTokens.nocturneAccentRow
               : FfTokens.sessionEl,
           borderRadius: BorderRadius.circular(9),
           border: Border.all(
-            color: complete
+            color: complete && !elsewhere
                 ? FfTokens.nocturneAccentEdge
                 : Colors.transparent,
           ),
@@ -2086,13 +2901,46 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
               ),
             ),
             const Spacer(),
+            Tooltip(
+              message:
+                  'IPTC will be applied outside FloFile — start without writing IPTC',
+              waitDuration: const Duration(milliseconds: 350),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Applied elsewhere',
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: enabled
+                          ? (elsewhere
+                              ? FfTokens.sessionTx
+                              : FfTokens.sessionT2)
+                          : FfTokens.sessionT3,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  _SessionSwitch(
+                    value: elsewhere,
+                    onChanged: enabled
+                        ? (next) => unawaited(_setIptcAppliedElsewhere(next))
+                        : null,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
             Text(
               'Apply on ingest',
               style: TextStyle(
                 fontFamily: FfTokens.fontFamily,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: enabled ? FfTokens.sessionT2 : FfTokens.sessionT3,
+                color: enabled && !elsewhere
+                    ? FfTokens.sessionT2
+                    : FfTokens.sessionT3,
               ),
             ),
             const SizedBox(width: 6),
@@ -2101,8 +2949,8 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                   'Write the IPTC template onto photos when the session opens',
               waitDuration: const Duration(milliseconds: 350),
               child: _SessionSwitch(
-                value: _iptcMode.appliesOnLoad,
-                onChanged: enabled
+                value: !elsewhere && _iptcMode.appliesOnLoad,
+                onChanged: enabled && !elsewhere
                     ? (next) => unawaited(_setApplyIptcOnIngest(next))
                     : null,
               ),
@@ -2331,6 +3179,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         : (tokens.isNotEmpty ? tokens.first : null);
     final colorOn =
         _captionBuilderKey.currentState?.structurePreviewColorCode ?? false;
+    final structureDirty =
+        _captionBuilderKey.currentState?.structureEditorDirty ?? false;
+    final showSave = showAdminSave && structureDirty;
 
     return Row(
       children: [
@@ -2338,63 +3189,31 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
           'Caption',
           style: TextStyle(
             fontFamily: FfTokens.fontFamily,
-            fontSize: 14,
+            fontSize: 15,
             fontWeight: FontWeight.w600,
             color: FfTokens.sessionTx,
           ),
         ),
         const SizedBox(width: 10),
         if (tokens.isNotEmpty)
-          Container(
-            padding: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              color: FfTokens.sessionBg,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final token in tokens)
-                  _Pressable(
-                    height: 28,
-                    radius: 6,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    color: token == current
-                        ? FfTokens.nocturneAccentSoft
-                        : Colors.transparent,
-                    borderColor: token == current
-                        ? FfTokens.nocturneAccentEdge
-                        : Colors.transparent,
-                    borderWidth: token == current ? 1 : 0,
-                    hoverColor: FfTokens.sessionHv,
-                    hoverForeground: token != current,
-                    foreground: token == current
-                        ? FfTokens.sessionTx
-                        : FfTokens.sessionT3,
-                    onPressed: () => unawaited(_selectStyle(token)),
-                    child: Text(
-                      catalog!.labelFor(token),
-                      style: const TextStyle(
-                        fontFamily: FfTokens.fontFamily,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+          _V5Segmented<String>(
+            value: current ?? tokens.first,
+            small: true,
+            onChanged: (token) => unawaited(_selectStyle(token)),
+            options: [
+              for (final token in tokens) (token, catalog!.labelFor(token)),
+            ],
           ),
         const Spacer(),
-        if (showAdminSave)
+        if (showSave)
           _Pressable(
-            height: 30,
-            radius: 7,
+            height: 32,
+            radius: 8,
             padding: const EdgeInsets.symmetric(horizontal: 10),
-            color: FfTokens.nocturneAccentSoft,
-            borderColor: FfTokens.nocturneAccentEdge,
-            borderWidth: 1,
-            hoverColor: FfTokens.nocturneAccentDeep,
-            foreground: FfTokens.sessionTx,
+            color: Colors.transparent,
+            hoverColor: FfTokens.sessionHv,
+            hoverForeground: true,
+            foreground: FfTokens.accentHover,
             onPressed: _savingCaptionDefault
                 ? null
                 : () => unawaited(_saveCaptionStyleAsFirebaseDefault()),
@@ -2414,52 +3233,48 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
               ],
             ),
           ),
-        if (showAdminSave) const SizedBox(width: 6),
-        _Pressable(
-          height: 30,
-          radius: 7,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          color: colorOn ? FfTokens.sessionOnSoft : Colors.transparent,
-          hoverColor: FfTokens.sessionHv,
-          hoverForeground: true,
-          foreground: colorOn ? FfTokens.sessionTx : FfTokens.sessionT2,
-          onPressed: () {
-            _captionBuilderKey.currentState
-                ?.toggleStructurePreviewColorCode();
-            setState(() {});
-          },
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              PhosphorIcon(PhosphorIconsRegular.highlighter, size: 15),
-              SizedBox(width: 6),
-              Text(
-                'Colour code',
-                style: TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
+        if (showSave) const SizedBox(width: 4),
+        Tooltip(
+          message: 'Colour code',
+          waitDuration: const Duration(milliseconds: 350),
+          child: _Pressable(
+            height: 32,
+            width: 32,
+            radius: 8,
+            padding: EdgeInsets.zero,
+            color: colorOn ? FfTokens.nocturneAccentSoft : Colors.transparent,
+            borderColor:
+                colorOn ? FfTokens.nocturneAccentEdge : Colors.transparent,
+            borderWidth: colorOn ? 1 : 0,
+            hoverColor: FfTokens.sessionHv,
+            hoverForeground: true,
+            foreground: colorOn ? FfTokens.sessionTx : FfTokens.sessionT2,
+            onPressed: () {
+              _captionBuilderKey.currentState
+                  ?.toggleStructurePreviewColorCode();
+              setState(() {});
+            },
+            child: const PhosphorIcon(PhosphorIconsRegular.palette, size: 15),
           ),
         ),
         const SizedBox(width: 4),
-        _Pressable(
-          height: 34,
-          radius: 8,
-          padding: EdgeInsets.zero,
-          color: Colors.transparent,
-          hoverColor: FfTokens.sessionHv,
-          onPressed: () =>
-              _captionBuilderKey.currentState?.shuffleCaptionSample(),
-          child: const SizedBox(
-            width: 34,
-            child: PhosphorIcon(
-              PhosphorIconsRegular.shuffle,
-              size: 17,
-              color: FfTokens.sessionT2,
-            ),
+        Tooltip(
+          message: 'Shuffle sample',
+          waitDuration: const Duration(milliseconds: 350),
+          child: _Pressable(
+            height: 32,
+            width: 32,
+            radius: 8,
+            padding: EdgeInsets.zero,
+            color: Colors.transparent,
+            hoverColor: FfTokens.sessionHv,
+            hoverForeground: true,
+            foreground: FfTokens.sessionT2,
+            onPressed: () {
+              _captionBuilderKey.currentState?.shuffleCaptionSample();
+              setState(() {});
+            },
+            child: const PhosphorIcon(PhosphorIconsRegular.shuffle, size: 15),
           ),
         ),
       ],
@@ -2937,42 +3752,37 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     if (_captionTemplate == null && _styleCatalog == null) {
       return const SizedBox.shrink();
     }
-    final dialog = KeyedSubtree(
-      key: ValueKey(
-        'startup_caption_${_sport ?? 'none'}_'
-        '${_selectedStyleToken ?? 'none'}',
-      ),
-      child: CaptionLayoutBuilderDialog(
-        key: _captionBuilderKey,
-        embedded: true,
-        adminMode: false,
-        initialSport: _sport,
-        initialTemplate: _captionTemplate,
-        previewHomeTeam: _homeFilled ? _homeTeam : null,
-        previewAwayTeam: _awayFilled ? _awayTeam : null,
-        previewGameInfo: _buildPreviewGameInfo(),
-        previewPlayers: _captionPreviewPlayers.isEmpty
-            ? null
-            : List<CaptionPreviewPlayer>.from(_captionPreviewPlayers),
-        previewDateFromFolder:
-            _folderChosen ? _previewDateFromFolder : null,
-        onRegisterFlush: (flush) => _flushCaptionBuilder = flush,
-        onDraftChanged: _onEmbeddedCaptionDraft,
-        onWireChanged: (wire) {
-          if (!mounted) return;
-          setState(() => _selectedStyleToken = _tokenForWire(wire));
-          unawaited(_maybeOpenIptcAfterWirePick());
-        },
-        onSessionStructureChipTap: (focusField) {
-          unawaited(
-            _openIptc(
-              populateFromFolder: true,
-              enableWriting: true,
-              focusField: focusField,
-            ),
-          );
-        },
-      ),
+    final dialog = CaptionLayoutBuilderDialog(
+      key: _captionBuilderKey,
+      embedded: true,
+      adminMode: false,
+      initialSport: _sport,
+      initialTemplate: _captionTemplate,
+      preferFileIptcValues: _iptcSource == _IptcSourceMode.files,
+      previewHomeTeam: _homeFilled ? _homeTeam : null,
+      previewAwayTeam: _awayFilled ? _awayTeam : null,
+      previewGameInfo: _buildPreviewGameInfo(),
+      previewPlayers: _captionPreviewPlayers.isEmpty
+          ? null
+          : List<CaptionPreviewPlayer>.from(_captionPreviewPlayers),
+      previewDateFromFolder: _folderChosen ? _previewDateFromFolder : null,
+      onRegisterFlush: (flush) => _flushCaptionBuilder = flush,
+      onDraftChanged: _onEmbeddedCaptionDraft,
+      onWireChanged: (wire) {
+        if (!mounted) return;
+        setState(() => _selectedStyleToken = _tokenForWire(wire));
+        unawaited(_maybeOpenIptcAfterWirePick());
+      },
+      onSessionStructureChipTap: (focusField) {
+        unawaited(
+          _openIptc(
+            populateFromFolder: true,
+            // Don't flip "Already in files" back to write-on-ingest.
+            enableWriting: _iptcSource != _IptcSourceMode.files,
+            focusField: focusField,
+          ),
+        );
+      },
     );
     return ClipRRect(
       borderRadius: BorderRadius.circular(9),
@@ -3037,300 +3847,197 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     required bool compact,
   }) {
     final cards = <Widget>[
-      _SessionOptionCard(
+      _SessionOptionTile(
         icon: PhosphorIconsRegular.uploadSimple,
         title: 'FTP',
         description: 'Show the FTP button',
         value: _ftpModeEnabled,
-        compact: compact,
         onChanged: (next) => unawaited(_setFtpMode(next)),
-        actionLabel: (_ftpProfileName != null && _ftpProfileName!.isNotEmpty)
-            ? _ftpProfileName!
-            : 'Edit',
-        actionIcon: PhosphorIconsRegular.pencilSimple,
-        onAction: _openFtpSettings,
+        onEdit: _openFtpSettings,
       ),
-      _SessionOptionCard(
+      _SessionOptionTile(
         icon: PhosphorIconsRegular.textbox,
         title: 'File renaming',
         description: 'Rename on FTP upload',
         value: _fileRenamingEnabled,
-        compact: compact,
         onChanged: (next) => unawaited(_setFileRenaming(next)),
-        actionLabel: 'Edit',
-        actionIcon: PhosphorIconsRegular.pencilSimple,
-        onAction: (_) => unawaited(_openFileRename()),
+        onEdit: (_) => unawaited(_openFileRename()),
       ),
-      _SessionOptionCard(
+      _SessionOptionTile(
         icon: PhosphorIconsRegular.lightning,
         title: 'Firebar',
         description: 'Pin quick-caption bar',
         value: !_hideFirebar,
-        compact: compact,
         onChanged: (next) => unawaited(_setFirebarShown(next)),
       ),
       if (JerseyOcrChannel.supported)
-        _SessionOptionCard(
+        _SessionOptionTile(
           icon: PhosphorIconsRegular.scan,
           title: 'Text recognition',
           description: 'Read jersey numbers',
           value: _jerseyOcrEnabled,
-          compact: compact,
           onChanged: (next) => unawaited(_setJerseyOcr(next)),
         ),
-      _SessionOptionCard(
+      _SessionOptionTile(
         icon: PhosphorIconsRegular.hash,
         title: 'Serial numbers',
         description: 'Byline from serials',
         value: _serialBylinesEnabled,
-        compact: compact,
         onChanged: (next) => unawaited(_setSerialBylines(next)),
-        actionLabel: 'Edit',
-        actionIcon: PhosphorIconsRegular.pencilSimple,
-        onAction: (_) => unawaited(_openSerialNumbers()),
+        onEdit: (_) => unawaited(_openSerialNumbers()),
       ),
     ];
-    final body = LayoutBuilder(
-      builder: (context, constraints) {
-        // Two columns when needed so descriptions can read; one row when wide.
-        final gap = compact ? 6.0 : 8.0;
-        final oneRow = constraints.maxWidth >= 900;
-        if (oneRow) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var i = 0; i < cards.length; i++) ...[
-                if (i > 0) SizedBox(width: gap),
-                Expanded(child: cards[i]),
-              ],
-            ],
-          );
-        }
-        const cols = 2;
-        final rows = <Widget>[];
-        for (var i = 0; i < cards.length; i += cols) {
-          final slice = cards.sublist(
-            i,
-            i + cols > cards.length ? cards.length : i + cols,
-          );
-          rows.add(
-            Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (var j = 0; j < cols; j++) ...[
-                    if (j > 0) SizedBox(width: gap),
-                    Expanded(
-                      child: j < slice.length
-                          ? slice[j]
-                          : const SizedBox.shrink(),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          );
-        }
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (var i = 0; i < rows.length; i++) ...[
-              if (i > 0) SizedBox(height: gap),
-              rows[i],
-            ],
-          ],
-        );
-      },
-    );
-    // Title + one-line description; two rows when not wide enough for one.
-    final optionsHeight = compact ? 72.0 : 78.0;
     return Container(
-      padding: EdgeInsets.fromLTRB(16, compact ? 8 : 10, 16, compact ? 8 : 10),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       decoration: BoxDecoration(
         color: FfTokens.sessionPanel,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text('Session options', style: _kSectionLabel),
-          const SizedBox(height: 6),
-          SizedBox(height: optionsHeight, child: body),
+          const SizedBox(height: 8),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cols = constraints.maxWidth >= 1100
+                  ? 5
+                  : constraints.maxWidth >= 900
+                      ? 3
+                      : 2;
+              final gap = 8.0;
+              final width = constraints.maxWidth;
+              final tileW = (width - gap * (cols - 1)) / cols;
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (final card in cards)
+                    SizedBox(
+                      width: tileW,
+                      height: 44,
+                      child: card,
+                    ),
+                ],
+              );
+            },
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildReadyBar(FfTokens t, {required bool compact}) {
-    final noteIsWarning = _folderChosen &&
-        !_scanningIptc &&
-        _hasIptcFieldWarnings;
-    const captionWarn = FfTokens.danger;
-    const filingWarn = Color(0xFFE8B547);
-    final checks = <(String, bool)>[
-      if (_folderChosen)
-        (
-          _imageCount == 1 ? '1 photo' : '$_imageCount photos',
-          true,
+  Widget _buildV5Footer(FfTokens t) {
+    final missingCount =
+        _missingCaptionIptc.length + _missingFilingIptc.length;
+    final Widget status;
+    if (_setupStep == 1) {
+      if (!_folderChosen) {
+        status = const _FooterStatus(
+          icon: PhosphorIconsRegular.info,
+          iconColor: FfTokens.sessionT3,
+          text: 'Choose an images folder',
+        );
+      } else if (!_awayFilled || !_homeFilled) {
+        status = const _FooterStatus(
+          icon: PhosphorIconsRegular.info,
+          iconColor: FfTokens.sessionT3,
+          text: 'Pick both teams to continue',
+        );
+      } else if (_iptcSource != _IptcSourceMode.files &&
+          _hasIptcFieldWarnings) {
+        status = _FooterStatus(
+          icon: PhosphorIconsFill.warningCircle,
+          iconColor: FfTokens.sessionWarn,
+          linkLabel: '$missingCount IPTC fields missing for $_filingWireLabel',
+          onLink: () => unawaited(_openIptcForMissingFields()),
+        );
+      } else {
+        status = const _FooterStatus(
+          icon: PhosphorIconsFill.checkCircle,
+          iconColor: FfTokens.sessionOk,
+          text: 'Ready',
+        );
+      }
+    } else if (_iptcSource == _IptcSourceMode.files) {
+      status = const _FooterStatus(
+        icon: PhosphorIconsRegular.fileMagnifyingGlass,
+        iconColor: FfTokens.sessionT3,
+        text: 'Underlined values are read from each file',
+      );
+    } else if (_hasIptcFieldWarnings) {
+      status = _FooterStatus(
+        icon: PhosphorIconsFill.warningCircle,
+        iconColor: FfTokens.sessionWarn,
+        linkLabel:
+            'IPTC warning — $missingCount fields missing to file to $_filingWireLabel',
+        onLink: () => unawaited(_openIptcForMissingFields()),
+      );
+    } else {
+      status = const _FooterStatus(
+        icon: PhosphorIconsFill.checkCircle,
+        iconColor: FfTokens.sessionOk,
+        text: 'IPTC template complete',
+      );
+    }
+
+    // Step 1: status only — Continue lives on the setup panel.
+    // Step 2: Back + Go time.
+    if (_setupStep == 1) {
+      return Container(
+        padding: const EdgeInsets.fromLTRB(24, 10, 24, 10),
+        decoration: const BoxDecoration(
+          color: FfTokens.sessionPanel,
+          border: Border(top: BorderSide(color: FfTokens.sessionLn)),
         ),
-      if (_bothTeamsChosen)
-        (
-          '${mlbTeamAbbreviation(_awayTeam ?? '')} @ ${mlbTeamAbbreviation(_homeTeam ?? '')}',
-          true,
-        ),
-      if (_selectedStyleToken != null && _styleCatalog != null)
-        (
-          '${_styleCatalog!.labelFor(_selectedStyleToken!)} style',
-          true,
-        ),
-    ];
-    final onOptions = <String>[
-      if (_writeIptc) 'IPTC',
-      if (_ftpModeEnabled) 'FTP',
-      if (_fileRenamingEnabled) 'File renaming',
-      if (!_hideFirebar) 'Firebar',
-      if (JerseyOcrChannel.supported && _jerseyOcrEnabled) 'Text recognition',
-      if (_serialBylinesEnabled) 'Serial numbers',
-    ];
-    if (onOptions.isNotEmpty) {
-      checks.add((onOptions.join(', '), true));
+        child: status,
+      );
     }
 
     return Container(
-      padding: EdgeInsets.fromLTRB(
-        compact ? 10 : 12,
-        compact ? 6 : 8,
-        compact ? 10 : 12,
-        compact ? 6 : 8,
-      ),
-      decoration: BoxDecoration(
+      padding: const EdgeInsets.fromLTRB(24, 10, 24, 10),
+      decoration: const BoxDecoration(
         color: FfTokens.sessionPanel,
-        borderRadius: BorderRadius.circular(12),
-        border: const Border(
-          top: BorderSide(color: FfTokens.sessionLn),
-        ),
+        border: Border(top: BorderSide(color: FfTokens.sessionLn)),
       ),
       child: Row(
         children: [
-          Expanded(
-            child: noteIsWarning
-                ? Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      if (_missingCaptionIptc.isNotEmpty)
-                        _MissingFieldsLink(
-                          label:
-                              'IPTC Warning - Missing Fields to Build Caption',
-                          color: captionWarn,
-                          onTap: () => unawaited(
-                            _openIptcForMissingFields(
-                              highlight: IptcMissingHighlight.caption,
-                            ),
-                          ),
-                        ),
-                      if (_missingCaptionIptc.isNotEmpty &&
-                          _missingFilingIptc.isNotEmpty)
-                        const Text(
-                          '·',
-                          style: TextStyle(
-                            fontFamily: FfTokens.fontFamily,
-                            fontSize: 12,
-                            color: FfTokens.sessionT3,
-                          ),
-                        ),
-                      if (_missingFilingIptc.isNotEmpty)
-                        _MissingFieldsLink(
-                          label:
-                              'IPTC Warning - Missing Fields to File to $_filingWireLabel',
-                          color: filingWarn,
-                          onTap: () => unawaited(
-                            _openIptcForMissingFields(
-                              highlight: IptcMissingHighlight.filing,
-                            ),
-                          ),
-                        ),
-                    ],
-                  )
-                : Wrap(
-                    spacing: 14,
-                    runSpacing: 4,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      for (final c in checks)
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const PhosphorIcon(
-                              PhosphorIconsBold.check,
-                              size: 14,
-                              color: FfTokens.sessionOk,
-                            ),
-                            const SizedBox(width: 5),
-                            Text(
-                              c.$1,
-                              style: const TextStyle(
-                                fontFamily: FfTokens.fontFamily,
-                                fontSize: 12,
-                                color: FfTokens.sessionT2,
-                              ),
-                            ),
-                          ],
-                        ),
-                      Text(
-                        _canGo ? 'Press Enter to start' : _goHint,
-                        style: const TextStyle(
-                          fontFamily: FfTokens.fontFamily,
-                          fontSize: 12,
-                          color: FfTokens.sessionT3,
-                        ),
-                      ),
-                    ],
-                  ),
-          ),
-          SizedBox(width: compact ? 8 : 10),
+          Expanded(child: status),
           _Pressable(
-            height: compact ? 32 : 34,
-            radius: 8,
-            padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 12),
-            color: FfTokens.sessionEl,
+            height: 38,
+            radius: 9,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            color: Colors.transparent,
             hoverColor: FfTokens.sessionHv,
-            borderColor: FfTokens.sessionLn2,
-            borderWidth: 1,
-            onPressed: _going ? null : () => unawaited(_restartSetup()),
-            child: Row(
+            hoverForeground: true,
+            foreground: FfTokens.sessionT2,
+            onPressed: _going ? null : () => _showSetupStep(1),
+            child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const PhosphorIcon(
-                  PhosphorIconsRegular.arrowCounterClockwise,
-                  size: 15,
-                  color: FfTokens.sessionTx,
-                ),
-                if (!compact) ...[
-                  const SizedBox(width: 6),
-                  const Text(
-                    'Restart',
-                    style: TextStyle(
-                      fontFamily: FfTokens.fontFamily,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: FfTokens.sessionTx,
-                    ),
+                PhosphorIcon(PhosphorIconsRegular.arrowLeft, size: 15),
+                SizedBox(width: 8),
+                Text(
+                  'Back',
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
                   ),
-                ],
+                ),
+                SizedBox(width: 8),
+                _KbdHint('Esc'),
               ],
             ),
           ),
-          SizedBox(width: compact ? 6 : 8),
-          SizedBox(
-            width: compact ? 132 : 148,
-            child: _GoTimeButton(
-              enabled: _canGo,
-              loading: _going,
-              compact: compact,
-              onPressed: _goTime,
-            ),
+          const SizedBox(width: 8),
+          _GoTimeButton(
+            enabled: _canGo,
+            loading: _going,
+            compact: false,
+            label: 'Go time',
+            shortcut: '⌘↵',
+            onPressed: _goTime,
           ),
         ],
       ),
@@ -5157,12 +5864,16 @@ class _GoTimeButton extends StatefulWidget {
     required this.loading,
     required this.onPressed,
     this.compact = false,
+    this.label = 'Go time',
+    this.shortcut = '↵',
   });
 
   final bool enabled;
   final bool loading;
   final VoidCallback onPressed;
   final bool compact;
+  final String label;
+  final String shortcut;
 
   @override
   State<_GoTimeButton> createState() => _GoTimeButtonState();
@@ -5215,17 +5926,18 @@ class _GoTimeButtonState extends State<_GoTimeButton> {
         onTap: enabled ? widget.onPressed : null,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          height: widget.compact ? 32 : 34,
+          height: widget.compact ? 32 : 38,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: active ? null : FfTokens.sessionEl,
+            color: active ? null : Colors.transparent,
             gradient: gradient,
             borderRadius: BorderRadius.circular(9),
             border: Border.all(
               color: !active
-                  ? Colors.transparent
+                  ? FfTokens.sessionLn
                   : (_hover
-                      ? Colors.white.withValues(alpha: 0.92)
+                      ? Colors.white.withValues(alpha: 0.85)
                       : FfTokens.nocturneAc.withValues(alpha: 0.95)),
             ),
             boxShadow: active
@@ -5235,40 +5947,21 @@ class _GoTimeButtonState extends State<_GoTimeButton> {
                 : null,
           ),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                widget.loading ? 'Starting…' : 'Go time',
+                widget.loading ? 'Starting…' : widget.label,
                 style: TextStyle(
                   fontFamily: FfTokens.fontFamily,
-                  fontSize: widget.compact ? 14 : 15,
+                  fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  letterSpacing: -0.3,
                   color: fg,
                 ),
               ),
               if (!widget.loading) ...[
                 const SizedBox(width: 10),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: active
-                        ? Colors.black.withValues(alpha: 0.28)
-                        : const Color(0x0FFFFFFF),
-                    borderRadius: BorderRadius.circular(5),
-                  ),
-                  child: Text(
-                    '↵',
-                    style: TextStyle(
-                      fontFamily: FfTokens.fontFamily,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      height: 1,
-                      color: fg,
-                    ),
-                  ),
-                ),
+                _KbdHint(widget.shortcut, onDark: active),
               ],
             ],
           ),
@@ -5401,6 +6094,315 @@ class _PressableState extends State<_Pressable> {
                   ? Center(widthFactor: 1, child: widget.child)
                   : widget.child,
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _KbdHint extends StatelessWidget {
+  const _KbdHint(this.label, {this.onDark = false});
+
+  final String label;
+  final bool onDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: onDark
+            ? Colors.black.withValues(alpha: 0.28)
+            : const Color(0x14E8EEF4),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontFamily: FfTokens.fontFamily,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          height: 1.2,
+          color: onDark ? Colors.white : FfTokens.sessionT2,
+        ),
+      ),
+    );
+  }
+}
+
+class _FooterStatus extends StatelessWidget {
+  const _FooterStatus({
+    required this.icon,
+    required this.iconColor,
+    this.text,
+    this.linkLabel,
+    this.onLink,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final String? text;
+  final String? linkLabel;
+  final VoidCallback? onLink;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        PhosphorIcon(icon, size: 16, color: iconColor),
+        const SizedBox(width: 8),
+        Expanded(
+          child: linkLabel != null
+              ? _MissingFieldsLink(
+                  label: linkLabel!,
+                  color: iconColor,
+                  onTap: onLink ?? () {},
+                )
+              : Text(
+                  text ?? '',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    color: FfTokens.sessionT2,
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _V5IptcNote extends StatelessWidget {
+  const _V5IptcNote({
+    required this.icon,
+    required this.iconColor,
+    required this.child,
+    this.action,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final Widget child;
+  final VoidCallback? action;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: FfTokens.nocturneSf,
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: PhosphorIcon(icon, size: 16, color: iconColor),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: child),
+          if (action != null) ...[
+            const SizedBox(width: 10),
+            _Pressable(
+              height: 19,
+              radius: 4,
+              padding: EdgeInsets.zero,
+              color: Colors.transparent,
+              hoverColor: Colors.transparent,
+              hoverForeground: true,
+              foreground: FfTokens.accentHover,
+              onPressed: action,
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  PhosphorIcon(PhosphorIconsRegular.pencilSimple, size: 13),
+                  SizedBox(width: 5),
+                  Text(
+                    'Edit template',
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _V5Segmented<T> extends StatelessWidget {
+  const _V5Segmented({
+    required this.value,
+    required this.options,
+    required this.onChanged,
+    this.small = false,
+  });
+
+  final T value;
+  final List<(T, String)> options;
+  final ValueChanged<T> onChanged;
+  final bool small;
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        final i = options.indexWhere((o) => o.$1 == value);
+        if (i < 0) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          onChanged(options[(i + 1) % options.length].$1);
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          onChanged(options[(i - 1 + options.length) % options.length].$1);
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Container(
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          color: FfTokens.sessionBg,
+          borderRadius: BorderRadius.circular(9),
+        ),
+        child: Row(
+          children: [
+            for (final option in options)
+              Expanded(
+                child: _Pressable(
+                  height: small ? 28 : 36,
+                  radius: 7,
+                  padding: EdgeInsets.symmetric(horizontal: small ? 10 : 12),
+                  color: option.$1 == value
+                      ? FfTokens.nocturneAccentSoft
+                      : Colors.transparent,
+                  borderColor: option.$1 == value
+                      ? FfTokens.nocturneAccentEdge
+                      : Colors.transparent,
+                  borderWidth: option.$1 == value ? 1 : 0,
+                  hoverColor: FfTokens.sessionHv,
+                  hoverForeground: option.$1 != value,
+                  foreground: option.$1 == value
+                      ? FfTokens.sessionTx
+                      : FfTokens.sessionT3,
+                  onPressed: () => onChanged(option.$1),
+                  child: Center(
+                    child: Text(
+                      option.$2,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: small ? 12 : 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SessionOptionTile extends StatelessWidget {
+  const _SessionOptionTile({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.value,
+    required this.onChanged,
+    this.onEdit,
+  });
+
+  final IconData icon;
+  final String title;
+  final String description;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final void Function(BuildContext anchor)? onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: description,
+      waitDuration: const Duration(milliseconds: 350),
+      child: Focus(
+        onKeyEvent: (node, event) {
+          if (event is! KeyDownEvent) return KeyEventResult.ignored;
+          if (event.logicalKey == LogicalKeyboardKey.space ||
+              event.logicalKey == LogicalKeyboardKey.enter) {
+            onChanged(!value);
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: _Pressable(
+          height: 44,
+          radius: 10,
+          padding: const EdgeInsets.fromLTRB(12, 0, 10, 0),
+          color: FfTokens.nocturneSf,
+          hoverColor: FfTokens.sessionHv,
+          onPressed: () => onChanged(!value),
+          child: Row(
+            children: [
+              PhosphorIcon(
+                icon,
+                size: 17,
+                color: value ? FfTokens.accentHover : FfTokens.sessionT3,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: FfTokens.sessionTx,
+                  ),
+                ),
+              ),
+              if (onEdit != null && value) ...[
+                Builder(
+                  builder: (ctx) {
+                    return _Pressable(
+                      height: 24,
+                      radius: 6,
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      color: Colors.transparent,
+                      hoverColor: FfTokens.sessionHv,
+                      hoverForeground: true,
+                      foreground: FfTokens.sessionT2,
+                      onPressed: () => onEdit!(ctx),
+                      child: const PhosphorIcon(
+                        PhosphorIconsRegular.pencilSimple,
+                        size: 13,
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(width: 4),
+              ],
+              _SessionSwitch(
+                value: value,
+                onChanged: onChanged,
+              ),
+            ],
           ),
         ),
       ),

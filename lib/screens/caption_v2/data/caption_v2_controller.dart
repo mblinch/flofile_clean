@@ -43,6 +43,7 @@ import '../../../services/admin_service.dart';
 import '../../../config/tank01_config.dart';
 import '../../../utils/exiftool_helper.dart';
 import '../../../utils/default_verb_keywords.dart';
+import '../../../utils/image_file_operations.dart';
 import '../../../utils/image_file_ready.dart';
 import '../../../utils/native_file_picker.dart';
 import '../../../utils/oriented_image_bytes.dart';
@@ -4281,13 +4282,15 @@ class CaptionV2Controller extends ChangeNotifier {
       if (preset.isEmpty) return;
       final index = imagePaths.indexOf(imagePath);
       final cleared = await _loadIptcClearedFields();
+      final fillGaps = await _prefs!.getIptcFillGapsOnly();
       final result = await IptcTemplateApplyService.applyToImage(
         imagePath,
         preset,
         imageIndex: index >= 0 ? index : null,
-        replaceExisting: true,
+        replaceExisting: !fillGaps,
         preserveOnLoad: true,
-        fieldsToClear: cleared.isNotEmpty ? cleared : null,
+        fillEmptyOnly: fillGaps,
+        fieldsToClear: (!fillGaps && cleared.isNotEmpty) ? cleared : null,
       );
       if (result.success && !result.skipped) {
         captionedImages.remove(imagePath);
@@ -4342,15 +4345,17 @@ class CaptionV2Controller extends ChangeNotifier {
       }
       notifyListeners();
       final cleared = await _loadIptcClearedFields();
+      final fillGaps = await _prefs!.getIptcFillGapsOnly();
       var i = 0;
       for (final path in imagePaths) {
         final result = await IptcTemplateApplyService.applyToImage(
           path,
           preset,
           imageIndex: i,
-          replaceExisting: true,
+          replaceExisting: !fillGaps,
           preserveOnLoad: true,
-          fieldsToClear: cleared.isNotEmpty ? cleared : null,
+          fillEmptyOnly: fillGaps,
+          fieldsToClear: (!fillGaps && cleared.isNotEmpty) ? cleared : null,
         );
         if (result.success && !result.skipped) {
           captionedImages.remove(path);
@@ -9464,7 +9469,8 @@ class CaptionV2Controller extends ChangeNotifier {
     return (await deleteImages([path])) == 1;
   }
 
-  /// Deletes every path that still exists on disk. One persist / IPTC refresh.
+  /// Moves every path that still exists on disk to the OS trash.
+  /// One persist / IPTC refresh.
   Future<int> deleteImages(List<String> paths) async {
     final unique = <String>{
       for (final path in paths)
@@ -9477,7 +9483,7 @@ class CaptionV2Controller extends ChangeNotifier {
       try {
         final file = File(path);
         if (!await file.exists()) continue;
-        await file.delete();
+        await deleteImageFromDisk(path);
         removed.add(path);
       } catch (_) {}
     }

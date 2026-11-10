@@ -82,6 +82,8 @@ class StructureFormulaField extends StatefulWidget {
     this.onChipTap,
     this.enabled = true,
     this.expands = false,
+    this.controlsOnHoverOnly = false,
+    this.fileSourcedKeys = const {},
     this.monthOptionByOccurrence,
     this.weekdayOptionByOccurrence,
     this.onDatePartOptionChanged,
@@ -99,6 +101,12 @@ class StructureFormulaField extends StatefulWidget {
   /// When true, fill the parent and scroll inside the field (needs a
   /// bounded-height parent such as [Expanded]).
   final bool expands;
+
+  /// When true, Aa / Long·Short controls appear only while the chip is hovered.
+  final bool controlsOnHoverOnly;
+
+  /// Structure keys marked as read-from-file (dotted indicator on the chip).
+  final Set<String> fileSourcedKeys;
 
   /// Per-occurrence [DateFieldToken.optionIndex] for Month chips.
   final List<int>? monthOptionByOccurrence;
@@ -148,6 +156,8 @@ class StructureFormulaFieldState extends State<StructureFormulaField> {
       monthOptionByOccurrence: widget.monthOptionByOccurrence,
       weekdayOptionByOccurrence: widget.weekdayOptionByOccurrence,
       enabled: widget.enabled,
+      controlsOnHoverOnly: widget.controlsOnHoverOnly,
+      fileSourcedKeys: widget.fileSourcedKeys,
     );
     _focus = FocusNode(onKeyEvent: _onKeyEvent);
     _loadFormula(widget.formula);
@@ -160,6 +170,8 @@ class StructureFormulaFieldState extends State<StructureFormulaField> {
     _controller.hoverRef = widget.hoverRef;
     _controller.onHoverRef = widget.onHoverRef;
     _controller.enabled = widget.enabled;
+    _controller.controlsOnHoverOnly = widget.controlsOnHoverOnly;
+    _controller.fileSourcedKeys = widget.fileSourcedKeys;
     // Only adopt parent option lists when they actually change — a hover
     // rebuild must not clobber an optimistic chip format update.
     final monthChanged = !_listEq(
@@ -173,6 +185,8 @@ class StructureFormulaFieldState extends State<StructureFormulaField> {
       _controller.weekdayOptionByOccurrence = widget.weekdayOptionByOccurrence;
     }
     if (oldWidget.hoverRef != widget.hoverRef ||
+        oldWidget.controlsOnHoverOnly != widget.controlsOnHoverOnly ||
+        oldWidget.fileSourcedKeys != widget.fileSourcedKeys ||
         monthChanged ||
         weekdayChanged) {
       setState(() {});
@@ -813,6 +827,8 @@ class _FormulaEditingController extends TextEditingController {
     this.monthOptionByOccurrence,
     this.weekdayOptionByOccurrence,
     this.enabled = true,
+    this.controlsOnHoverOnly = false,
+    this.fileSourcedKeys = const {},
   });
 
   final Map<int, String> tokenKeys;
@@ -826,6 +842,8 @@ class _FormulaEditingController extends TextEditingController {
   List<int>? monthOptionByOccurrence;
   List<int>? weekdayOptionByOccurrence;
   bool enabled;
+  bool controlsOnHoverOnly;
+  Set<String> fileSourcedKeys;
 
   static const int _tokenBase = 0xE000;
 
@@ -943,6 +961,8 @@ class _FormulaEditingController extends TextEditingController {
           weekdayOcc++;
         }
 
+        final fromFile = fileSourcedKeys.contains(key);
+        final showControls = !controlsOnHoverOnly || hot;
         children.add(
           WidgetSpan(
             alignment: PlaceholderAlignment.middle,
@@ -961,106 +981,129 @@ class _FormulaEditingController extends TextEditingController {
                         }
                       }
                     : null,
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 1),
-                  padding: const EdgeInsets.fromLTRB(8, 2, 5, 2),
-                  decoration: BoxDecoration(
-                    color: chipFill,
-                    borderRadius: BorderRadius.circular(5),
-                    border: Border.all(color: chipBorder),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Label only — AA / format controls handle their own
-                      // taps so they do not open the IPTC source dialog.
-                      Listener(
-                        behavior: HitTestBehavior.opaque,
-                        onPointerDown: enabled
-                            ? (event) {
-                                if (event.buttons == kPrimaryMouseButton) {
-                                  onChipTap?.call(cu);
-                                }
-                              }
-                            : null,
-                        child: MouseRegion(
-                          cursor: onChipTap != null
-                              ? SystemMouseCursors.click
-                              : SystemMouseCursors.basic,
-                          child: Text(
-                            label,
-                            style: TextStyle(
-                              fontFamily: FfTokens.fontFamily,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              height: 1.35,
-                              color: chipText,
-                            ),
-                          ),
-                        ),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 1),
+                      padding: const EdgeInsets.fromLTRB(8, 2, 5, 2),
+                      decoration: BoxDecoration(
+                        color: chipFill,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: chipBorder),
                       ),
-                      if (formatKind != null && formatOcc != null) ...[
-                        Container(
-                          width: 1,
-                          height: 12,
-                          margin: const EdgeInsets.symmetric(horizontal: 5),
-                          color: t.accentEdge,
-                        ),
-                        _formatControl(
-                          t: t,
-                          kind: formatKind,
-                          optionIndex: formatOption,
-                          code: cu,
-                        ),
-                      ],
-                      if (canCaps) ...[
-                        Container(
-                          width: 1,
-                          height: 12,
-                          margin: const EdgeInsets.symmetric(horizontal: 5),
-                          color: t.accentEdge,
-                        ),
-                        // Listener (not InkWell): EditableText wins the gesture
-                        // arena over WidgetSpan InkWells, so onTap never fires.
-                        Listener(
-                          behavior: HitTestBehavior.opaque,
-                          onPointerDown: (event) {
-                            if (event.buttons == kPrimaryMouseButton) {
-                              onToggleCaps?.call(cu);
-                            }
-                          },
-                          child: MouseRegion(
-                            cursor: SystemMouseCursors.click,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: capsOn
-                                    ? t.accent.withValues(alpha: 0.35)
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(3),
-                              ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Label only — AA / format controls handle their own
+                          // taps so they do not open the IPTC source dialog.
+                          Listener(
+                            behavior: HitTestBehavior.opaque,
+                            onPointerDown: enabled
+                                ? (event) {
+                                    if (event.buttons ==
+                                        kPrimaryMouseButton) {
+                                      onChipTap?.call(cu);
+                                    }
+                                  }
+                                : null,
+                            child: MouseRegion(
+                              cursor: onChipTap != null
+                                  ? SystemMouseCursors.click
+                                  : SystemMouseCursors.basic,
                               child: Text(
-                                'AA',
+                                label,
                                 style: TextStyle(
                                   fontFamily: FfTokens.fontFamily,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  height: 1,
-                                  letterSpacing: 0.2,
-                                  color: capsOn
-                                      ? FfTokens.accentHover
-                                      : t.textTertiary,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.35,
+                                  color: chipText,
                                 ),
                               ),
                             ),
                           ),
+                          if (showControls &&
+                              formatKind != null &&
+                              formatOcc != null) ...[
+                            Container(
+                              width: 1,
+                              height: 12,
+                              margin:
+                                  const EdgeInsets.symmetric(horizontal: 5),
+                              color: t.accentEdge,
+                            ),
+                            _formatControl(
+                              t: t,
+                              kind: formatKind,
+                              optionIndex: formatOption,
+                              code: cu,
+                            ),
+                          ],
+                          if (showControls && canCaps) ...[
+                            Container(
+                              width: 1,
+                              height: 12,
+                              margin:
+                                  const EdgeInsets.symmetric(horizontal: 5),
+                              color: t.accentEdge,
+                            ),
+                            // Listener (not InkWell): EditableText wins the
+                            // gesture arena over WidgetSpan InkWells.
+                            Listener(
+                              behavior: HitTestBehavior.opaque,
+                              onPointerDown: (event) {
+                                if (event.buttons == kPrimaryMouseButton) {
+                                  onToggleCaps?.call(cu);
+                                }
+                              },
+                              child: MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: capsOn
+                                        ? t.accent.withValues(alpha: 0.35)
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                  child: Text(
+                                    capsOn ? 'AA' : 'Aa',
+                                    style: TextStyle(
+                                      fontFamily: FfTokens.fontFamily,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                      height: 1,
+                                      letterSpacing: 0.2,
+                                      color: capsOn
+                                          ? FfTokens.accentHover
+                                          : t.textTertiary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    if (fromFile)
+                      Positioned(
+                        right: 3,
+                        top: 3,
+                        child: Container(
+                          width: 5,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: t.textSecondary,
+                            shape: BoxShape.circle,
+                          ),
                         ),
-                      ],
-                    ],
-                  ),
+                      ),
+                  ],
                 ),
               ),
             ),

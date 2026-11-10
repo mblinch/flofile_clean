@@ -14,9 +14,10 @@ import '../../../widgets/teal_action_button.dart';
 const Color _captionWarn = FfTokens.danger;
 final Color _captionWarnLine = FfTokens.danger.withValues(alpha: 0.45);
 
-/// Blank field the wire still needs for filing (e.g. Getty).
-const Color _filingWarn = Color(0xFFE8B547);
-const Color _filingWarnLine = Color(0x73E8B547);
+/// Blank field the wire still needs for filing (e.g. Getty) — muted grey so
+/// caption-required (red) stays the urgent signal.
+const Color _filingWarn = FfTokens.sessionT2;
+final Color _filingWarnLine = FfTokens.sessionT2.withValues(alpha: 0.45);
 
 enum _FieldAlert { none, caption, filing }
 
@@ -2499,7 +2500,7 @@ class _Footer extends StatelessWidget {
         : 'Red - Required to build captions';
     final filingLegend = editIptcLegend
         ? 'Needed for Getty'
-        : 'Yellow - Needed for filing to $filingName';
+        : 'Grey - Needed for filing to $filingName';
     return Container(
       padding: EdgeInsets.fromLTRB(20, compact ? 8 : 12, 16, compact ? 8 : 12),
       decoration: BoxDecoration(

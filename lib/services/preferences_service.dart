@@ -220,6 +220,10 @@ class PreferencesService {
   static const String _keyStartupLastAwayPrefix = 'startup_last_away_';
   /// `none` | `on_import` | `on_save` — when startup IPTC template is applied.
   static const String _keyIptcApplyMode = 'iptc_apply_mode';
+  /// Startup: user handles IPTC outside FloFile — skip write + caption IPTC gate.
+  static const String _keyIptcAppliedElsewhere = 'iptc_applied_elsewhere';
+  /// Startup: on ingest, write template fields only when the file field is empty.
+  static const String _keyIptcFillGapsOnly = 'iptc_fill_gaps_only';
   /// `merge` | `overwrite` — Personality / Keywords on session load.
   static const String _keyIptcOnLoadListMode = 'iptc_on_load_list_mode';
   static const String _keyApplyIptcOnImport = 'apply_iptc_on_import';
@@ -585,6 +589,26 @@ class PreferencesService {
   Future<void> saveIptcApplyMode(IptcApplyMode mode) async {
     final prefs = await _getPrefs();
     await prefs.setString(_keyIptcApplyMode, mode.storageValue);
+  }
+
+  Future<bool> getIptcAppliedElsewhere() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keyIptcAppliedElsewhere) ?? false;
+  }
+
+  Future<void> saveIptcAppliedElsewhere(bool enabled) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keyIptcAppliedElsewhere, enabled);
+  }
+
+  Future<bool> getIptcFillGapsOnly() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keyIptcFillGapsOnly) ?? false;
+  }
+
+  Future<void> saveIptcFillGapsOnly(bool enabled) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keyIptcFillGapsOnly, enabled);
   }
 
   Future<IptcOnLoadListMode> getIptcOnLoadListMode() async {

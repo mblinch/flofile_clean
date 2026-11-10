@@ -59,10 +59,15 @@ class CaptionLayoutBuilderDialog extends StatefulWidget {
     this.onAdminSaveAsDefault,
     this.onAdminDiscard,
     this.onSessionStructureChipTap,
+    this.preferFileIptcValues = false,
   });
 
   /// When true, renders without [Dialog] chrome (for embedding in admin).
   final bool embedded;
+
+  /// New Session "Already in files": date/geo chips + preview values come from
+  /// each file's IPTC (dotted chip marker + dashed underline in preview).
+  final bool preferFileIptcValues;
 
   /// Edits in-memory wire drafts instead of writing user preferences.
   final bool adminMode;
@@ -809,6 +814,9 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
 
   /// Structure PREVIEW: colour-code slots like Structure chips.
   bool _structurePreviewColorCode = false;
+
+  /// New Session embed: field palette hidden until "+ Insert field".
+  bool _structureInsertPaletteOpen = false;
 
   /// Getty note to user includes the NBAE copyright line.
   bool _gettyNoteIsNbae = false;
@@ -6250,6 +6258,9 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
   /// Whether Structure PREVIEW colour-codes resolved slots.
   bool get structurePreviewColorCode => _structurePreviewColorCode;
 
+  /// True when Structure differs from the last saved default (for Save button).
+  bool get structureEditorDirty => _structureEditorDirty;
+
   /// Host Caption header can toggle colour-coding on/off.
   void setStructurePreviewColorCode(bool on) {
     if (_structurePreviewColorCode == on) return;
@@ -7240,6 +7251,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                       spans.add(TextSpan(text: leading));
                     }
                     if (core.isNotEmpty) {
+                      final fromFile = _isFileSourcedStructureKey(key);
                       spans.add(
                         TextSpan(
                           text: core,
@@ -7248,6 +7260,15 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                             backgroundColor: labelBg,
                             fontWeight:
                                 colorCode ? FontWeight.w600 : null,
+                            decoration: fromFile
+                                ? TextDecoration.underline
+                                : null,
+                            decorationStyle: fromFile
+                                ? TextDecorationStyle.dashed
+                                : null,
+                            decorationColor: fromFile
+                                ? t.textTertiary
+                                : null,
                           ),
                           onEnter: (_) => _setStructureHoverRef(ref),
                           onExit: (_) => _setStructureHoverRef(null),
@@ -7836,52 +7857,28 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Full editor: label only — sample lives in Preview.
-          // Session embed keeps the compact inline sample for a tight layout.
-          if (compact)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text(
-                  'PLAYER OUTPUT',
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.1,
-                    color: t.textTertiary,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _nocturnePlayerSample(
-                    playerPreviewText,
-                    compact: true,
-                    inline: true,
-                  ),
-                ),
-              ],
-            )
-          else
-            Text(
-              'PLAYER OUTPUT',
-              style: TextStyle(
-                fontFamily: FfTokens.fontFamily,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 1.1,
-                color: t.textTertiary,
-              ),
+          Text(
+            'PLAYER OUTPUT',
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 1.1,
+              color: t.textTertiary,
             ),
+          ),
           const SizedBox(height: 8),
           Expanded(
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: _nocturnePlayerOutputOptionGroups(
-                  compact: compact,
-                ),
+                // Embed: player toggles only (no IPTC personality/keywords).
+                children: compact
+                    ? _nocturnePlayerOutputOptionGroups(compact: false)
+                        .take(1)
+                        .toList()
+                    : _nocturnePlayerOutputOptionGroups(compact: false),
               ),
             ),
           ),
@@ -7890,9 +7887,11 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     );
   }
 
-  Widget _nocturneStructureAddPalette() {
+  Widget _nocturneStructureAddPalette({bool forceInline = false}) {
     return StructureFormulaPalette(
-      compactPopup: _isSessionStartupEmbed,
+      // Admin: full grouped chip rows (compactPopup false).
+      // New Session insert toggle: inline chip rows via forceInline.
+      compactPopup: !forceInline && _isSessionStartupEmbed,
       onPointerDown: () {
         _structureFormulaFieldKey.currentState?.keepFocus();
       },
@@ -7910,6 +7909,17 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       onHoverRef: _setStructureHoverRef,
       enabled: !_coreStyleLocked,
       expands: expands,
+      controlsOnHoverOnly: _isSessionStartupEmbed,
+      fileSourcedKeys: widget.preferFileIptcValues
+          ? {
+              for (final key in [
+                ...StructureFormulaKeys.date,
+                ...StructureFormulaKeys.dateline,
+                ...StructureFormulaKeys.locationGroup,
+              ])
+                key,
+            }
+          : const {},
       onChanged: _onStructureFormulaChanged,
       onChipTap: _onStructureChipTap,
       monthOptionByOccurrence: _structureOptionIndexes(DateFieldKind.month),
@@ -7976,18 +7986,78 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                   color: t.textTertiary,
                 ),
               ),
-              if (embed) ...[
-                // Keep + visible above the fold — chips scroll underneath.
-                const Spacer(),
-                _nocturneStructureAddPalette(),
-              ],
+              const Spacer(),
+              if (embed)
+                Material(
+                  color: _structureInsertPaletteOpen
+                      ? t.selected
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () {
+                      setState(() {
+                        _structureInsertPaletteOpen =
+                            !_structureInsertPaletteOpen;
+                      });
+                      _structureFormulaFieldKey.currentState?.keepFocus();
+                    },
+                    onTapDown: (_) {
+                      _structureFormulaFieldKey.currentState?.keepFocus();
+                    },
+                    child: Container(
+                      height: 28,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: _structureInsertPaletteOpen
+                            ? Border.all(color: t.accentEdge)
+                            : null,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          PhosphorIcon(
+                            PhosphorIconsBold.plus,
+                            size: 12,
+                            color: _structureInsertPaletteOpen
+                                ? t.text
+                                : t.textSecondary,
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            'Insert field',
+                            style: TextStyle(
+                              fontFamily: FfTokens.fontFamily,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: _structureInsertPaletteOpen
+                                  ? t.text
+                                  : t.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
           SizedBox(height: embed ? 3 : 6),
           Expanded(
             child: embed
-                ? _nocturneStructureFormulaField(expands: true)
-                // Shrink-wrap the formula to content; palette sits directly under.
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: _nocturneStructureFormulaField(expands: true),
+                      ),
+                      if (_structureInsertPaletteOpen) ...[
+                        const SizedBox(height: 6),
+                        _nocturneStructureAddPalette(forceInline: true),
+                      ],
+                    ],
+                  )
                 : Align(
                     alignment: Alignment.topCenter,
                     child: Column(
@@ -8203,6 +8273,12 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     );
   }
 
+  bool _isFileSourcedStructureKey(String key) {
+    if (!widget.preferFileIptcValues) return false;
+    final group = StructureFormulaKeys.previewColorGroup(key);
+    return group == 'date' || group == 'geo';
+  }
+
   Widget _buildNocturneStructureEditor({
     required String sampleCaption,
     required CreditSampleAgency sampleAgency,
@@ -8234,23 +8310,41 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                 ),
                 SizedBox(height: embed ? 4 : 8),
                 Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Structure fills leftover width; Player Output fixed.
-                      Expanded(
-                        flex: 155,
-                        child: _nocturneStructurePanel(),
-                      ),
-                      SizedBox(width: embed ? 0 : 8),
-                      SizedBox(
-                        width: embed ? 400 : 340,
-                        child: _nocturnePlayerOutputPanel(
-                          playerPreviewText,
-                          compact: embed,
-                        ),
-                      ),
-                    ],
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final stack = embed && constraints.maxWidth < 900;
+                      final structure = _nocturneStructurePanel();
+                      final player = _nocturnePlayerOutputPanel(
+                        playerPreviewText,
+                        compact: embed,
+                      );
+                      if (stack) {
+                        return SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              SizedBox(height: 220, child: structure),
+                              const SizedBox(height: 12),
+                              SizedBox(height: 220, child: player),
+                            ],
+                          ),
+                        );
+                      }
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            flex: 155,
+                            child: structure,
+                          ),
+                          SizedBox(width: embed ? 0 : 8),
+                          SizedBox(
+                            width: embed ? 400 : 340,
+                            child: player,
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ),
               ],
@@ -10502,37 +10596,58 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     // stays usable on short windows while using more height on large displays.
     final dialogWidth = (mq.width - 32).clamp(320.0, 1400.0);
 
-    final shell = SizedBox(
-        width: widget.embedded ? double.infinity : dialogWidth,
-        height: widget.embedded ? double.infinity : dialogHeight,
+    final editorBody = FutureBuilder<void>(
+      future: _load,
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return const Center(
+            child: SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        }
+        return _buildNocturneStructureEditor(
+          sampleCaption: sampleCaption,
+          sampleAgency: previewAgency,
+          playerPreviewText: playerPreviewText,
+        );
+      },
+    );
+
+    // Embedded: expand into the startup SizedBox. Non-embedded: fixed dialog.
+    final Widget shell;
+    if (widget.embedded) {
+      shell = ColoredBox(
+        color: Colors.transparent,
+        child: editorBody,
+      );
+    } else {
+      shell = SizedBox(
+        width: dialogWidth,
+        height: dialogHeight,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: widget.embedded ? Colors.transparent : _t.surface,
-            borderRadius: BorderRadius.circular(
-              widget.embedded ? 0 : FfTokens.radiusWindow,
-            ),
-            border: widget.embedded ? null : Border.all(color: _t.divider),
-            boxShadow: widget.embedded
-                ? null
-                : [
-                    BoxShadow(
-                      color: _t.bg.withValues(alpha: 0.55),
-                      blurRadius: 24,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
+            color: _t.surface,
+            borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
+            border: Border.all(color: _t.divider),
+            boxShadow: [
+              BoxShadow(
+                color: _t.bg.withValues(alpha: 0.55),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(
-              widget.embedded ? 0 : FfTokens.radiusWindow,
-            ),
+            borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
             child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (!widget.embedded)
+              fit: StackFit.expand,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                     Container(
                       height: 40,
                       width: double.infinity,
@@ -10564,7 +10679,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 6, vertical: 2),
                                 minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                tapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
                               ),
                               onPressed: _duplicateCaptionStyle,
                               child: Text(
@@ -10581,7 +10697,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 6, vertical: 2),
                                 minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                tapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
                               ),
                               onPressed: _selectedSavedStyleId == null
                                   ? null
@@ -10606,7 +10723,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                               borderRadius: BorderRadius.circular(6),
                               child: Padding(
                                 padding: const EdgeInsets.all(4),
-                                child: PhosphorIcon(PhosphorIconsRegular.x,
+                                child: PhosphorIcon(
+                                  PhosphorIconsRegular.x,
                                   size: 18,
                                   color: _t.textSecondary,
                                 ),
@@ -10616,45 +10734,22 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                         ],
                       ),
                     ),
-                  Expanded(
-                    child: ColoredBox(
-                      color: widget.embedded ? Colors.transparent : _t.bg,
-                      child: FutureBuilder<void>(
-                      future: _load,
-                      builder: (context, snap) {
-                        if (snap.connectionState != ConnectionState.done) {
-                          return SizedBox(
-                            height: 120,
-                            child: Center(
-                              child: SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: _t.accent,
-                                ),
-                              ),
-                            ),
-                          );
-                        }
-                        return _buildNocturneStructureEditor(
-                          sampleCaption: sampleCaption,
-                          sampleAgency: previewAgency,
-                          playerPreviewText: playerPreviewText,
-                        );
-                      },
+                    Expanded(
+                      child: ColoredBox(
+                        color: _t.bg,
+                        child: editorBody,
+                      ),
                     ),
-                    ),
-                  ),
-                ],
-              ),
-              if (_renameCaptionStylePromptOpen)
-                Positioned.fill(child: _renameCaptionStyleNameOverlay()),
-            ],
-          ),
+                  ],
+                ),
+                if (_renameCaptionStylePromptOpen)
+                  Positioned.fill(child: _renameCaptionStyleNameOverlay()),
+              ],
+            ),
           ),
         ),
       );
+    }
 
     if (widget.embedded) {
       return AppDialogFfStyle(enabled: true, child: shell);
