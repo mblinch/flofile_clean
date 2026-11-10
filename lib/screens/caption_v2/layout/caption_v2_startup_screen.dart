@@ -37,6 +37,7 @@ import '../../../widgets/file_rename_dialog.dart';
 import '../../../widgets/caption_layout_builder_dialog.dart';
 import '../data/team_abbrev.dart';
 import 'caption_v2_iptc_dialog.dart';
+import 'iptc_template_editor.dart';
 import 'roster_import_dialog.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
@@ -156,8 +157,18 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   /// Folder scan: files that already have City + Date (for "Already in files").
   int _iptcScanWithCityDate = 0;
   int _iptcScanTotal = 0;
+  /// IPTC values read from folder photos (inline menu / Already in files).
+  Map<String, String> _iptcValuesFromFiles = const {};
+  /// IPTC template values shown/edited for Apply / Fill missing.
+  Map<String, String> _iptcValuesFromTemplate = const {};
+  /// Panel keys present on folder photos (marks “Found in files”).
+  Set<String> _iptcKeysFoundInFiles = const {};
+  int _iptcInlineRevision = 0;
+  /// When true, folder auto-select will not override the user's IPTC source pick.
+  bool _iptcSourceManual = false;
 
-  /// Step 1 = Setup panel; Step 2 = summary + Caption + Session options.
+  /// Step 1 = wire; Step 2 = setup (folder/IPTC/league/teams);
+  /// Step 3 = Caption layout + Session options.
   int _setupStep = 1;
   /// Which setup field to focus when returning from the summary strip.
   String? _setupFocusTarget;
@@ -219,12 +230,23 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   bool get _bothTeamsChosen =>
       _homeFilled && _awayFilled && _homeTeam != _awayTeam;
 
-  /// Continue (step 1) / Go Time (step 2) require folder + sport + both teams.
+  /// Go Time (step 3) require folder + sport + both teams.
   bool get _canGo =>
       _sportChosen && _folderChosen && _bothTeamsChosen && !_going;
 
+  /// Setup panel Continue (step 2 → 3).
   bool get _canContinue =>
       _folderChosen && _sportChosen && _bothTeamsChosen && !_going;
+
+  bool get _wireChosen {
+    final token = _selectedStyleToken;
+    if (token == null || token.isEmpty) return false;
+    return CaptionStyleCatalog.isCoreWireToken(token) ||
+        CaptionStyleCatalog.isCustomMenuToken(token);
+  }
+
+  /// Wire step Continue (step 1 → 2).
+  bool get _canContinueFromWire => _wireChosen && !_loadingStyles;
 
   bool get _writeIptc => _iptcMode != IptcApplyMode.none;
 
@@ -287,6 +309,10 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
   String get _goHint {
     if (_setupStep == 1) {
+      if (_canContinueFromWire) return 'Press Enter to continue';
+      return 'Choose a wire to continue';
+    }
+    if (_setupStep == 2) {
       if (_canContinue) return 'Press Enter to continue';
       if (!_folderChosen) return 'Choose an images folder';
       if (!_sportChosen) return 'Pick a league to continue';
@@ -370,6 +396,14 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
   /// Filing gaps stay muted grey; caption gaps stay red.
   static const Color _filingWarnColor = FfTokens.sessionT2;
+
+  WireStyle get _iptcInlineWire {
+    final wire = _captionTemplate?.wireStyle ?? WireStyle.getty;
+    if (wire == WireStyle.custom || wire == WireStyle.gettyInternational) {
+      return WireStyle.getty;
+    }
+    return wire;
+  }
 
   @override
   void initState() {
@@ -721,12 +755,18 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       _previewDateFromFolder = fromFolderPhoto;
       _pickingFolder = false;
       _folderDragOver = false;
+      // New folder → let the IPTC checker pick Apply / Fill / Already in files.
+      _iptcSourceManual = false;
     });
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('last_images_folder', path);
     } catch (_) {}
-    await _refreshIptcCaptionWarning();
+    if (files.isEmpty) {
+      await _promptEmptyFolderIptcPlan();
+    } else {
+      await _refreshIptcCaptionWarning(autoSelectSource: true);
+    }
   }
 
   static String _exifDateTimeOriginal(DateTime dt) {
@@ -996,7 +1036,12 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   }
 
   /// Maps the 3-way IPTC source control onto apply-mode + fill-gaps + elsewhere.
-  Future<void> _setIptcSource(_IptcSourceMode source) async {
+  Future<void> _setIptcSource(
+    _IptcSourceMode source, {
+    bool refresh = true,
+    bool markManual = true,
+  }) async {
+    if (markManual) _iptcSourceManual = true;
     if (source == _iptcSource &&
         (source != _IptcSourceMode.apply || _writeIptc) &&
         (source != _IptcSourceMode.fill || (_writeIptc && _iptcFillGapsOnly))) {
@@ -1038,15 +1083,174 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
           _iptcStatus = 'Elsewhere';
         });
     }
+    if (refresh) await _refreshIptcCaptionWarning();
+  }
+
+  /// Folder scan → recommended IPTC source for New Session load-in.
+  ///
+  /// All required caption + wire fields present on files → Already in files.
+  /// Some IPTC present but required fields still missing → Fill missing IPTC.
+  /// Nothing on the files → Apply my template.
+  _IptcSourceMode _recommendIptcSourceFromScan({
+    required Map<String, String> fromFiles,
+    required CaptionTemplate captionTemplate,
+    required WireStyle wire,
+  }) {
+    final hasAny = fromFiles.values.any((v) {
+      final trimmed = v.trim();
+      return trimmed.isNotEmpty &&
+          !IptcTemplateApplyService.isInAppGeneratedPlaceholder(trimmed);
+    });
+    if (!hasAny) return _IptcSourceMode.apply;
+
+    final captionMissing = CaptionFormulaRenderer.missingCaptionIptcLabels(
+      template: captionTemplate,
+      game: IptcTemplateApplyService.gameInfoFromPanelValues(fromFiles),
+      includeCreator: false,
+    );
+    final filingMissing =
+        IptcTemplateApplyService.missingRequiredLabels(wire, fromFiles);
+    if (captionMissing.isEmpty && filingMissing.isEmpty) {
+      return _IptcSourceMode.files;
+    }
+    return _IptcSourceMode.fill;
+  }
+
+  /// Empty edit folder: ask which of the three IPTC sources to use.
+  Future<void> _promptEmptyFolderIptcPlan() async {
+    if (!mounted) return;
+    final tokens = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    final choice = await showDialog<_IptcSourceMode>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.55),
+      builder: (ctx) {
+        final screenW = MediaQuery.sizeOf(ctx).width;
+        final dialogW = math.min(440.0, screenW * 0.92);
+        Widget option({
+          required _IptcSourceMode mode,
+          required String label,
+          required bool primary,
+        }) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedGreyButton(
+                label: label,
+                fontSize: 11,
+                isPrimary: primary,
+                onPressed: () => Navigator.pop(ctx, mode),
+              ),
+            ),
+          );
+        }
+
+        return AppDialogFfStyle(
+          enabled: true,
+          child: Center(
+            child: Material(
+              color: Colors.transparent,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minWidth: 280, maxWidth: dialogW),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: tokens.surface,
+                    borderRadius:
+                        BorderRadius.circular(FfTokens.radiusWindow),
+                    border: Border.all(color: tokens.divider),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.35),
+                        blurRadius: 24,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius:
+                        BorderRadius.circular(FfTokens.radiusWindow),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.fromLTRB(16, 14, 12, 10),
+                          decoration: BoxDecoration(
+                            color: tokens.bg,
+                            border: Border(
+                              bottom: BorderSide(color: tokens.divider),
+                            ),
+                          ),
+                          child: Text(
+                            'No images yet',
+                            style: tokens.labelStyle.copyWith(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+                          child: Text(
+                            'This folder has no images yet. How should IPTC be '
+                            'handled when photos arrive?',
+                            style: tokens.bodyStyle.copyWith(
+                              fontSize: 13,
+                              height: 1.4,
+                              color: tokens.text.withValues(alpha: 0.88),
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              option(
+                                mode: _IptcSourceMode.apply,
+                                label: 'Apply my template',
+                                primary: true,
+                              ),
+                              option(
+                                mode: _IptcSourceMode.fill,
+                                label: 'Fill missing IPTC',
+                                primary: false,
+                              ),
+                              option(
+                                mode: _IptcSourceMode.files,
+                                label: 'Already in files',
+                                primary: false,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    if (!mounted) return;
+    await _setIptcSource(
+      choice ?? _IptcSourceMode.files,
+      refresh: false,
+      markManual: false,
+    );
     await _refreshIptcCaptionWarning();
   }
 
   void _showSetupStep(int step, {String? focus}) {
     setState(() {
       _setupStep = step;
-      _setupFocusTarget = step == 1 ? focus : null;
+      _setupFocusTarget = step == 2 ? focus : null;
     });
-    if (step == 1 && focus != null) {
+    if (step == 2 && focus != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         switch (focus) {
@@ -1061,25 +1265,63 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     }
   }
 
-  Future<void> _continueToStep2() async {
-    if (!_canContinue || _setupStep == 2) return;
+  Future<void> _continueFromWire() async {
+    if (!_canContinueFromWire || _setupStep != 1) return;
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    if (!mounted || _setupStep != 1) return;
+    _showSetupStep(2);
+  }
+
+  Future<void> _continueToCaptionStep() async {
+    if (!_canContinue || _setupStep != 2) return;
     // Defer past pointer-up. Any setState during the Continue gesture
     // (including IPTC sync) disposes the button under the cursor and
-    // blanks Step 2 via MouseTracker asserts.
+    // blanks Step 3 via MouseTracker asserts.
     await Future<void>.delayed(const Duration(milliseconds: 50));
-    if (!mounted || _setupStep == 2) return;
+    if (!mounted || _setupStep != 2) return;
 
     // Fresh visit leaves write off — sync the visible Apply/Fill choice on.
     if (!_iptcAppliedElsewhere && !_writeIptc) {
       await _setIptcSource(
         _iptcFillGapsOnly ? _IptcSourceMode.fill : _IptcSourceMode.apply,
       );
-      if (!mounted || _setupStep == 2) return;
+      if (!mounted || _setupStep != 2) return;
     }
-    _showSetupStep(2);
+    _showSetupStep(3);
   }
 
-  Future<void> _refreshIptcCaptionWarning() async {
+  List<(String, String)> get _wireStepOptions {
+    final catalog = _styleCatalog;
+    if (catalog != null) {
+      final fromCatalog = <(String, String)>[
+        for (final option in catalog.options)
+          if (CaptionStyleCatalog.isCoreWireToken(option.token))
+            (option.token, option.label),
+      ];
+      if (fromCatalog.isNotEmpty) return fromCatalog;
+    }
+    return const [
+      (CaptionStyleCatalog.tokGetty, 'Getty'),
+      (CaptionStyleCatalog.tokImagn, 'Imagn'),
+      (CaptionStyleCatalog.tokAp, 'AP'),
+      (CaptionStyleCatalog.tokCp, 'CP'),
+    ];
+  }
+
+  String get _selectedWireLabel {
+    final token = _selectedStyleToken;
+    if (token == null) return 'Wire';
+    final catalog = _styleCatalog;
+    if (catalog != null) return catalog.labelFor(token);
+    for (final option in _wireStepOptions) {
+      if (option.$1 == token) return option.$2;
+    }
+    return 'Wire';
+  }
+
+  Future<void> _refreshIptcCaptionWarning({
+    bool autoSelectSource = false,
+  }) async {
     final prefs = _prefs;
     final gen = ++_iptcScanGen;
     final folder = _folderPath?.trim() ?? '';
@@ -1090,6 +1332,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         _missingFilingIptc = const [];
         _iptcScanWithCityDate = 0;
         _iptcScanTotal = 0;
+        _iptcValuesFromFiles = const {};
+        _iptcValuesFromTemplate = const {};
+        _iptcKeysFoundInFiles = const {};
         _scanningIptc = false;
       });
       return;
@@ -1134,18 +1379,34 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       //    full folder for city+date coverage when reading from files).
       final files = await _imageFilesInFolder(folder);
       if (gen != _iptcScanGen) return;
-      final sample = files.take(8).toList();
-      final fromFiles = <String, String>{};
+      final rawFromFiles = <String, String>{};
       var withCityDate = 0;
+      var withCityDateRaw = 0;
       if (files.isNotEmpty) {
         // Cap the coverage scan so huge folders stay responsive.
         final coverage = files.length <= 80 ? files : files.take(80).toList();
-        final batch =
+        var batch =
             await IptcTemplateImportService.readMetadataBatch(coverage);
         if (gen != _iptcScanGen) return;
-        for (final path in coverage) {
-          final meta = batch[path];
-          if (meta == null) continue;
+        // Fallback: big batches can fail; read a small sample one-by-one.
+        if (batch.isEmpty) {
+          final sample = files.take(8).toList();
+          batch = await IptcTemplateImportService.readMetadataBatch(sample);
+          if (gen != _iptcScanGen) return;
+          if (batch.isEmpty) {
+            for (final path in sample) {
+              final meta =
+                  await IptcTemplateImportService.readMetadata(path);
+              if (meta != null) batch[path] = meta;
+            }
+            if (gen != _iptcScanGen) return;
+          }
+        }
+        // Union filled fields from every unique metadata map (path aliases can
+        // duplicate the same map under several keys).
+        final seenMeta = <int>{};
+        for (final meta in batch.values) {
+          if (!seenMeta.add(identityHashCode(meta))) continue;
           final panel = IptcTemplateImportService.panelValuesFromExiftool(meta);
           panel.forEach((k, v) {
             final trimmed = v.trim();
@@ -1153,32 +1414,63 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
             if (IptcTemplateApplyService.isInAppGeneratedPlaceholder(trimmed)) {
               return;
             }
-            fromFiles.putIfAbsent(k, () => trimmed);
+            rawFromFiles.putIfAbsent(k, () => trimmed);
           });
+        }
+        for (final path in coverage) {
+          final meta = batch[path] ??
+              batch[p.normalize(path)] ??
+              batch[p.normalize(File(path).absolute.path)];
+          if (meta == null) continue;
+          final panel = IptcTemplateImportService.panelValuesFromExiftool(meta);
           final city = (panel['City'] ?? '').trim();
           final date = (panel['Date'] ?? panel['Time and Date'] ?? '').trim();
-          if (city.isNotEmpty && date.isNotEmpty) withCityDate++;
+          if (city.isNotEmpty && date.isNotEmpty) withCityDateRaw++;
         }
+        withCityDate = withCityDateRaw;
         // Scale the sample count up when we only scanned a subset.
         if (coverage.length < files.length && coverage.isNotEmpty) {
           withCityDate =
-              ((withCityDate / coverage.length) * files.length).round();
+              ((withCityDateRaw / coverage.length) * files.length).round();
         }
-      } else if (sample.isNotEmpty) {
-        final batch =
-            await IptcTemplateImportService.readMetadataBatch(sample);
-        if (gen != _iptcScanGen) return;
-        for (final meta in batch.values) {
-          final panel = IptcTemplateImportService.panelValuesFromExiftool(meta);
-          panel.forEach((k, v) {
-            final trimmed = v.trim();
-            if (trimmed.isEmpty) return;
-            if (IptcTemplateApplyService.isInAppGeneratedPlaceholder(trimmed)) {
-              return;
-            }
-            fromFiles.putIfAbsent(k, () => trimmed);
-          });
+      }
+      // Normalize to wire panel keys so the IPTC builder can show them.
+      final fromFiles =
+          IptcTemplateApplyService.panelValuesFromImportedTemplate(
+        rawFromFiles,
+        wire,
+      );
+      rawFromFiles.forEach((k, v) {
+        final trimmed = v.trim();
+        if (trimmed.isEmpty) return;
+        if (IptcTemplateApplyService.toPresetKey(k) == 'Caption' ||
+            k == 'Caption') {
+          return;
         }
+        fromFiles.putIfAbsent(k, () => trimmed);
+      });
+      fromFiles.removeWhere(
+        (k, _) =>
+            IptcTemplateApplyService.toPresetKey(k) == 'Caption' ||
+            k == 'Caption',
+      );
+
+      // Load-in checker: pick Already in files / Fill gaps / Apply template.
+      if (autoSelectSource &&
+          !_iptcSourceManual &&
+          files.isNotEmpty &&
+          gen == _iptcScanGen) {
+        final recommended = _recommendIptcSourceFromScan(
+          fromFiles: fromFiles,
+          captionTemplate: captionTemplate,
+          wire: wire,
+        );
+        await _setIptcSource(
+          recommended,
+          refresh: false,
+          markManual: false,
+        );
+        if (!mounted || gen != _iptcScanGen) return;
       }
 
       // 2) Selected IPTC template fills gaps for structure/caption preview.
@@ -1220,12 +1512,22 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
               )
               .toList();
       if (!mounted || gen != _iptcScanGen) return;
+      final foundKeys = <String>{};
+      for (final key in fromFiles.keys) {
+        if (key == 'Caption' || key == 'Personality') continue;
+        foundKeys.add(key);
+      }
+      if (!mounted || gen != _iptcScanGen) return;
       setState(() {
         _iptcPanelForPreview = previewPanel;
         _missingCaptionIptc = missing;
         _missingFilingIptc = filingMissing;
         _iptcScanWithCityDate = withCityDate;
         _iptcScanTotal = files.length;
+        _iptcValuesFromFiles = Map<String, String>.from(fromFiles);
+        _iptcValuesFromTemplate = Map<String, String>.from(templatePanel);
+        _iptcKeysFoundInFiles = foundKeys;
+        _iptcInlineRevision++;
         _scanningIptc = false;
       });
     } catch (_) {
@@ -1235,6 +1537,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         _missingFilingIptc = const [];
         _iptcScanWithCityDate = 0;
         _iptcScanTotal = 0;
+        _iptcValuesFromFiles = const {};
+        _iptcValuesFromTemplate = const {};
+        _iptcKeysFoundInFiles = const {};
         _scanningIptc = false;
       });
     }
@@ -1650,6 +1955,11 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       _missingFilingIptc = const [];
       _iptcScanWithCityDate = 0;
       _iptcScanTotal = 0;
+      _iptcValuesFromFiles = const {};
+      _iptcValuesFromTemplate = const {};
+      _iptcKeysFoundInFiles = const {};
+      _iptcInlineRevision = 0;
+      _iptcSourceManual = false;
       _scanningIptc = false;
       _iptcPanelForPreview = const {};
       _iptcOpenedForStyleToken = null;
@@ -1743,7 +2053,12 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     if (event.logicalKey == LogicalKeyboardKey.escape) {
-      if (_setupStep == 2 && _openMenuId == null) {
+      if (_openMenuId != null) return KeyEventResult.ignored;
+      if (_setupStep == 3) {
+        _showSetupStep(2);
+        return KeyEventResult.handled;
+      }
+      if (_setupStep == 2) {
         _showSetupStep(1);
         return KeyEventResult.handled;
       }
@@ -1764,12 +2079,19 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
     if (_setupStep == 1) {
       if (chord) return KeyEventResult.ignored;
-      if (!_canContinue) return KeyEventResult.ignored;
-      unawaited(_continueToStep2());
+      if (!_canContinueFromWire) return KeyEventResult.ignored;
+      unawaited(_continueFromWire());
       return KeyEventResult.handled;
     }
 
-    // Step 2: ⌘/Ctrl+Enter starts the session.
+    if (_setupStep == 2) {
+      if (chord) return KeyEventResult.ignored;
+      if (!_canContinue) return KeyEventResult.ignored;
+      unawaited(_continueToCaptionStep());
+      return KeyEventResult.handled;
+    }
+
+    // Step 3: ⌘/Ctrl+Enter starts the session.
     if (!chord) return KeyEventResult.ignored;
     if (!_canGo) return KeyEventResult.ignored;
     unawaited(_goTime());
@@ -1932,14 +2254,32 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
-              child: _setupStep == 1
-                  ? SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
-                      child: Center(
-                        child: _buildV5SetupPanel(stackTeams: stackTeams),
-                      ),
-                    )
-                  : _buildV5Step2(t),
+              child: switch (_setupStep) {
+                1 => _buildV5WireStep(),
+                2 => LayoutBuilder(
+                    builder: (context, constraints) {
+                      return SingleChildScrollView(
+                        padding:
+                            const EdgeInsets.fromLTRB(24, 8, 24, 12),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: math.max(
+                              0,
+                              constraints.maxHeight - 20,
+                            ),
+                          ),
+                          child: Align(
+                            alignment: Alignment.topCenter,
+                            child: _buildV5SetupPanel(
+                              stackTeams: stackTeams,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                _ => _buildV5CaptionStep(t),
+              },
             ),
             if (_error != null)
               Padding(
@@ -1962,79 +2302,272 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     );
   }
 
-  Widget _buildV5Step2(FfTokens t) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Concrete height so the embed dialog (infinity shell) always has
-        // a tight parent — Expanded-in-scroll and infinity-SizedBox combos
-        // were collapsing the caption editor to nothing.
-        final captionH = math.max(380.0, constraints.maxHeight - 220.0);
-        return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildV5SummaryStrip(),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: captionH,
-                child: ValueListenableBuilder<bool>(
-                  valueListenable: AdminService.previewAsNonAdmin,
-                  builder: (context, _, __) {
-                    final showAdminSave =
-                        AdminService.isCurrentUserAdminSync();
-                    return _buildV4CaptionCard(showAdminSave: showAdminSave);
-                  },
-                ),
-              ),
-              const SizedBox(height: 12),
-              _buildSessionStep(t, compact: true),
-            ],
+  Widget _buildV5CaptionStep(FfTokens t) {
+    // Flex layout (not scroll+fixed height) so Structure / Player Output
+    // always receive a real height budget.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildV5SummaryStrip(),
+          const SizedBox(height: 12),
+          Expanded(
+            child: ValueListenableBuilder<bool>(
+              valueListenable: AdminService.previewAsNonAdmin,
+              builder: (context, _, __) {
+                final showAdminSave =
+                    AdminService.isCurrentUserAdminSync();
+                return _buildV4CaptionCard(showAdminSave: showAdminSave);
+              },
+            ),
           ),
-        );
-      },
+          const SizedBox(height: 12),
+          _buildSessionStep(t, compact: true),
+        ],
+      ),
     );
   }
 
-  /// v5 step 1 — centered setup panel (Images / IPTC / League / Teams).
+  /// Step 1 — pick the wire before IPTC / teams / caption layout.
+  Widget _buildV5WireStep() {
+    final options = _wireStepOptions;
+    final selected = _selectedStyleToken;
+    final current = options.any((o) => o.$1 == selected)
+        ? selected
+        : (options.isNotEmpty ? options.first.$1 : null);
+
+    IconData iconFor(String token) {
+      switch (token) {
+        case CaptionStyleCatalog.tokImagn:
+          return PhosphorIconsRegular.camera;
+        case CaptionStyleCatalog.tokAp:
+          return PhosphorIconsRegular.broadcast;
+        case CaptionStyleCatalog.tokCp:
+          return PhosphorIconsRegular.flag;
+        case CaptionStyleCatalog.tokGettyIntl:
+          return PhosphorIconsRegular.globeHemisphereWest;
+        case CaptionStyleCatalog.tokGetty:
+        default:
+          return PhosphorIconsRegular.newspaper;
+      }
+    }
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 920),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(28, 28, 28, 22),
+            decoration: BoxDecoration(
+              color: FfTokens.sessionPanel,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: FfTokens.sessionLn),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Choose your wire',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: FfTokens.sessionTx,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'This sets the caption layout and IPTC fields for the session.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    color: FfTokens.sessionT2,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                if (_loadingStyles)
+                  const Center(
+                    child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                else
+                  Row(
+                    children: [
+                      for (var i = 0; i < options.length; i++) ...[
+                        if (i > 0) const SizedBox(width: 12),
+                        Expanded(
+                          child: _Pressable(
+                            height: 132,
+                            radius: 12,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 16,
+                            ),
+                            color: options[i].$1 == current
+                                ? FfTokens.nocturneAccentSoft
+                                : FfTokens.nocturneSf,
+                            borderColor: options[i].$1 == current
+                                ? FfTokens.nocturneAccentEdge
+                                : FfTokens.sessionLn,
+                            borderWidth: options[i].$1 == current ? 1.4 : 1,
+                            hoverColor: FfTokens.sessionHv,
+                            onPressed: () =>
+                                unawaited(_selectStyle(options[i].$1)),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                PhosphorIcon(
+                                  iconFor(options[i].$1),
+                                  size: 28,
+                                  color: options[i].$1 == current
+                                      ? FfTokens.nocturneAc
+                                      : FfTokens.sessionT2,
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  options[i].$2,
+                                  textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontFamily: FfTokens.fontFamily,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: options[i].$1 == current
+                                        ? FfTokens.sessionTx
+                                        : FfTokens.sessionT2,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                const SizedBox(height: 24),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: _GoTimeButton(
+                    enabled: _canContinueFromWire,
+                    loading: false,
+                    compact: false,
+                    label: 'Continue',
+                    shortcut: '↵',
+                    onPressed: () => unawaited(_continueFromWire()),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Step 2 — centered setup panel (Images / IPTC / League / Teams).
   Widget _buildV5SetupPanel({required bool stackTeams}) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 760),
+    return SizedBox(
+      width: 1270,
+      height: 670,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+        padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
         decoration: BoxDecoration(
           color: FfTokens.sessionPanel,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildV5SetupRow(
-              label: 'Images',
-              child: _buildV5ImagesField(),
-            ),
-            _buildV5SetupRow(
-              label: 'IPTC',
-              child: _buildV5IptcSourceField(),
-            ),
-            _buildV5SetupRow(
-              label: 'League',
-              child: _setupGate(
-                unlocked: _leagueUnlocked,
-                child: _buildV5LeagueField(),
+            // Images + League + Teams on one row.
+            Container(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+              decoration: const BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: FfTokens.sessionLn),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 56,
+                    height: 40,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('Images', style: _kSectionLabel),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 280,
+                    child: _buildV5ImagesField(),
+                  ),
+                  const SizedBox(width: 16),
+                  SizedBox(
+                    width: 52,
+                    height: 40,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('League', style: _kSectionLabel),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 180,
+                    child: _setupGate(
+                      unlocked: _leagueUnlocked,
+                      child: _buildV5LeagueField(),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  SizedBox(
+                    width: 48,
+                    height: 40,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('Teams', style: _kSectionLabel),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _setupGate(
+                      unlocked: _teamsUnlocked,
+                      child: _buildV5TeamsField(stack: false),
+                    ),
+                  ),
+                ],
               ),
             ),
-            _buildV5SetupRow(
-              label: 'Teams',
-              child: _setupGate(
-                unlocked: _teamsUnlocked,
-                child: _buildV5TeamsField(stack: stackTeams),
+            // Full-width IPTC builder fills remaining panel height.
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 6, 10, 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text('IPTC', style: _kSectionLabel),
+                    const SizedBox(height: 6),
+                    Expanded(
+                      child: _setupGate(
+                        unlocked: _folderChosen,
+                        child: _buildV5IptcSourceField(),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              showDivider: false,
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+              padding: const EdgeInsets.fromLTRB(10, 4, 10, 6),
               child: Align(
                 alignment: Alignment.centerRight,
                 child: _GoTimeButton(
@@ -2043,7 +2576,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                   compact: false,
                   label: 'Continue',
                   shortcut: '↵',
-                  onPressed: () => unawaited(_continueToStep2()),
+                  onPressed: () => unawaited(_continueToCaptionStep()),
                 ),
               ),
             ),
@@ -2057,9 +2590,11 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     required String label,
     required Widget child,
     bool showDivider = true,
+    double topPadding = 14,
+    double bottomPadding = 14,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+      padding: EdgeInsets.fromLTRB(10, topPadding, 10, bottomPadding),
       decoration: showDivider
           ? const BoxDecoration(
               border: Border(
@@ -2212,127 +2747,191 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     );
   }
 
-  Widget _buildV5IptcSourceField() {
-    final source = _iptcSource;
-    final missingCount =
-        _missingCaptionIptc.length + _missingFilingIptc.length;
-    final wireLabel = _filingWireLabel;
-    final scanning = _folderChosen && _scanningIptc;
+  Future<void> _persistInlineIptcTemplate() async {
+    final prefs = _prefs;
+    if (prefs == null) return;
+    final wire = _iptcInlineWire;
+    final preset = IptcTemplateApplyService.normalizeForPreset(
+      _iptcValuesFromTemplate,
+      includeInAppGenerated: true,
+    );
+    await prefs.saveIptcWirePreset(wire, preset: preset);
+    if (!mounted) return;
+    setState(() {
+      final preview = Map<String, String>.from(_iptcValuesFromFiles);
+      for (final e in _iptcValuesFromTemplate.entries) {
+        final trimmed = e.value.trim();
+        if (trimmed.isEmpty) continue;
+        if (IptcTemplateApplyService.isInAppGeneratedPlaceholder(trimmed)) {
+          continue;
+        }
+        preview[e.key] = trimmed;
+      }
+      _iptcPanelForPreview = preview;
+    });
+  }
 
-    Widget note;
-    if (source == _IptcSourceMode.files) {
-      final ok = _iptcScanWithCityDate;
-      final total = _iptcScanTotal;
-      final scanColor = total > 0 && ok < total
-          ? FfTokens.sessionWarn
-          : FfTokens.sessionOk;
-      note = _V5IptcNote(
-        icon: PhosphorIconsRegular.fileMagnifyingGlass,
-        iconColor: FfTokens.sessionOk,
-        child: Text.rich(
-          TextSpan(
-            style: const TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontSize: 13,
-              height: 19 / 13,
-              color: FfTokens.sessionT2,
-            ),
-            children: [
-              const TextSpan(
-                text:
-                    'Captions read place and date from each photo’s own IPTC. ',
-              ),
-              const TextSpan(
-                text: 'Nothing is written',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: FfTokens.sessionTx,
-                ),
-              ),
-              const TextSpan(text: ' except the caption. '),
-              if (scanning)
-                const TextSpan(text: 'Scanning…')
-              else if (total > 0)
-                TextSpan(
-                  text: '$ok of $total have city and date.',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: scanColor,
-                  ),
-                ),
-            ],
-          ),
-        ),
-      );
-    } else {
-      final fill = source == _IptcSourceMode.fill;
-      final complete = _folderChosen && !_scanningIptc && missingCount == 0;
-      note = _V5IptcNote(
-        icon: complete
-            ? PhosphorIconsFill.checkCircle
-            : PhosphorIconsFill.warningCircle,
-        iconColor: complete ? FfTokens.sessionOk : FfTokens.sessionWarn,
-        action: _folderChosen
-            ? () => unawaited(
-                  _hasIptcFieldWarnings
-                      ? _openIptcForMissingFields()
-                      : _openIptc(),
-                )
-            : null,
-        child: Text.rich(
-          TextSpan(
-            style: const TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontSize: 13,
-              height: 19 / 13,
-              color: FfTokens.sessionT2,
-            ),
-            children: [
-              TextSpan(
-                text: fill
-                    ? 'Fills empty fields only — anything already in a file is kept. '
-                    : 'Your template is written to every photo on ingest. ',
-              ),
-              if (!_folderChosen)
-                const TextSpan(text: 'Choose a folder to check the template.')
-              else if (scanning)
-                const TextSpan(text: 'Scanning…')
-              else if (missingCount > 0)
-                TextSpan(
-                  text: '$missingCount fields missing for $wireLabel.',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: FfTokens.sessionWarn,
-                  ),
-                )
-              else
-                const TextSpan(
-                  text: 'Template complete.',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: FfTokens.sessionOk,
-                  ),
-                ),
-            ],
-          ),
-        ),
-      );
+  void _onInlineIptcValueChanged(String storageKey, String value) {
+    if (_iptcSource == _IptcSourceMode.files) return;
+    setState(() {
+      final next = Map<String, String>.from(_iptcValuesFromTemplate);
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) {
+        next.remove(storageKey);
+      } else {
+        next[storageKey] = value;
+      }
+      _iptcValuesFromTemplate = next;
+      _iptcInlineRevision++;
+    });
+    unawaited(_persistInlineIptcTemplate());
+  }
+
+  void _clearInlineIptcTemplate() {
+    if (_iptcSource == _IptcSourceMode.files) return;
+    setState(() {
+      _iptcValuesFromTemplate = const {};
+      _iptcInlineRevision++;
+    });
+    unawaited(_persistInlineIptcTemplate());
+  }
+
+  /// Values shown in the inline IPTC builder — always seeded from folder files.
+  Map<String, String> get _inlineIptcDisplayValues {
+    final files = _iptcValuesFromFiles;
+    final template = _iptcValuesFromTemplate;
+    switch (_iptcSource) {
+      case _IptcSourceMode.files:
+        return files;
+      case _IptcSourceMode.fill:
+        // Keep file values; template only fills blanks.
+        final out = Map<String, String>.from(files);
+        for (final e in template.entries) {
+          final trimmed = e.value.trim();
+          if (trimmed.isEmpty) continue;
+          if (IptcTemplateApplyService.isInAppGeneratedPlaceholder(trimmed)) {
+            continue;
+          }
+          out.putIfAbsent(e.key, () => e.value);
+        }
+        return out;
+      case _IptcSourceMode.apply:
+        // Start from files so the pad shows what's already there, then
+        // overlay template values that will be written.
+        final out = Map<String, String>.from(files);
+        for (final e in template.entries) {
+          final trimmed = e.value.trim();
+          if (trimmed.isEmpty) continue;
+          if (IptcTemplateApplyService.isInAppGeneratedPlaceholder(trimmed)) {
+            continue;
+          }
+          out[e.key] = e.value;
+        }
+        return out;
     }
+  }
 
+  Widget _buildV5InlineIptcMenu() {
+    final source = _iptcSource;
+    final fromFiles = source == _IptcSourceMode.files;
+    final onTemplate = !fromFiles;
+    final values = _inlineIptcDisplayValues;
+    final scanning = _folderChosen && _scanningIptc;
+    final styleLabel = _styleCatalog == null
+        ? 'IPTC template'
+        : _styleCatalog!.labelFor(
+            _selectedStyleToken ?? _styleCatalog!.activeToken,
+          );
+    final title = fromFiles
+        ? 'From files'
+        : 'TEMPLATE PAGE';
+    final subtitle = fromFiles
+        ? 'Read-only values from folder photos'
+        : (source == _IptcSourceMode.fill
+            ? 'This template fills empty IPTC fields on incoming files'
+            : 'This template will overwrite all IPTC on incoming files');
+
+    return Container(
+      decoration: BoxDecoration(
+        color: onTemplate ? FfTokens.nocturneAccentSoft : FfTokens.nocturneSf,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: onTemplate ? FfTokens.nocturneAccentEdge : FfTokens.sessionLn,
+          width: onTemplate ? 1.2 : 1,
+        ),
+        boxShadow: onTemplate
+            ? FfTokens.accentButtonGlow(FfTokens.nocturneAc)
+            : null,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: !_folderChosen
+          ? const Center(
+              child: Text(
+                'Choose a folder to see IPTC fields.',
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 13,
+                  color: FfTokens.sessionT3,
+                ),
+              ),
+            )
+          : scanning
+              ? const Center(
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              : IptcTemplateEditor(
+                  key: ValueKey(
+                    'inline-iptc-$_iptcInlineRevision-${_iptcInlineWire.name}-$source',
+                  ),
+                  wire: _iptcInlineWire,
+                  templates: const [],
+                  selectedTemplateId: '',
+                  values: values,
+                  foundInFilesKeys: _iptcKeysFoundInFiles,
+                  revision: _iptcInlineRevision,
+                  fieldsEnabled: onTemplate,
+                  onTemplateSelected: (_) {},
+                  onValueChanged: fromFiles
+                      ? (_, __) {}
+                      : _onInlineIptcValueChanged,
+                  onLoadTemplate: null,
+                  onClearTemplate:
+                      fromFiles ? null : _clearInlineIptcTemplate,
+                  onSaveTemplate: null,
+                  loadEnabled: false,
+                  clearEnabled: onTemplate,
+                  embedded: true,
+                  showTemplateControls: false,
+                  templatePageHeader: onTemplate,
+                  title: title,
+                  subtitle: subtitle,
+                  captionTemplate: _captionTemplate,
+                  captionStyleLabel: styleLabel,
+                  onCancel: () {},
+                  onDone: () {},
+                ),
+    );
+  }
+
+  Widget _buildV5IptcSourceField() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _V5Segmented<_IptcSourceMode>(
-          value: source,
+          value: _iptcSource,
           onChanged: (next) => unawaited(_setIptcSource(next)),
           options: const [
             (_IptcSourceMode.apply, 'Apply my template'),
-            (_IptcSourceMode.fill, 'Fill gaps only'),
+            (_IptcSourceMode.fill, 'Fill missing IPTC'),
             (_IptcSourceMode.files, 'Already in files'),
           ],
         ),
-        const SizedBox(height: 8),
-        note,
+        const SizedBox(height: 10),
+        Expanded(child: _buildV5InlineIptcMenu()),
       ],
     );
   }
@@ -2488,7 +3087,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         _imageCount == 1 ? '1' : '$_imageCount';
     final srcLabel = switch (_iptcSource) {
       _IptcSourceMode.apply => 'My template',
-      _IptcSourceMode.fill => 'Fill gaps',
+      _IptcSourceMode.fill => 'Fill missing',
       _IptcSourceMode.files => 'From files',
     };
     final iptcDot = _iptcSource != _IptcSourceMode.files &&
@@ -2502,6 +3101,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     Widget chip({
       required String focus,
       required Widget child,
+      int step = 2,
     }) {
       return _Pressable(
         height: 32,
@@ -2509,7 +3109,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 10),
         color: Colors.transparent,
         hoverColor: FfTokens.sessionHv,
-        onPressed: () => _showSetupStep(1, focus: focus),
+        onPressed: () => _showSetupStep(step, focus: focus),
         child: child,
       );
     }
@@ -2531,6 +3131,31 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         runSpacing: 6,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
+          chip(
+            focus: 'wire',
+            step: 1,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const PhosphorIcon(
+                  PhosphorIconsRegular.newspaper,
+                  size: 15,
+                  color: FfTokens.sessionT3,
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  _selectedWireLabel,
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: FfTokens.sessionTx,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          divider(),
           chip(
             focus: 'folder',
             child: Row(
@@ -2683,7 +3308,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
             hoverColor: FfTokens.sessionHv,
             hoverForeground: true,
             foreground: FfTokens.sessionT2,
-            onPressed: () => _showSetupStep(1),
+            onPressed: () => _showSetupStep(2),
             child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -3195,16 +3820,21 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
           ),
         ),
         const SizedBox(width: 10),
+        // Must be Expanded — _V5Segmented uses Expanded chips and cannot
+        // sit loose in a Row (unbounded width collapses the caption header).
         if (tokens.isNotEmpty)
-          _V5Segmented<String>(
-            value: current ?? tokens.first,
-            small: true,
-            onChanged: (token) => unawaited(_selectStyle(token)),
-            options: [
-              for (final token in tokens) (token, catalog!.labelFor(token)),
-            ],
-          ),
-        const Spacer(),
+          Expanded(
+            child: _V5Segmented<String>(
+              value: current ?? tokens.first,
+              small: true,
+              onChanged: (token) => unawaited(_selectStyle(token)),
+              options: [
+                for (final token in tokens) (token, catalog!.labelFor(token)),
+              ],
+            ),
+          )
+        else
+          const Spacer(),
         if (showSave)
           _Pressable(
             height: 32,
@@ -3837,7 +4467,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                   ),
                 ],
               )
-            : dialog,
+            : SizedBox.expand(child: dialog),
       ),
     );
   }
@@ -3932,6 +4562,17 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         _missingCaptionIptc.length + _missingFilingIptc.length;
     final Widget status;
     if (_setupStep == 1) {
+      status = _FooterStatus(
+        icon: _wireChosen
+            ? PhosphorIconsFill.checkCircle
+            : PhosphorIconsRegular.info,
+        iconColor:
+            _wireChosen ? FfTokens.sessionOk : FfTokens.sessionT3,
+        text: _wireChosen
+            ? 'Filing to $_selectedWireLabel'
+            : 'Choose Getty, Imagn, AP, or CP',
+      );
+    } else if (_setupStep == 2) {
       if (!_folderChosen) {
         status = const _FooterStatus(
           icon: PhosphorIconsRegular.info,
@@ -3981,8 +4622,8 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       );
     }
 
-    // Step 1: status only — Continue lives on the setup panel.
-    // Step 2: Back + Go time.
+    // Steps 1–2: status (+ Back on setup). Continue lives on each panel.
+    // Step 3: Back + Go time.
     if (_setupStep == 1) {
       return Container(
         padding: const EdgeInsets.fromLTRB(24, 10, 24, 10),
@@ -3991,6 +4632,48 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
           border: Border(top: BorderSide(color: FfTokens.sessionLn)),
         ),
         child: status,
+      );
+    }
+
+    if (_setupStep == 2) {
+      return Container(
+        padding: const EdgeInsets.fromLTRB(24, 10, 24, 10),
+        decoration: const BoxDecoration(
+          color: FfTokens.sessionPanel,
+          border: Border(top: BorderSide(color: FfTokens.sessionLn)),
+        ),
+        child: Row(
+          children: [
+            Expanded(child: status),
+            _Pressable(
+              height: 38,
+              radius: 9,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              color: Colors.transparent,
+              hoverColor: FfTokens.sessionHv,
+              hoverForeground: true,
+              foreground: FfTokens.sessionT2,
+              onPressed: () => _showSetupStep(1),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  PhosphorIcon(PhosphorIconsRegular.arrowLeft, size: 15),
+                  SizedBox(width: 8),
+                  Text(
+                    'Back',
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  _KbdHint('Esc'),
+                ],
+              ),
+            ),
+          ],
+        ),
       );
     }
 
@@ -4011,7 +4694,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
             hoverColor: FfTokens.sessionHv,
             hoverForeground: true,
             foreground: FfTokens.sessionT2,
-            onPressed: _going ? null : () => _showSetupStep(1),
+            onPressed: _going ? null : () => _showSetupStep(2),
             child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -5883,35 +6566,50 @@ class _GoTimeButtonState extends State<_GoTimeButton> {
   bool _hover = false;
   bool _pressed = false;
 
+  /// Same teal ramp as TealActionButton / primary ElevatedGreyButton.
+  static const _rest = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      Color(0xFF243848),
+      Color(0xFF15242E),
+      Color(0xFF0E181F),
+    ],
+    stops: [0.0, 0.45, 1.0],
+  );
+  static const _hoverGrad = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      Color(0xFF2E4658),
+      Color(0xFF1A2E3A),
+      Color(0xFF121F28),
+    ],
+    stops: [0.0, 0.45, 1.0],
+  );
+  static const _down = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      Color(0xFF1A2A36),
+      Color(0xFF0C141A),
+      Color(0xFF080E12),
+    ],
+    stops: [0.0, 0.45, 1.0],
+  );
+
   @override
   Widget build(BuildContext context) {
     final enabled = widget.enabled && !widget.loading;
     final active = widget.enabled;
-    final fg = active ? Colors.white : FfTokens.sessionT3;
+    final fg = active ? Colors.white : Colors.white.withValues(alpha: 0.4);
     final gradient = !active
         ? null
-        : LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: _pressed
-                ? const [
-                    Color(0xFF1A2A36),
-                    Color(0xFF0C141A),
-                    Color(0xFF080E12),
-                  ]
-                : _hover
-                    ? const [
-                        Color(0xFF2E4658),
-                        Color(0xFF1A2E3A),
-                        Color(0xFF121F28),
-                      ]
-                    : const [
-                        Color(0xFF243848),
-                        Color(0xFF15242E),
-                        Color(0xFF0E181F),
-                      ],
-            stops: const [0.0, 0.45, 1.0],
-          );
+        : _pressed
+            ? _down
+            : _hover
+                ? _hoverGrad
+                : _rest;
     return MouseRegion(
       cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: (_) => setState(() => _hover = true),
@@ -5925,19 +6623,21 @@ class _GoTimeButtonState extends State<_GoTimeButton> {
         onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
         onTap: enabled ? widget.onPressed : null,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          height: widget.compact ? 32 : 38,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          duration: const Duration(milliseconds: 100),
+          height: widget.compact ? 32 : 36,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: active ? null : Colors.transparent,
+            color: active
+                ? null
+                : const Color(0xFF15242E).withValues(alpha: 0.55),
             gradient: gradient,
-            borderRadius: BorderRadius.circular(9),
+            borderRadius: BorderRadius.circular(FfTokens.radiusChip),
             border: Border.all(
               color: !active
-                  ? FfTokens.sessionLn
+                  ? FfTokens.nocturneLn
                   : (_hover
-                      ? Colors.white.withValues(alpha: 0.85)
+                      ? Colors.white.withValues(alpha: 0.92)
                       : FfTokens.nocturneAc.withValues(alpha: 0.95)),
             ),
             boxShadow: active
@@ -5954,14 +6654,15 @@ class _GoTimeButtonState extends State<_GoTimeButton> {
                 widget.loading ? 'Starting…' : widget.label,
                 style: TextStyle(
                   fontFamily: FfTokens.fontFamily,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: -0.2,
                   color: fg,
                 ),
               ),
               if (!widget.loading) ...[
                 const SizedBox(width: 10),
-                _KbdHint(widget.shortcut, onDark: active),
+                _KbdHint(widget.shortcut, onDark: true),
               ],
             ],
           ),

@@ -352,6 +352,7 @@ class IptcTemplateEditor extends StatelessWidget {
     this.doneLabel = 'Done',
     this.showTemplateControls = true,
     this.workspacePalette = false,
+    this.embedded = false,
     this.leading,
     this.applyMode,
     this.onApplyModeChanged,
@@ -360,6 +361,7 @@ class IptcTemplateEditor extends StatelessWidget {
     this.wireLabels = const {},
     this.initialFocusField,
     this.initialMissingHighlight,
+    this.templatePageHeader = false,
   });
 
   final WireStyle wire;
@@ -390,6 +392,9 @@ class IptcTemplateEditor extends StatelessWidget {
   /// Nocturne caption-workspace colors. The start menu keeps the session palette.
   final bool workspacePalette;
 
+  /// Inline embed (New Session): hide close + Cancel/Done chrome.
+  final bool embedded;
+
   /// Optional left column, used for the photo in Edit IPTC.
   final Widget? leading;
 
@@ -411,6 +416,9 @@ class IptcTemplateEditor extends StatelessWidget {
 
   /// Optional custom wire names for grouped template labels.
   final Map<WireStyle, String> wireLabels;
+
+  /// New Session template modes — one accent header line ("TEMPLATE PAGE").
+  final bool templatePageHeader;
 
   static const _monoKeys = {
     'MEID',
@@ -444,14 +452,16 @@ class IptcTemplateEditor extends StatelessWidget {
           final w = constraints.maxWidth.isFinite
               ? constraints.maxWidth
               : 1200.0;
-          final compact = h < 820 || w < 1100;
-          final narrow = w < 1100;
+          final compact = embedded || h < 820 || w < 1100;
+          final narrow = !embedded && w < 1100;
           // Edit IPTC.html uses label-above fields; New Session keeps label-left.
           final editIptc = workspacePalette;
-          final fieldH = editIptc
-              ? (compact ? 38.0 : 34.0)
-              : (narrow ? 36.0 : 32.0);
-          final gap = compact ? 8.0 : 10.0;
+          final fieldH = embedded
+              ? 24.0
+              : editIptc
+                  ? (compact ? 38.0 : 34.0)
+                  : (narrow ? 36.0 : 32.0);
+          final gap = embedded ? 4.0 : (compact ? 8.0 : 10.0);
           final labelAbove = editIptc;
 
           final Widget fieldsBody;
@@ -649,15 +659,14 @@ class IptcTemplateEditor extends StatelessWidget {
                           ),
                         ),
                         SizedBox(width: compact ? 6 : 10),
-                        Expanded(
-                          child: _text(
-                            specs,
-                            'Country Code',
-                            compact,
-                            fieldH,
-                            display: 'Country Code',
-                            labelAbove: labelAbove,
-                          ),
+                        _text(
+                          specs,
+                          'Country Code',
+                          compact,
+                          fieldH,
+                          display: 'Country Code',
+                          labelAbove: labelAbove,
+                          fieldWidth: 52,
                         ),
                       ],
                     ),
@@ -828,20 +837,39 @@ class IptcTemplateEditor extends StatelessWidget {
                   fieldH,
                   display: 'Object name',
                 ),
-                _text(specs, 'Category', narrow, fieldH),
-                _supp(specs, narrow, fieldH, colors),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 12,
+                      child: _text(specs, 'Category', narrow, fieldH),
+                    ),
+                    SizedBox(width: embedded ? 4 : 8),
+                    Expanded(
+                      flex: 18,
+                      child: _supp(specs, narrow, fieldH, colors),
+                    ),
+                  ],
+                ),
                 _urgency(specs, narrow, fieldH),
               ],
             );
 
             // New Session / IPTC Editor v2 — 2×2 cards.
-            fieldsBody = TapRegion(
-              groupId: _legendFocusTapGroup,
-              onTapOutside: (_) {
-                _LegendFocusScope.maybeOf(context)?.dismissFocus();
-              },
-              child: Column(
-                children: [
+            final cards = Column(
+              children: [
+                if (embedded)
+                  Expanded(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: story),
+                        SizedBox(width: gap),
+                        Expanded(child: credit),
+                      ],
+                    ),
+                  )
+                else
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -850,7 +878,19 @@ class IptcTemplateEditor extends StatelessWidget {
                       Expanded(child: credit),
                     ],
                   ),
-                  SizedBox(height: gap),
+                SizedBox(height: gap),
+                if (embedded)
+                  Expanded(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: location),
+                        SizedBox(width: gap),
+                        Expanded(child: filing),
+                      ],
+                    ),
+                  )
+                else
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -859,45 +899,76 @@ class IptcTemplateEditor extends StatelessWidget {
                       Expanded(child: filing),
                     ],
                   ),
-                ],
-              ),
+              ],
+            );
+            fieldsBody = TapRegion(
+              groupId: _legendFocusTapGroup,
+              onTapOutside: (_) {
+                _LegendFocusScope.maybeOf(context)?.dismissFocus();
+              },
+              child: cards,
             );
           }
 
           final hasLeading = leading != null;
-          final bodyPadL = editIptc
-              ? (hasLeading ? 0.0 : (compact ? 12.0 : 20.0))
-              : (compact ? 12.0 : 16.0);
-          final bodyPadR = editIptc
-              ? (compact ? 16.0 : 24.0)
-              : (compact ? 12.0 : 16.0);
-          final bodyPadT = editIptc
-              ? (compact ? 12.0 : 20.0)
-              : (compact ? 8.0 : 14.0);
-          final body = ListView(
-            padding: EdgeInsets.fromLTRB(
-              bodyPadL,
-              bodyPadT,
-              bodyPadR,
-              compact ? 8 : 16,
-            ),
-            children: [
-              if (applyMode != null) ...[
-                _ApplyWhenBar(
-                  mode: applyMode!,
-                  onChanged: onApplyModeChanged,
-                  compact: compact,
-                ),
-                SizedBox(height: compact ? 6 : 10),
-              ],
-              // Startup IPTC only — omit on in-session Edit IPTC.
-              if (!workspacePalette) ...[
-                _CaptionOmittedNote(compact: compact),
-                SizedBox(height: compact ? 6 : 10),
-              ],
-              fieldsBody,
-            ],
-          );
+          final bodyPadL = embedded
+              ? 8.0
+              : editIptc
+                  ? (hasLeading ? 0.0 : (compact ? 12.0 : 20.0))
+                  : (compact ? 12.0 : 16.0);
+          final bodyPadR = embedded
+              ? 8.0
+              : editIptc
+                  ? (compact ? 16.0 : 24.0)
+                  : (compact ? 12.0 : 16.0);
+          final bodyPadT = embedded
+              ? 4.0
+              : editIptc
+                  ? (compact ? 12.0 : 20.0)
+                  : (compact ? 8.0 : 14.0);
+          final bodyPadB = embedded ? 4.0 : (compact ? 8.0 : 16.0);
+          final body = embedded
+              ? Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    bodyPadL,
+                    bodyPadT,
+                    bodyPadR,
+                    bodyPadB,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (applyMode != null) ...[
+                        _ApplyWhenBar(
+                          mode: applyMode!,
+                          onChanged: onApplyModeChanged,
+                          compact: true,
+                        ),
+                        const SizedBox(height: 4),
+                      ],
+                      Expanded(child: fieldsBody),
+                    ],
+                  ),
+                )
+              : ListView(
+                  padding: EdgeInsets.fromLTRB(
+                    bodyPadL,
+                    bodyPadT,
+                    bodyPadR,
+                    bodyPadB,
+                  ),
+                  children: [
+                    if (applyMode != null) ...[
+                      _ApplyWhenBar(
+                        mode: applyMode!,
+                        onChanged: onApplyModeChanged,
+                        compact: compact,
+                      ),
+                      SizedBox(height: compact ? 6 : 10),
+                    ],
+                    fieldsBody,
+                  ],
+                );
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -917,10 +988,13 @@ class IptcTemplateEditor extends StatelessWidget {
                     : (clearEnabled ? onClearTemplate : null),
                 onSave: fieldsEnabled ? onSaveTemplate : null,
                 loadingTemplate: loadingTemplate,
-                onClose: onCancel,
+                onClose: embedded ? null : onCancel,
                 compact: compact,
                 captionStyleLabel: captionStyleLabel,
                 wireLabels: wireLabels,
+                // Startup IPTC only — omit on in-session Edit IPTC.
+                showCaptionNote: false,
+                templatePageHeader: templatePageHeader,
               ),
               Expanded(
                 child: !hasLeading
@@ -935,18 +1009,19 @@ class IptcTemplateEditor extends StatelessWidget {
                         ],
                       ),
               ),
-              _Footer(
-                wireLabel: WireIptcSpecs.factoryWireLabel(wire),
-                compact: compact,
-                doneLabel: doneLabel,
-                onCancel: onCancel,
-                // Edit IPTC: Clear all is under Filing; New Session keeps footer Clear.
-                onClear: editIptc
-                    ? null
-                    : (clearEnabled ? onClearTemplate : null),
-                onDone: onDone,
-                editIptcLegend: editIptc,
-              ),
+              if (!embedded)
+                _Footer(
+                  wireLabel: WireIptcSpecs.factoryWireLabel(wire),
+                  compact: compact,
+                  doneLabel: doneLabel,
+                  onCancel: onCancel,
+                  // Edit IPTC: Clear all is under Filing; New Session keeps footer Clear.
+                  onClear: editIptc
+                      ? null
+                      : (clearEnabled ? onClearTemplate : null),
+                  onDone: onDone,
+                  editIptcLegend: editIptc,
+                ),
             ],
           );
         },
@@ -1068,17 +1143,18 @@ class IptcTemplateEditor extends StatelessWidget {
     required List<Widget> children,
     bool compact = false,
   }) {
+    final dense = embedded;
     return Container(
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(
-        compact ? 8 : 12,
-        compact ? 8 : 10,
-        compact ? 8 : 12,
-        compact ? 8 : 12,
+        dense ? 6 : (compact ? 8 : 12),
+        dense ? 4 : (compact ? 8 : 10),
+        dense ? 6 : (compact ? 8 : 12),
+        dense ? 4 : (compact ? 8 : 12),
       ),
       decoration: BoxDecoration(
         color: colors.group,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(dense ? 8 : 12),
         border: colors.workspace
             ? Border.all(color: FfTokens.nocturneLn2)
             : null,
@@ -1088,16 +1164,16 @@ class IptcTemplateEditor extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: EdgeInsets.fromLTRB(2, 0, 2, compact ? 2 : 6),
+            padding: EdgeInsets.fromLTRB(2, 0, 2, dense ? 2 : (compact ? 2 : 6)),
             child: Row(
               children: [
-                PhosphorIcon(icon, size: 15, color: colors.t3),
-                const SizedBox(width: 8),
+                PhosphorIcon(icon, size: dense ? 13 : 15, color: colors.t3),
+                SizedBox(width: dense ? 6 : 8),
                 Text(
                   title.toUpperCase(),
                   style: TextStyle(
                     fontFamily: FfTokens.fontFamily,
-                    fontSize: 11,
+                    fontSize: dense ? 10 : 11,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.1 * 13,
                     color: colors.t3,
@@ -1177,6 +1253,7 @@ class IptcTemplateEditor extends StatelessWidget {
     double fieldH, {
     String? display,
     bool labelAbove = false,
+    double? fieldWidth,
   }) {
     final spec = specs[label];
     final key = spec?.storageKey ?? label;
@@ -1190,6 +1267,7 @@ class IptcTemplateEditor extends StatelessWidget {
       narrow: narrow,
       labelAbove: labelAbove,
       height: fieldH,
+      fieldWidth: fieldWidth,
       // Edit IPTC hides the merge warning; New Session keeps it.
       labelTip: !workspacePalette &&
               (label == 'Personality' || label == 'Keywords')
@@ -1226,6 +1304,8 @@ class IptcTemplateEditor extends StatelessWidget {
     bool narrow,
     double fieldH,
   ) {
+    // Compact 3-char box sits flush beside the label (not stretched).
+    const codeBoxW = 52.0;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1233,15 +1313,13 @@ class IptcTemplateEditor extends StatelessWidget {
           child: _text(specs, 'Country', narrow, fieldH),
         ),
         SizedBox(width: narrow ? 6 : 8),
-        SizedBox(
-          width: narrow ? 108 : 178,
-          child: _text(
-            specs,
-            'Country Code',
-            narrow,
-            fieldH,
-            display: 'Country Code',
-          ),
+        _text(
+          specs,
+          'Country Code',
+          narrow,
+          fieldH,
+          display: 'Country Code',
+          fieldWidth: codeBoxW,
         ),
       ],
     );
@@ -1256,6 +1334,8 @@ class IptcTemplateEditor extends StatelessWidget {
   }) {
     final labels = _suppLabels;
     final shorts = ['Supp 1', 'Supp 2', 'Supp 3'];
+    // Compact boxes stay beside "Supp cats" instead of stretching the row.
+    final boxW = narrow ? 56.0 : 64.0;
     final groupMissing = _gettyNeedsOneSupp && _allSuppBlank(specs);
     final alerts = [
       for (final label in labels)
@@ -1279,11 +1359,14 @@ class IptcTemplateEditor extends StatelessWidget {
       narrow: narrow,
       labelAbove: labelAbove,
       height: fieldH,
+      fieldWidth: narrow ? null : (boxW * 3 + 8),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           for (var i = 0; i < 3; i++) ...[
             if (i > 0) const SizedBox(width: 4),
-            Expanded(
+            SizedBox(
+              width: boxW,
               child: Stack(
                 children: [
                   _TextInput(
@@ -1405,6 +1488,8 @@ class _Header extends StatelessWidget {
     this.onDeleteTemplate,
     this.captionStyleLabel,
     this.wireLabels = const {},
+    this.showCaptionNote = false,
+    this.templatePageHeader = false,
   });
 
   final String title;
@@ -1418,34 +1503,97 @@ class _Header extends StatelessWidget {
   final VoidCallback? onClear;
   final VoidCallback? onSave;
   final bool loadingTemplate;
-  final VoidCallback onClose;
+  final VoidCallback? onClose;
   final bool compact;
   final String? captionStyleLabel;
   final Map<WireStyle, String> wireLabels;
+  final bool showCaptionNote;
+  final bool templatePageHeader;
+
+  static const _captionNoteText =
+      'Caption isn’t in this template — existing captions stay on your '
+      'photos and are written later when you caption in the session.';
 
   @override
   Widget build(BuildContext context) {
     final colors = IptcEditorPalette.of(context);
     final styleLabel = captionStyleLabel?.trim() ?? '';
+    final close = onClose;
+    final captionNote = showCaptionNote
+        ? Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  PhosphorIcon(
+                    PhosphorIconsRegular.info,
+                    size: 14,
+                    color: colors.t3,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _captionNoteText,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 12,
+                        height: 1.25,
+                        color: colors.t2,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        : null;
+    final templateChrome = templatePageHeader && !showTemplateControls;
     return Container(
-      padding: EdgeInsets.fromLTRB(20, compact ? 8 : 12, 12, compact ? 8 : 12),
+      padding: EdgeInsets.fromLTRB(
+        compact ? 12 : 20,
+        compact ? 6 : 12,
+        compact ? 8 : 12,
+        compact ? 6 : 12,
+      ),
       decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: colors.line)),
+        color: templateChrome ? FfTokens.nocturneAccentRow : null,
+        border: Border(
+          bottom: BorderSide(
+            color: templateChrome
+                ? FfTokens.nocturneAccentEdge
+                : colors.line,
+          ),
+        ),
       ),
       child: Row(
         children: [
           if (!showTemplateControls) ...[
+            if (templateChrome) ...[
+              PhosphorIcon(
+                PhosphorIconsRegular.notebook,
+                size: 14,
+                color: FfTokens.nocturneAc,
+              ),
+              const SizedBox(width: 8),
+            ],
             Text(
               title,
               style: TextStyle(
                 fontFamily: FfTokens.fontFamily,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: colors.tx,
+                fontSize: templateChrome
+                    ? 11
+                    : (compact ? 13 : 15),
+                fontWeight: FontWeight.w700,
+                letterSpacing: templateChrome ? 0.6 : 0,
+                color: templateChrome ? FfTokens.nocturneAc : colors.tx,
               ),
             ),
-            if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
-              const SizedBox(width: 12),
+            if (captionNote != null)
+              captionNote
+            else if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   subtitle!,
@@ -1453,7 +1601,7 @@ class _Header extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontFamily: FfTokens.fontFamily,
-                    fontSize: 13,
+                    fontSize: compact ? 12 : 13,
                     color: colors.t3,
                   ),
                 ),
@@ -1461,11 +1609,12 @@ class _Header extends StatelessWidget {
             ] else
               const Spacer(),
             if (onClear != null) _ClearLink(onTap: onClear),
-            _IconButton(
-              icon: PhosphorIconsRegular.x,
-              tooltip: 'Close',
-              onTap: onClose,
-            ),
+            if (close != null)
+              _IconButton(
+                icon: PhosphorIconsRegular.x,
+                tooltip: 'Close',
+                onTap: close,
+              ),
           ] else ...[
             Text.rich(
               TextSpan(
@@ -1499,7 +1648,10 @@ class _Header extends StatelessWidget {
                 ],
               ),
             ),
-            const Spacer(),
+            if (captionNote != null)
+              captionNote
+            else
+              const Spacer(),
             _LinkButton(
               icon: PhosphorIconsRegular.uploadSimple,
               label: loadingTemplate
@@ -1526,11 +1678,12 @@ class _Header extends StatelessWidget {
               onTap: onSave,
               compact: compact,
             ),
-            _IconButton(
-              icon: PhosphorIconsRegular.x,
-              tooltip: 'Close',
-              onTap: onClose,
-            ),
+            if (close != null)
+              _IconButton(
+                icon: PhosphorIconsRegular.x,
+                tooltip: 'Close',
+                onTap: close,
+              ),
           ],
         ],
       ),
@@ -2026,6 +2179,7 @@ class _FieldSlot extends StatelessWidget {
     this.hideLabel = false,
     this.labelAbove = false,
     this.labelTip,
+    this.fieldWidth,
   });
 
   final String label;
@@ -2042,6 +2196,8 @@ class _FieldSlot extends StatelessWidget {
   final bool labelAbove;
   /// Tooltip shown via a small warning icon beside the label.
   final String? labelTip;
+  /// When set, input stays this wide beside the label instead of stretching.
+  final double? fieldWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -2119,15 +2275,27 @@ class _FieldSlot extends StatelessWidget {
       ],
     );
 
+    final fixedW = fieldWidth;
+    final Widget fieldChild = fixedW == null
+        ? child
+        : Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(width: fixedW, child: child),
+          );
+
     final Widget slot;
     if (stacked) {
       slot = Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(height: 16, child: labelRow),
           const SizedBox(height: 5),
-          SizedBox(height: height, child: child),
+          SizedBox(
+            height: height,
+            width: fixedW,
+            child: fieldChild,
+          ),
         ],
       );
     } else if (narrow) {
@@ -2136,9 +2304,10 @@ class _FieldSlot extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 4),
         child: SizedBox(
           height: height,
+          width: fixedW,
           child: Stack(
             children: [
-              Positioned.fill(child: child),
+              Positioned.fill(child: fieldChild),
               if (!hideLabel)
                 Positioned(
                   top: 3,
@@ -2165,10 +2334,15 @@ class _FieldSlot extends StatelessWidget {
         child: SizedBox(
           height: height,
           child: Row(
+            mainAxisSize:
+                fixedW == null ? MainAxisSize.max : MainAxisSize.min,
             children: [
               SizedBox(width: 118, child: labelRow),
               const SizedBox(width: 10),
-              Expanded(child: child),
+              if (fixedW != null)
+                SizedBox(width: fixedW, child: child)
+              else
+                Expanded(child: child),
             ],
           ),
         ),

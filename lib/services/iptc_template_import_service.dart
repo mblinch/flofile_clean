@@ -255,6 +255,17 @@ class IptcTemplateImportService {
       '-XMP-photomech:CreatorIdentity',
       '-XMP:CreatorIdentity',
       '-CreatorIdentity',
+      // Date/time — needed for "Already in files" city+date coverage and panel Time and Date.
+      '-DateTimeOriginal',
+      '-CreateDate',
+      '-ModifyDate',
+      '-SubSecTimeOriginal',
+      '-IPTC:DateCreated',
+      '-DateCreated',
+      '-IPTC:TimeCreated',
+      '-TimeCreated',
+      '-XMP:DateCreated',
+      '-XMP-photoshop:DateCreated',
     ];
 
   /// Reads metadata from [filePath] for apply skip-if-unchanged checks.
@@ -272,18 +283,54 @@ class IptcTemplateImportService {
       ...applyCompareTags,
       ...filePaths,
     ]);
-    if (!proc.isSuccess) return {};
+    // ExifTool often exits 1 on warnings while still returning usable JSON.
+    final stdout = proc.stdoutText.trim();
+    if (stdout.isEmpty) return {};
     try {
-      final List data = jsonDecode(proc.stdoutText);
+      final start = stdout.indexOf('[');
+      final end = stdout.lastIndexOf(']');
+      if (start < 0 || end <= start) return {};
+      final List data = jsonDecode(stdout.substring(start, end + 1));
       final out = <String, Map<String, dynamic>>{};
-      for (final item in data) {
-        if (item is Map<String, dynamic>) {
-          final source = item['SourceFile']?.toString();
-          if (source != null && source.isNotEmpty) {
-            out[source] = item;
+      void index(String key, Map<String, dynamic> item) {
+        if (key.isEmpty) return;
+        out[key] = item;
+        // ExifTool SourceFile spelling can differ from the path we passed in.
+        final norm = key.replaceAll('\\', '/');
+        out[norm] = item;
+        if (norm.startsWith('./')) out[norm.substring(2)] = item;
+      }
+
+      for (var i = 0; i < data.length; i++) {
+        final item = data[i];
+        if (item is! Map) continue;
+        final map = Map<String, dynamic>.from(item);
+        final source = map['SourceFile']?.toString();
+        if (source != null && source.isNotEmpty) {
+          index(source, map);
+        }
+        // Prefer stable lookup by the path we asked for (same order when possible).
+        if (i < filePaths.length) {
+          out[filePaths[i]] = map;
+        }
+      }
+      // Also map each requested path to the matching SourceFile entry.
+      final aliases = <String, Map<String, dynamic>>{};
+      final knownKeys = out.keys.toList(growable: false);
+      for (final path in filePaths) {
+        if (out.containsKey(path)) continue;
+        final base = path.split(Platform.pathSeparator).last;
+        for (final key in knownKeys) {
+          final keyBase = key.contains('\\')
+              ? key.split('\\').last
+              : key.split('/').last;
+          if (key == path || key.endsWith(base) || keyBase == base) {
+            aliases[path] = out[key]!;
+            break;
           }
         }
       }
+      out.addAll(aliases);
       return out;
     } catch (_) {
       return {};
@@ -547,11 +594,24 @@ class IptcTemplateImportService {
   static String formatExifDateTimeForPanel(Map<String, dynamic> meta) =>
       _formatExifDateTime(meta);
 
+  static const _dateTimeTagKeys = [
+    'DateTimeOriginal',
+    'CreateDate',
+    'ModifyDate',
+    'IPTC:DateCreated',
+    'DateCreated',
+    'XMP:DateCreated',
+    'XMP-photoshop:DateCreated',
+  ];
+
   static String _formatExifDateTime(Map<String, dynamic> meta) {
     final dt = parseExifDateTimeFromMeta(meta);
     if (dt == null) {
-      final raw = _first(meta, ['DateTimeOriginal', 'CreateDate', 'ModifyDate']);
-      return raw;
+      final raw = _first(meta, _dateTimeTagKeys);
+      final time = _first(meta, ['IPTC:TimeCreated', 'TimeCreated']);
+      if (raw.isEmpty) return '';
+      if (time.isEmpty) return raw;
+      return '$raw $time';
     }
     final datePart =
         '${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
@@ -566,11 +626,19 @@ class IptcTemplateImportService {
 
   /// Parses EXIF date/time from metadata, truncating sub-second precision to ms.
   static DateTime? parseExifDateTimeFromMeta(Map<String, dynamic> meta) {
-    final raw = _first(meta, ['DateTimeOriginal', 'CreateDate', 'ModifyDate']);
+    final raw = _first(meta, _dateTimeTagKeys);
     if (raw.isEmpty) return null;
     final subSec = _first(meta, ['SubSecTimeOriginal']);
     try {
-      return _parseExifDateTimeString(raw, subSec);
+      // IPTC DateCreated is often YYYYMMDD or YYYY:MM:DD without a time.
+      final normalized = raw.contains(' ')
+          ? raw
+          : () {
+              final time = _first(meta, ['IPTC:TimeCreated', 'TimeCreated']);
+              if (time.isEmpty) return raw;
+              return '$raw $time';
+            }();
+      return _parseExifDateTimeString(normalized, subSec);
     } catch (_) {
       return null;
     }
