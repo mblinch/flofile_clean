@@ -70,4 +70,64 @@ void main() {
 
     expect(peakBin(after.red), greaterThan(peakBin(before.red)));
   });
+
+  test('flat mid gray does not warn for clipping', () {
+    final histogram = rgbHistogram(
+      rgb: solid(128, 128, 128, 64),
+      width: 8,
+      height: 8,
+      adjustments: PhotoAdjustments.neutral,
+      crop: PhotoCrop.full,
+    );
+    expect(histogram.shadowsClipping, isFalse);
+    expect(histogram.highlightsClipping, isFalse);
+  });
+
+  test('crushed blacks warn for shadow clipping', () {
+    final histogram = rgbHistogram(
+      rgb: solid(0, 0, 0, 64),
+      width: 8,
+      height: 8,
+      adjustments: PhotoAdjustments.neutral,
+      crop: PhotoCrop.full,
+    );
+    expect(histogram.shadowClipped, 64);
+    expect(histogram.shadowsClipping, isTrue);
+    expect(histogram.highlightsClipping, isFalse);
+  });
+
+  test('blown whites warn for highlight clipping', () {
+    final histogram = rgbHistogram(
+      rgb: solid(255, 255, 255, 64),
+      width: 8,
+      height: 8,
+      adjustments: PhotoAdjustments.neutral,
+      crop: PhotoCrop.full,
+    );
+    expect(histogram.highlightClipped, 64);
+    expect(histogram.highlightsClipping, isTrue);
+    expect(histogram.shadowsClipping, isFalse);
+  });
+
+  test('single blown channel counts as highlight clip', () {
+    final histogram = rgbHistogram(
+      rgb: solid(255, 40, 40, 64),
+      width: 8,
+      height: 8,
+      adjustments: PhotoAdjustments.neutral,
+      crop: PhotoCrop.full,
+    );
+    expect(histogram.highlightsClipping, isTrue);
+  });
+
+  test('pulling blacks on a dark gray trips shadow clipping', () {
+    final histogram = rgbHistogram(
+      rgb: solid(36, 36, 36, 256),
+      width: 16,
+      height: 16,
+      adjustments: const PhotoAdjustments(blacks: -100),
+      crop: PhotoCrop.full,
+    );
+    expect(histogram.shadowsClipping, isTrue);
+  });
 }

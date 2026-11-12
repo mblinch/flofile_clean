@@ -21,6 +21,7 @@ class OrientedFilePreview extends StatefulWidget {
     this.viewCrop,
     this.compareOriginal = false,
     this.debugMask = false,
+    this.quarterTurns = 0,
   });
 
   final String path;
@@ -43,6 +44,9 @@ class OrientedFilePreview extends StatefulWidget {
 
   /// Debug: show the local-tone luminance mask.
   final bool debugMask;
+
+  /// Extra CW quarter-turns after crop (edit draft).
+  final int quarterTurns;
 
   @override
   State<OrientedFilePreview> createState() => _OrientedFilePreviewState();
@@ -126,10 +130,11 @@ class _OrientedFilePreviewState extends State<OrientedFilePreview> {
     }
     final grade = widget.adjustments;
     final crop = widget.viewCrop ?? PhotoCrop.full;
+    final Widget child;
     if ((grade != null && !grade.isNeutral) ||
         !crop.isFull ||
         widget.debugMask) {
-      return GradedMemoryImage(
+      child = GradedMemoryImage(
         bytes: _bytes!,
         adjustments: grade ?? PhotoAdjustments.neutral,
         crop: crop,
@@ -139,12 +144,16 @@ class _OrientedFilePreviewState extends State<OrientedFilePreview> {
         debugMask: widget.debugMask,
         displayLongEdge: widget.cacheWidth,
       );
+    } else {
+      child = Image.memory(
+        _bytes!,
+        fit: widget.fit,
+        filterQuality: widget.filterQuality,
+        gaplessPlayback: true,
+      );
     }
-    return Image.memory(
-      _bytes!,
-      fit: widget.fit,
-      filterQuality: widget.filterQuality,
-      gaplessPlayback: true,
-    );
+    final turns = widget.quarterTurns % 4;
+    if (turns == 0) return child;
+    return RotatedBox(quarterTurns: turns, child: child);
   }
 }

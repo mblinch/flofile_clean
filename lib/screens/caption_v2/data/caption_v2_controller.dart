@@ -1895,11 +1895,25 @@ class CaptionV2Controller extends ChangeNotifier {
 
   List<EffectiveVerb> _sortedVerbs(List<EffectiveVerb> verbs) {
     if (verbs.isEmpty) return const [];
-    final ranked = List<EffectiveVerb>.from(verbs);
-    ranked.sort(
-      (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()),
-    );
-    return ranked;
+    switch (verbSortMode) {
+      case VerbSortMode.custom:
+        return List<EffectiveVerb>.from(verbs);
+      case VerbSortMode.mostUsed:
+        final ranked = List<EffectiveVerb>.from(verbs);
+        ranked.sort((a, b) {
+          final byCount = (_verbUsageCounts[b.key] ?? 0)
+              .compareTo(_verbUsageCounts[a.key] ?? 0);
+          if (byCount != 0) return byCount;
+          return a.label.toLowerCase().compareTo(b.label.toLowerCase());
+        });
+        return ranked;
+      case VerbSortMode.alphabetical:
+        final ranked = List<EffectiveVerb>.from(verbs);
+        ranked.sort(
+          (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()),
+        );
+        return ranked;
+    }
   }
 
   EffectiveVerb? get pinnedVerbDefinition {

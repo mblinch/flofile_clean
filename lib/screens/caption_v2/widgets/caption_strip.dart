@@ -1574,8 +1574,8 @@ class _InningCardState extends State<_InningCard> {
     ];
 
     return Container(
-      height: 28,
-      padding: const EdgeInsets.all(2),
+      height: 32,
+      padding: const EdgeInsets.fromLTRB(2, 4, 2, 4),
       decoration: BoxDecoration(
         color: t.bg,
         borderRadius: BorderRadius.circular(9),
@@ -1636,16 +1636,21 @@ class _InningCardState extends State<_InningCard> {
               style: FfTokens.panelLabel(color: t.textSecondary),
             ),
             const SizedBox(width: 6),
-            _GettyEditorsNoteDropdown(
-              selected: widget.selectedGettyEditorsNote,
-              customText: widget.gettyEditorsNoteCustomText,
-              tokens: t,
-              onChanged: widget.onGettyEditorsNoteChanged!,
+            Padding(
+              padding: EdgeInsets.only(
+                right: widget.onQuarterModeChanged == null ? 6 : 0,
+              ),
+              child: _GettyEditorsNoteDropdown(
+                selected: widget.selectedGettyEditorsNote,
+                customText: widget.gettyEditorsNoteCustomText,
+                tokens: t,
+                onChanged: widget.onGettyEditorsNoteChanged!,
+              ),
             ),
           ],
           if (widget.onQuarterModeChanged != null)
             Padding(
-              padding: const EdgeInsets.only(left: 8),
+              padding: const EdgeInsets.only(left: 8, right: 6),
               child: _PeriodModeToggle(
                 quarterMode: widget.quarterMode,
                 tokens: t,

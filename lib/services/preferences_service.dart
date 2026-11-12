@@ -117,6 +117,9 @@ class PreferencesService {
   /// One-time clear of favorites that were seeded from app defaults.
   static const String _keyClearedDefaultFavoriteVerbs =
       'cleared_default_favorite_verbs_v1';
+  /// One-time: force verb sort to A–Z for every existing install.
+  static const String _keyForcedAlphabeticalVerbSort =
+      'forced_alphabetical_verb_sort_v1';
   static const String _keyCurrentSport = 'current_sport'; // Track current sport
   static const String _keyFavoriteTeams = 'favorite_teams';
   static const String _keyFavoriteTeamsBaseball =
@@ -333,6 +336,7 @@ class PreferencesService {
     _prefs ??= await SharedPreferences.getInstance();
     await _instance!._applyFirstLaunchDefaults();
     await _instance!._clearSeededDefaultFavoriteVerbsOnce();
+    await _instance!._forceAlphabeticalVerbSortDefaultOnce();
     // Camera serials live in their own service but sync with this cloud bundle.
     CameraSerialService.onChangedForCloudSync ??= () async {
       await _instance!.noteCameraSerialsChanged();
@@ -366,6 +370,12 @@ class PreferencesService {
     if (!prefs.containsKey(_keyBurstDetectionEnabled)) {
       await prefs.setBool(_keyBurstDetectionEnabled, false);
     }
+    if (!prefs.containsKey(_keyVerbSortMode)) {
+      await prefs.setString(
+        _keyVerbSortMode,
+        VerbSortMode.alphabetical.storageValue,
+      );
+    }
   }
 
   /// Favorites are personal. Clear any verbs that were previously seeded from
@@ -385,6 +395,20 @@ class PreferencesService {
         }
       }
       await prefs.setBool(_keyClearedDefaultFavoriteVerbs, true);
+    } finally {
+      _endSuppressUserTypedMark();
+    }
+  }
+
+  /// Existing installs may still have Most used / Custom saved. Reset everyone
+  /// to A–Z once; users can still change sort mid-session afterward.
+  Future<void> _forceAlphabeticalVerbSortDefaultOnce() async {
+    final prefs = await _getPrefs();
+    if (prefs.getBool(_keyForcedAlphabeticalVerbSort) == true) return;
+    _beginSuppressUserTypedMark();
+    try {
+      await saveVerbSortMode(VerbSortMode.alphabetical);
+      await prefs.setBool(_keyForcedAlphabeticalVerbSort, true);
     } finally {
       _endSuppressUserTypedMark();
     }
@@ -1997,7 +2021,10 @@ class PreferencesService {
 
   Future<VerbSortMode> getVerbSortMode() async {
     final prefs = await _getPrefs();
-    return VerbSortModeX.fromStorage(prefs.getString(_keyVerbSortMode));
+    // Default for all users is A–Z when nothing is stored yet.
+    return VerbSortModeX.fromStorage(
+      prefs.getString(_keyVerbSortMode) ?? VerbSortMode.alphabetical.storageValue,
+    );
   }
 
   Future<void> saveVerbSortMode(VerbSortMode mode) async {

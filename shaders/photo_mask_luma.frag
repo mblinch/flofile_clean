@@ -11,10 +11,15 @@ uniform float uTemperature;
 uniform float uTint;
 uniform float uExposure;
 uniform float uContrast;
-uniform float uTempStrength;
-uniform float uTintStrength;
+uniform float uTempStrengthPos;
+uniform float uTempStrengthNeg;
+uniform float uTintStrengthPos;
+uniform float uTintStrengthNeg;
 uniform float uContrastPivot;
-uniform float uContrastStrength;
+uniform float uContrastStrengthLo;
+uniform float uContrastStrengthHi;
+uniform float uContrastFadeLo;
+uniform float uContrastFadeHi;
 uniform float uLogMin;
 uniform float uLogMax;
 
@@ -40,10 +45,12 @@ void main() {
   vec4 src = texture(uTex, uv);
   vec3 lin = vec3(srgbToLinear(src.r), srgbToLinear(src.g), srgbToLinear(src.b));
 
+  float tempStrength = (uTemperature < 0.0) ? uTempStrengthNeg : uTempStrengthPos;
+  float tintStrength = (uTint < 0.0) ? uTintStrengthNeg : uTintStrengthPos;
   vec3 gain = vec3(
-    max(1.0 + uTempStrength * uTemperature, 1e-4),
-    max(1.0 - uTintStrength * uTint, 1e-4),
-    max(1.0 - uTempStrength * uTemperature, 1e-4)
+    max(1.0 + tempStrength * uTemperature, 1e-4),
+    max(1.0 - tintStrength * uTint, 1e-4),
+    max(1.0 - tempStrength * uTemperature, 1e-4)
   );
   float gy = dot(gain, kLuma);
   gain /= max(gy, 1e-4);
@@ -53,7 +60,10 @@ void main() {
   float y = dot(max(lin, 0.0), kLuma);
   if (abs(uContrast) >= 1e-6 && y > 1e-8) {
     float stops = log2(y / uContrastPivot);
-    float shaped = stops * (1.0 + uContrastStrength * uContrast);
+    float strength = (stops < 0.0) ? uContrastStrengthLo : uContrastStrengthHi;
+    float t = clamp((y - uContrastFadeLo) / max(uContrastFadeHi - uContrastFadeLo, 1e-6), 0.0, 1.0);
+    float fade = 1.0 - t * t * (3.0 - 2.0 * t);
+    float shaped = stops * (1.0 + strength * fade * uContrast);
     float y2 = max(0.0, uContrastPivot * exp2(shaped));
     lin *= y2 / y;
     y = y2;

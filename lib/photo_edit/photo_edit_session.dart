@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 
 import '../services/admin_service.dart';
@@ -19,15 +21,17 @@ class PhotoEditSession extends ChangeNotifier {
   /// Hold backslash to flash the ungraded original.
   bool comparing = false;
 
-  /// Debug: paint the local-tone luminance mask instead of the grade.
-  bool debugMask = false;
-
   String? error;
 
   final Map<String, PhotoAdjustments> _drafts = {};
   final Map<String, PhotoCrop> _crops = {};
   final Map<String, double> _imageAspect = {};
   final Map<String, double> _lockedAspect = {};
+  /// Clockwise quarter-turns (0…3) on top of the upright EXIF frame.
+  final Map<String, int> _rotations = {};
+
+  /// Fine CW straighten in degrees (−45…45), applied before crop.
+  final Map<String, double> _straighten = {};
 
   PhotoAdjustments adjustmentsFor(String? path) {
     if (path == null) return PhotoAdjustments.neutral;
@@ -39,22 +43,52 @@ class PhotoEditSession extends ChangeNotifier {
     return _crops[path] ?? PhotoCrop.full;
   }
 
+  /// Extra CW quarter-turns for [path] (0 = upright).
+  int rotationFor(String? path) {
+    if (path == null) return 0;
+    return _rotations[path] ?? 0;
+  }
+
+  /// Horizon straighten in degrees (CW positive).
+  double straightenFor(String? path) {
+    if (path == null) return 0;
+    return _straighten[path] ?? 0;
+  }
+
   /// Locked pixel aspect (width/height), or null for a free crop.
   double? aspectFor(String? path) {
     if (path == null) return null;
     return _lockedAspect[path];
   }
 
+  /// Pixel width/height of the oriented source, when known.
+  double? imageAspectFor(String? path) {
+    if (path == null) return null;
+    return _imageAspect[path];
+  }
+
   /// Normalized width/height for the locked aspect on this photo.
+  ///
+  /// When straightened, crop space is the rotated AABB, so the ratio uses that.
   double? normAspectFor(String path) {
     final pixel = _lockedAspect[path];
     final image = _imageAspect[path];
     if (pixel == null || image == null || image <= 0) return null;
-    return pixel / image;
+    final degrees = straightenFor(path);
+    if (degrees.abs() <= 1e-6) return pixel / image;
+    final rad = degrees * math.pi / 180.0;
+    final cosA = math.cos(rad).abs();
+    final sinA = math.sin(rad).abs();
+    final aabbAspect = (image * cosA + sinA) / (image * sinA + cosA);
+    if (aabbAspect <= 0) return pixel / image;
+    return pixel / aabbAspect;
   }
 
   bool isDirty(String? path) =>
-      !adjustmentsFor(path).isNeutral || !cropFor(path).isFull;
+      !adjustmentsFor(path).isNeutral ||
+      !cropFor(path).isFull ||
+      rotationFor(path) != 0 ||
+      straightenFor(path).abs() > 1e-6;
 
   void noteImageAspect(String path, double aspect) {
     if (aspect <= 0) return;
@@ -73,7 +107,6 @@ class PhotoEditSession extends ChangeNotifier {
     if (!editing) {
       cropping = false;
       comparing = false;
-      debugMask = false;
     }
     error = null;
     notifyListeners();
@@ -81,11 +114,10 @@ class PhotoEditSession extends ChangeNotifier {
 
   /// Leaves edit/crop without requiring admin (used when previewing as user).
   void exitEditing() {
-    if (!editing && !cropping && !comparing && !debugMask) return;
+    if (!editing && !cropping && !comparing) return;
     editing = false;
     cropping = false;
     comparing = false;
-    debugMask = false;
     error = null;
     notifyListeners();
   }
@@ -93,12 +125,6 @@ class PhotoEditSession extends ChangeNotifier {
   void setComparing(bool value) {
     if (!editing || comparing == value) return;
     comparing = value;
-    notifyListeners();
-  }
-
-  void toggleDebugMask() {
-    if (!editing || saving) return;
-    debugMask = !debugMask;
     notifyListeners();
   }
 
@@ -137,7 +163,60 @@ class PhotoEditSession extends ChangeNotifier {
       _lockedAspect[path] = pixelAspect;
       final image = _imageAspect[path];
       if (image != null && image > 0) {
-        _crops[path] = PhotoCrop.largest(pixelAspect / image);
+        final degrees = straightenFor(path);
+        if (degrees.abs() > 1e-6) {
+          _crops[path] = safeCropForStraighten(
+            imageAspect: image,
+            degrees: degrees,
+            pixelAspect: pixelAspect,
+          );
+        } else {
+          _crops[path] = PhotoCrop.largest(pixelAspect / image);
+        }
+      }
+    }
+    error = null;
+    notifyListeners();
+  }
+
+  /// Rotate 90° clockwise. Crop stays in source space; preview uses [RotatedBox].
+  void rotateClockwise(String path) {
+    if (saving || !AdminService.isCurrentUserAdminSync()) return;
+    editing = true;
+    _rotations[path] = (rotationFor(path) + 1) % 4;
+    if (_rotations[path] == 0) _rotations.remove(path);
+    error = null;
+    notifyListeners();
+  }
+
+  /// Rotate 90° counter-clockwise.
+  void rotateCounterClockwise(String path) {
+    if (saving || !AdminService.isCurrentUserAdminSync()) return;
+    editing = true;
+    _rotations[path] = (rotationFor(path) + 3) % 4;
+    if (_rotations[path] == 0) _rotations.remove(path);
+    error = null;
+    notifyListeners();
+  }
+
+  /// Fine straighten for horizon fixes. Crop is reset to a safe inscribed frame.
+  void setStraighten(String path, double degrees) {
+    if (saving || !AdminService.isCurrentUserAdminSync()) return;
+    editing = true;
+    cropping = true;
+    final next = clampStraightenDegrees(degrees);
+    if (next.abs() <= 1e-6) {
+      _straighten.remove(path);
+      // Leave crop as-is when returning to zero so the user can keep framing.
+    } else {
+      _straighten[path] = next;
+      final image = _imageAspect[path];
+      if (image != null && image > 0) {
+        _crops[path] = safeCropForStraighten(
+          imageAspect: image,
+          degrees: next,
+          pixelAspect: _lockedAspect[path],
+        );
       }
     }
     error = null;
@@ -160,6 +239,8 @@ class PhotoEditSession extends ChangeNotifier {
     _drafts.remove(path);
     _crops.remove(path);
     _lockedAspect.remove(path);
+    _rotations.remove(path);
+    _straighten.remove(path);
     error = null;
     notifyListeners();
   }
@@ -167,7 +248,15 @@ class PhotoEditSession extends ChangeNotifier {
   Future<void> apply(String path) async {
     final adjustments = adjustmentsFor(path);
     final crop = cropFor(path);
-    if ((adjustments.isNeutral && crop.isFull) || saving) return;
+    final turns = rotationFor(path);
+    final straighten = straightenFor(path);
+    if ((adjustments.isNeutral &&
+            crop.isFull &&
+            turns == 0 &&
+            straighten.abs() <= 1e-6) ||
+        saving) {
+      return;
+    }
     saving = true;
     error = null;
     notifyListeners();
@@ -179,10 +268,14 @@ class PhotoEditSession extends ChangeNotifier {
         cropTop: crop.top,
         cropWidth: crop.width,
         cropHeight: crop.height,
+        quarterTurns: turns,
+        straightenDegrees: straighten,
       );
       _drafts.remove(path);
       _crops.remove(path);
       _lockedAspect.remove(path);
+      _rotations.remove(path);
+      _straighten.remove(path);
       await onReplaced(path);
     } catch (e) {
       error = e is StateError ? e.message : 'Could not save the edited photo.';

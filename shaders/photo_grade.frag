@@ -23,8 +23,8 @@ uniform float uHighlights;    // eased −1…1
 uniform float uShadows;       // eased −1…1
 uniform float uWhites;        // eased −1…1
 uniform float uBlacks;        // eased −1…1
-uniform float uVibrance;      // eased −1…1
-uniform float uSaturation;    // eased −1…1
+uniform float uVibrance;      // linear −1…1
+uniform float uSaturation;    // linear −1…1
 uniform float uHasMask;       // 1 when local tone mask is bound
 uniform float uDebugMask;     // 1 = show mask instead of graded image
 uniform float uDither;        // 1 = apply ±0.5/255 ordered dither
@@ -33,21 +33,44 @@ uniform float uCropTop;
 uniform float uCropWidth;
 uniform float uCropHeight;
 // Tunables mirrored from PhotoAdjustConfig (so one place in Dart can push them).
-uniform float uTempStrength;
-uniform float uTintStrength;
+uniform float uTempStrengthPos;
+uniform float uTempStrengthNeg;
+uniform float uTintStrengthPos;
+uniform float uTintStrengthNeg;
 uniform float uContrastPivot;
-uniform float uContrastStrength;
+uniform float uContrastStrengthLo;
+uniform float uContrastStrengthHi;
+uniform float uContrastFadeLo;
+uniform float uContrastFadeHi;
 uniform float uHiMaskLo;
 uniform float uHiMaskHi;
-uniform float uShMaskLo;
-uniform float uShMaskHi;
-uniform float uLocalToneStrength;
-uniform float uWhitesStart;
+uniform float uHiFadeLo;
+uniform float uHiFadeHi;
+uniform float uHiStrengthNeg;
+uniform float uHiStrengthPos;
+uniform float uShMaskPower;
+uniform float uShFadeLo;
+uniform float uShFadeHi;
+uniform float uShStrengthPos;
+uniform float uShStrengthNeg;
+uniform float uWhitesMaskLo;
+uniform float uWhitesMaskHi;
+uniform float uWhitesFadeLo;
+uniform float uWhitesFadeHi;
 uniform float uWhitesAmount;
 uniform float uBlacksEnd;
-uniform float uBlacksAmount;
-uniform float uVibranceAmount;
-uniform float uSaturationAmount;
+uniform float uBlacksMaskPower;
+uniform float uBlacksAmountPos;
+uniform float uBlacksAmountNeg;
+uniform float uVibranceAmountPos;
+uniform float uVibranceAmountNeg;
+uniform float uVibChromaFadeLo;
+uniform float uVibChromaFadeHi;
+uniform float uVibChromaFloorNeg;
+uniform float uSaturationAmountPos;
+uniform float uSaturationAmountNeg;
+uniform float uSatChromaFadeLo;
+uniform float uSatChromaFadeHi;
 uniform float uSkinHueCenter;
 uniform float uSkinHueWidth;
 uniform float uSkinVibranceScale;
@@ -85,10 +108,12 @@ float unpackMask(vec4 texel) {
 
 vec3 whiteBalance(vec3 c, float temperature, float tint) {
   if (abs(temperature) < 1e-6 && abs(tint) < 1e-6) return c;
+  float tempStrength = (temperature < 0.0) ? uTempStrengthNeg : uTempStrengthPos;
+  float tintStrength = (tint < 0.0) ? uTintStrengthNeg : uTintStrengthPos;
   vec3 gain = vec3(
-    max(1.0 + uTempStrength * temperature, 1e-4),
-    max(1.0 - uTintStrength * tint, 1e-4),
-    max(1.0 - uTempStrength * temperature, 1e-4)
+    max(1.0 + tempStrength * temperature, 1e-4),
+    max(1.0 - tintStrength * tint, 1e-4),
+    max(1.0 - tempStrength * temperature, 1e-4)
   );
   // Renormalize so overall luminance is preserved.
   float y = dot(gain, kLuma);
@@ -96,24 +121,30 @@ vec3 whiteBalance(vec3 c, float temperature, float tint) {
   return c * gain;
 }
 
-// Contrast: stretch log2 stops about mid-grey, then rescale RGB (preserve hue).
+// Contrast: ACR-shaped log2 S-curve (stronger below pivot, fade in highlights).
 vec3 applyContrast(vec3 c, float amount) {
   if (abs(amount) < 1e-6) return c;
   float y = dot(max(c, 0.0), kLuma);
   if (y <= 1e-8) return c;
   float stops = log2(y / uContrastPivot);
-  float shaped = stops * (1.0 + uContrastStrength * amount);
+  float strength = (stops < 0.0) ? uContrastStrengthLo : uContrastStrengthHi;
+  float fade = 1.0 - gradeSmoothstep(uContrastFadeLo, uContrastFadeHi, y);
+  float shaped = stops * (1.0 + strength * fade * amount);
   float y2 = max(0.0, uContrastPivot * exp2(shaped));
   return c * (y2 / y);
 }
 
 vec3 applyLocalTone(vec3 c, float mask01, float highlights, float shadows) {
   if (abs(highlights) < 1e-6 && abs(shadows) < 1e-6) return c;
-  float hiW = gradeSmoothstep(uHiMaskLo, uHiMaskHi, mask01);
-  float shW = 1.0 - gradeSmoothstep(uShMaskLo, uShMaskHi, mask01);
+  // ACR-like lobe: soft brights, fade before specular white.
+  float hiW = gradeSmoothstep(uHiMaskLo, uHiMaskHi, mask01)
+            * (1.0 - gradeSmoothstep(uHiFadeLo, uHiFadeHi, mask01));
+  float shW = pow(max(0.0, 1.0 - mask01), uShMaskPower)
+            * (1.0 - gradeSmoothstep(uShFadeLo, uShFadeHi, mask01));
+  float hiStr = (highlights < 0.0) ? uHiStrengthNeg : uHiStrengthPos;
+  float shStr = (shadows < 0.0) ? uShStrengthNeg : uShStrengthPos;
   // Negative highlights darken brights; positive shadows lift darks.
-  float stops = hiW * highlights * uLocalToneStrength
-              + shW * shadows * uLocalToneStrength;
+  float stops = hiW * highlights * hiStr + shW * shadows * shStr;
   return c * exp2(stops);
 }
 
@@ -122,13 +153,14 @@ vec3 applyWhitesBlacks(vec3 c, float whites, float blacks) {
   float y = dot(max(c, 0.0), kLuma);
   float x = y;
   if (abs(blacks) >= 1e-6) {
-    float knee = 1.0 - gradeSmoothstep(0.0, uBlacksEnd, x);
-    if (blacks > 0.0) x += blacks * uBlacksAmount * knee;
-    else x *= 1.0 + blacks * knee;
+    float knee = pow(1.0 - gradeSmoothstep(0.0, uBlacksEnd, x), uBlacksMaskPower);
+    float amount = (blacks < 0.0) ? uBlacksAmountNeg : uBlacksAmountPos;
+    x *= exp2(blacks * amount * knee);
   }
   if (abs(whites) >= 1e-6) {
-    float knee = gradeSmoothstep(uWhitesStart, 1.0, x);
-    x += whites * uWhitesAmount * knee;
+    float whW = gradeSmoothstep(uWhitesMaskLo, uWhitesMaskHi, x)
+              * (1.0 - gradeSmoothstep(uWhitesFadeLo, uWhitesFadeHi, x));
+    x *= exp2(whites * uWhitesAmount * whW);
   }
   x = max(x, 0.0);
   if (y < 1e-8) return c;
@@ -161,18 +193,26 @@ vec3 applyVibranceSaturation(vec3 c, float vibrance, float saturation) {
 
   if (abs(vibrance) >= 1e-6) {
     float sat = chroma(outc, y);
-    float lowSatWeight = 1.0 - clamp(sat * 2.5, 0.0, 1.0);
+    float fade = gradeSmoothstep(uVibChromaFadeLo, uVibChromaFadeHi, sat);
+    float floor = vibrance < 0.0 ? uVibChromaFloorNeg : 0.0;
+    float lowSatWeight = 1.0 - (1.0 - floor) * fade;
     float hue = hueDegrees(outc);
     float skinDist = min(abs(hue - uSkinHueCenter), 360.0 - abs(hue - uSkinHueCenter));
     float skin = 1.0 - gradeSmoothstep(0.0, uSkinHueWidth, skinDist);
     float skinScale = pow(uSkinVibranceScale, skin);
-    float amount = vibrance * uVibranceAmount * lowSatWeight * skinScale;
+    float strength = vibrance >= 0.0 ? uVibranceAmountPos : uVibranceAmountNeg;
+    float amount = vibrance * strength * lowSatWeight * skinScale;
     outc = vec3(y) + (outc - vec3(y)) * (1.0 + amount);
   }
 
   if (abs(saturation) >= 1e-6) {
-    float amount = saturation * uSaturationAmount;
-    outc = vec3(y) + (outc - vec3(y)) * (1.0 + amount);
+    float strength = saturation >= 0.0 ? uSaturationAmountPos : uSaturationAmountNeg;
+    float weight = 1.0;
+    if (saturation > 0.0) {
+      float sat = chroma(outc, y);
+      weight = 1.0 - gradeSmoothstep(uSatChromaFadeLo, uSatChromaFadeHi, sat);
+    }
+    outc = vec3(y) + (outc - vec3(y)) * (1.0 + saturation * strength * weight);
   }
   return outc;
 }

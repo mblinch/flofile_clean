@@ -65,9 +65,10 @@ enum CaptionV2SaveChord { none, save, transmit }
 
 /// Maps a key-down to save or FTP.
 ///
-/// ⌘S / Ctrl+S always save. Shift+Enter saves, and FTPs when [ftpMode] is on.
-/// ⌘Enter / Ctrl+Enter FTP only when [ftpMode] is on. Plain Enter is not a
-/// save chord, so Firebar can keep using it to insert.
+/// ⌘S / Ctrl+S always save (Shift may still be down after a range select).
+/// Shift+Enter saves, and FTPs when [ftpMode] is on. ⌘Enter / Ctrl+Enter FTP
+/// only when [ftpMode] is on. Plain Enter is not a save chord, so Firebar can
+/// keep using it to insert.
 CaptionV2SaveChord captionV2SaveChord({
   required LogicalKeyboardKey key,
   required bool shift,
@@ -90,7 +91,8 @@ CaptionV2SaveChord captionV2SaveChord({
   if (isEnter && !shift && metaOrControl && !alt && ftpMode) {
     return CaptionV2SaveChord.transmit;
   }
-  if (isS && metaOrControl && !shift && !alt) {
+  // Ignore Shift so ⌘S still works right after Shift-click multi-select.
+  if (isS && metaOrControl && !alt) {
     return CaptionV2SaveChord.save;
   }
   return CaptionV2SaveChord.none;

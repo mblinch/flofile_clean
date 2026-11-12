@@ -2757,16 +2757,18 @@ class _NumberRoster extends StatelessWidget {
               label: playersButton
                   ? 'Players'
                   : teamNameButton
-                      ? 'Team Name'
+                      ? 'Team name'
                       : 'Teammates',
+              icon: playersButton
+                  ? PhosphorIconsRegular.usersThree
+                  : teamNameButton
+                      ? PhosphorIconsRegular.shield
+                      : PhosphorIconsRegular.users,
               selected: playersButton
                   ? playersSubjectSelected
                   : teamNameButton
                       ? teamNameSubjectSelected
                       : teammatesSubjectSelected,
-              tokens: tokens,
-              height: cellH,
-              fontSize: nameSize,
               onTap: playersButton
                   ? onPlayersSubject!
                   : teamNameButton
@@ -2827,21 +2829,22 @@ class _NumberRoster extends StatelessWidget {
                   final isOther = band.$1 == 'Other';
                   final subjectCount = isOther && showSubjects ? 3 : 0;
                   final count = band.$2.length + subjectCount;
-                  // Other holds phrases (Players, Team Name, Teammates), so
-                  // those cells are wide rectangles instead of jersey squares.
-                  final bandCols = isOther ? 2 : cols;
+                  // Other: one row of 3 equal subject buttons (Players / Team
+                  // name / Teammates). Number bands keep jersey square columns.
+                  final bandCols = isOther ? 3 : cols;
+                  final gap = isOther ? 4.0 : columnGap;
                   final rowCount = count == 0 ? 0 : (count / bandCols).ceil();
                   final rowH = isOther ? 40.0 : fittedH;
                   return Column(
                     children: [
                       for (var row = 0; row < rowCount; row++) ...[
-                        if (row > 0) const SizedBox(height: columnGap),
+                        if (row > 0) SizedBox(height: gap),
                         SizedBox(
                           height: rowH,
                           child: Row(
                             children: [
                               for (var col = 0; col < bandCols; col++) ...[
-                                if (col > 0) const SizedBox(width: columnGap),
+                                if (col > 0) SizedBox(width: gap),
                                 Expanded(
                                   child: row * bandCols + col < count
                                       ? cellAt(band, row * bandCols + col)
@@ -2867,18 +2870,14 @@ class _NumberRoster extends StatelessWidget {
 class _TeamSubjectCell extends StatefulWidget {
   const _TeamSubjectCell({
     required this.label,
+    required this.icon,
     required this.selected,
-    required this.tokens,
-    required this.height,
-    required this.fontSize,
     required this.onTap,
   });
 
   final String label;
+  final IconData icon;
   final bool selected;
-  final FfTokens tokens;
-  final double height;
-  final double fontSize;
   final VoidCallback onTap;
 
   @override
@@ -2887,54 +2886,78 @@ class _TeamSubjectCell extends StatefulWidget {
 
 class _TeamSubjectCellState extends State<_TeamSubjectCell> {
   bool _hovered = false;
+  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
-    final tokens = widget.tokens;
     final selected = widget.selected;
-    final fill = selected
-        ? tokens.text
-        : (_hovered ? tokens.hover : tokens.sunken);
-    final labelColor = selected ? tokens.bg : tokens.text;
+    final pressed = _pressed || selected;
+    final Color fill;
+    final Color border;
+    final Color iconColor;
+    if (pressed) {
+      fill = FfTokens.nocturneAccentSoft;
+      border = FfTokens.nocturneAccentEdge;
+      iconColor = FfTokens.accentHover;
+    } else if (_hovered) {
+      fill = FfTokens.nocturneHv;
+      border = FfTokens.nocturneLn;
+      iconColor = FfTokens.accentHover;
+    } else {
+      fill = FfTokens.nocturneSf;
+      border = FfTokens.nocturneLn;
+      iconColor = FfTokens.nocturneT2;
+    }
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onExit: (_) => setState(() {
+        _hovered = false;
+        _pressed = false;
+      }),
       child: GestureDetector(
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
         onTap: widget.onTap,
         child: SizedBox(
-          height: widget.height,
+          height: 40,
           width: double.infinity,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 120),
             alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             decoration: BoxDecoration(
               color: fill,
               borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: border, width: 1),
             ),
-            child: Text(
-              widget.label,
-              maxLines: 2,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: FfTokens.labelFamily,
-                fontSize: widget.fontSize,
-                height: 1.05,
-                letterSpacing: 0.2,
-                fontWeight: FontWeight.w700,
-                color: labelColor,
-                shadows: [
-                  Shadow(
-                    color: labelColor.withValues(alpha: 0.9),
-                    blurRadius: 8,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                PhosphorIcon(
+                  widget.icon,
+                  size: 15,
+                  color: iconColor,
+                ),
+                const SizedBox(width: 7),
+                Flexible(
+                  child: Text(
+                    widget.label,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: FfTokens.labelFamily,
+                      fontSize: 12,
+                      height: 1,
+                      fontWeight: FontWeight.w600,
+                      color: FfTokens.nocturneTx,
+                    ),
                   ),
-                  Shadow(
-                    color: labelColor.withValues(alpha: 0.55),
-                    blurRadius: 18,
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),

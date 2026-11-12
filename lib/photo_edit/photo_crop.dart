@@ -1,4 +1,80 @@
+import 'dart:math' as math;
 import 'dart:ui';
+
+/// Fine straighten angle range for horizon fixes (degrees, CW positive).
+const straightenMinDegrees = -45.0;
+const straightenMaxDegrees = 45.0;
+
+/// Axis-aligned bounding box of [rect] after rotating [radians] about its center.
+Rect rotatedAabb(Rect rect, double radians) {
+  if (rect.isEmpty) return rect;
+  final c = rect.center;
+  final cos = math.cos(radians);
+  final sin = math.sin(radians);
+  Offset map(Offset p) {
+    final d = p - c;
+    return Offset(c.dx + d.dx * cos - d.dy * sin, c.dy + d.dx * sin + d.dy * cos);
+  }
+
+  final corners = [rect.topLeft, rect.topRight, rect.bottomLeft, rect.bottomRight]
+      .map(map);
+  var minX = double.infinity;
+  var minY = double.infinity;
+  var maxX = -double.infinity;
+  var maxY = -double.infinity;
+  for (final p in corners) {
+    if (p.dx < minX) minX = p.dx;
+    if (p.dy < minY) minY = p.dy;
+    if (p.dx > maxX) maxX = p.dx;
+    if (p.dy > maxY) maxY = p.dy;
+  }
+  return Rect.fromLTRB(minX, minY, maxX, maxY);
+}
+
+/// Largest centered crop of the expanded AABB that stays on source pixels.
+///
+/// [imageAspect] is width/height of the upright source. [degrees] is CW.
+PhotoCrop safeCropForStraighten({
+  required double imageAspect,
+  required double degrees,
+  double? pixelAspect,
+}) {
+  final aspect = imageAspect <= 0 ? 1.0 : imageAspect;
+  final rad = degrees * math.pi / 180.0;
+  final c = math.cos(rad).abs();
+  final s = math.sin(rad).abs();
+  final w = aspect;
+  const h = 1.0;
+  final aabbW = w * c + h * s;
+  final aabbH = w * s + h * c;
+  var innerW = w * c - h * s;
+  var innerH = h * c - w * s;
+  if (innerW < PhotoCrop.minSize * aabbW || innerH < PhotoCrop.minSize * aabbH) {
+    innerW = aabbW * 0.72;
+    innerH = aabbH * 0.72;
+  }
+  var nw = (innerW / aabbW).clamp(PhotoCrop.minSize, 1.0);
+  var nh = (innerH / aabbH).clamp(PhotoCrop.minSize, 1.0);
+  if (pixelAspect != null && pixelAspect > 0 && aabbH > 0) {
+    // pixelAspect = cropPixelW/cropPixelH = (nw*aabbW)/(nh*aabbH)
+    // aabb pixel aspect ≈ imageAspect after rotation expansion:
+    final aabbAspect = aabbW / aabbH;
+    final wantNorm = pixelAspect / aabbAspect;
+    if (nw / nh > wantNorm) {
+      nw = nh * wantNorm;
+    } else {
+      nh = nw / wantNorm;
+    }
+    nw = nw.clamp(PhotoCrop.minSize, 1.0);
+    nh = nh.clamp(PhotoCrop.minSize, 1.0);
+  }
+  return PhotoCrop(
+    left: (1 - nw) / 2,
+    top: (1 - nh) / 2,
+    width: nw,
+    height: nh,
+  );
+}
 
 /// Normalized crop of the oriented photo. 0…1 covers the full frame.
 class PhotoCrop {
@@ -236,6 +312,9 @@ PhotoCrop _aspectDrag(
 }
 
 double mathMin(double a, double b) => a < b ? a : b;
+
+double clampStraightenDegrees(double degrees) =>
+    degrees.clamp(straightenMinDegrees, straightenMaxDegrees);
 
 /// Which handle [local] hits, in the overlay's coordinate space.
 CropHandle? cropHandleAt(Offset local, Rect crop, {double slop = 22}) {

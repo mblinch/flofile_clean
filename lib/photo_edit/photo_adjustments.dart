@@ -164,8 +164,9 @@ class PhotoGradeParams {
 
   factory PhotoGradeParams.fromUi(PhotoAdjustments ui) {
     return PhotoGradeParams(
-      temperature: easeUi(ui.temperature),
-      tint: easeUi(ui.tint),
+      // ACR Temp/Tint track the slider more linearly than power-eased.
+      temperature: (ui.temperature / 100.0).clamp(-1.0, 1.0),
+      tint: (ui.tint / 100.0).clamp(-1.0, 1.0),
       exposure: ui.exposure.clamp(
         PhotoAdjustConfig.exposureStopsMin,
         PhotoAdjustConfig.exposureStopsMax,
@@ -175,8 +176,9 @@ class PhotoGradeParams {
       shadows: easeUi(ui.shadows),
       whites: easeUi(ui.whites),
       blacks: easeUi(ui.blacks),
-      vibrance: easeUi(ui.vibrance),
-      saturation: easeUi(ui.saturation),
+      // ACR Vibrance/Saturation track the slider more linearly than power-eased.
+      vibrance: (ui.vibrance / 100.0).clamp(-1.0, 1.0),
+      saturation: (ui.saturation / 100.0).clamp(-1.0, 1.0),
     );
   }
 
@@ -226,9 +228,15 @@ double _luma(double r, double g, double b) =>
 /// Per-channel WB gains, renormalized so overall luminance is preserved.
 (double, double, double) whiteBalanceGain(double temperature, double tint) {
   if (temperature.abs() < 1e-8 && tint.abs() < 1e-8) return (1, 1, 1);
-  var r = 1 + PhotoAdjustConfig.tempStrength * temperature;
-  var g = 1 - PhotoAdjustConfig.tintStrength * tint;
-  var b = 1 - PhotoAdjustConfig.tempStrength * temperature;
+  final tempStrength = temperature < 0
+      ? PhotoAdjustConfig.tempStrengthNeg
+      : PhotoAdjustConfig.tempStrengthPos;
+  final tintStrength = tint < 0
+      ? PhotoAdjustConfig.tintStrengthNeg
+      : PhotoAdjustConfig.tintStrengthPos;
+  var r = 1 + tempStrength * temperature;
+  var g = 1 - tintStrength * tint;
+  var b = 1 - tempStrength * temperature;
   r = math.max(r, 1e-4);
   g = math.max(g, 1e-4);
   b = math.max(b, 1e-4);
@@ -237,15 +245,24 @@ double _luma(double r, double g, double b) =>
   return (r / y, g / y, b / y);
 }
 
-/// Contrast in log2 space about [PhotoAdjustConfig.contrastPivot].
+/// ACR-shaped contrast in log2 space about [PhotoAdjustConfig.contrastPivot].
+///
+/// Stronger below the pivot than above; amount fades out toward highlights.
 double contrastCurve(double y, double amount) {
   if (amount.abs() < 1e-8 || y <= 0) return y;
-  final stops = math.log(y / PhotoAdjustConfig.contrastPivot) / math.ln2;
-  final shaped = stops * (1 + PhotoAdjustConfig.contrastStrength * amount);
-  return math.max(
-    0.0,
-    PhotoAdjustConfig.contrastPivot * math.pow(2, shaped).toDouble(),
-  );
+  final pivot = PhotoAdjustConfig.contrastPivot;
+  final stops = math.log(y / pivot) / math.ln2;
+  final strength = stops < 0
+      ? PhotoAdjustConfig.contrastStrengthLo
+      : PhotoAdjustConfig.contrastStrengthHi;
+  final fade = 1 -
+      gradeSmoothstep(
+        PhotoAdjustConfig.contrastFadeLo,
+        PhotoAdjustConfig.contrastFadeHi,
+        y,
+      );
+  final shaped = stops * (1 + strength * fade * amount);
+  return math.max(0.0, pivot * math.pow(2, shaped).toDouble());
 }
 
 /// Soft endpoint push. No hard clamp.
@@ -253,17 +270,31 @@ double whitesBlacksCurve(double y, double whites, double blacks) {
   if (whites.abs() < 1e-8 && blacks.abs() < 1e-8) return y;
   var x = y;
   if (blacks.abs() >= 1e-8) {
-    // Smooth toe mostly below blacksEnd.
-    final knee = 1 - gradeSmoothstep(0, PhotoAdjustConfig.blacksEnd, x);
-    if (blacks > 0) {
-      x = x + blacks * PhotoAdjustConfig.blacksAmount * knee;
-    } else {
-      x = x * (1 + blacks * knee);
-    }
+    final knee = math
+        .pow(
+          1 - gradeSmoothstep(0, PhotoAdjustConfig.blacksEnd, x),
+          PhotoAdjustConfig.blacksMaskPower,
+        )
+        .toDouble();
+    final amount = blacks < 0
+        ? PhotoAdjustConfig.blacksAmountNeg
+        : PhotoAdjustConfig.blacksAmountPos;
+    x = x * math.pow(2, blacks * amount * knee).toDouble();
   }
   if (whites.abs() >= 1e-8) {
-    final knee = gradeSmoothstep(PhotoAdjustConfig.whitesStart, 1.0, x);
-    x = x + whites * PhotoAdjustConfig.whitesAmount * knee;
+    final whW = gradeSmoothstep(
+          PhotoAdjustConfig.whitesMaskLo,
+          PhotoAdjustConfig.whitesMaskHi,
+          x,
+        ) *
+        (1 -
+            gradeSmoothstep(
+              PhotoAdjustConfig.whitesFadeLo,
+              PhotoAdjustConfig.whitesFadeHi,
+              x,
+            ));
+    x = x *
+        math.pow(2, whites * PhotoAdjustConfig.whitesAmount * whW).toDouble();
   }
   return x < 0 ? 0 : x;
 }
@@ -306,18 +337,31 @@ GradeRgb applyShadowsHighlights(
     return GradeRgb(r, g, b);
   }
   final hiW = gradeSmoothstep(
-    PhotoAdjustConfig.highlightMaskLo,
-    PhotoAdjustConfig.highlightMaskHi,
-    mask01,
-  );
-  final shW = 1 -
-      gradeSmoothstep(
-        PhotoAdjustConfig.shadowMaskLo,
-        PhotoAdjustConfig.shadowMaskHi,
+        PhotoAdjustConfig.highlightMaskLo,
+        PhotoAdjustConfig.highlightMaskHi,
         mask01,
-      );
-  final stops = hiW * a.highlights * PhotoAdjustConfig.localToneStrength +
-      shW * a.shadows * PhotoAdjustConfig.localToneStrength;
+      ) *
+      (1 -
+          gradeSmoothstep(
+            PhotoAdjustConfig.highlightFadeLo,
+            PhotoAdjustConfig.highlightFadeHi,
+            mask01,
+          ));
+  final shW = math.pow(math.max(0.0, 1 - mask01), PhotoAdjustConfig.shadowMaskPower) *
+      (1 -
+          gradeSmoothstep(
+            PhotoAdjustConfig.shadowFadeLo,
+            PhotoAdjustConfig.shadowFadeHi,
+            mask01,
+          ));
+  final hiStrength = a.highlights < 0
+      ? PhotoAdjustConfig.highlightStrengthNeg
+      : PhotoAdjustConfig.highlightStrengthPos;
+  final shStrength = a.shadows < 0
+      ? PhotoAdjustConfig.shadowStrengthNeg
+      : PhotoAdjustConfig.shadowStrengthPos;
+  final stops =
+      hiW * a.highlights * hiStrength + shW * a.shadows * shStrength;
   if (stops.abs() < 1e-8) return GradeRgb(r, g, b);
   final gain = math.pow(2, stops).toDouble();
   return GradeRgb(r * gain, g * gain, b * gain);
@@ -368,11 +412,19 @@ GradeRgb applyVibranceSaturation(
 
   if (a.vibrance.abs() >= 1e-8) {
     final sat = _chroma(r, g, b);
-    // Less-saturated pixels get more boost.
-    final lowSatWeight = 1 - _saturate(sat * 2.5);
+    // Low chroma gets more effect; vivid fades toward floor (0 on +,
+    // vibranceChromaFloorNeg on − so ACR still pulls vivid down a bit).
+    final fade = gradeSmoothstep(
+      PhotoAdjustConfig.vibranceChromaFadeLo,
+      PhotoAdjustConfig.vibranceChromaFadeHi,
+      sat,
+    );
+    final floor =
+        a.vibrance < 0 ? PhotoAdjustConfig.vibranceChromaFloorNeg : 0.0;
+    final lowSatWeight = 1 - (1 - floor) * fade;
     final hue = _hueDegrees(r, g, b);
-    final skinDist =
-        (hue - PhotoAdjustConfig.skinHueCenter).abs().clamp(0.0, 180.0);
+    var skinDist = (hue - PhotoAdjustConfig.skinHueCenter).abs();
+    if (skinDist > 180) skinDist = 360 - skinDist;
     final skin = 1 -
         gradeSmoothstep(
           0,
@@ -383,19 +435,31 @@ GradeRgb applyVibranceSaturation(
       PhotoAdjustConfig.skinVibranceScale,
       skin,
     ).toDouble();
-    final amount = a.vibrance *
-        PhotoAdjustConfig.vibranceAmount *
-        lowSatWeight *
-        skinScale;
+    final strength = a.vibrance >= 0
+        ? PhotoAdjustConfig.vibranceAmountPos
+        : PhotoAdjustConfig.vibranceAmountNeg;
+    final amount = a.vibrance * strength * lowSatWeight * skinScale;
     outR = y + (outR - y) * (1 + amount);
     outG = y + (outG - y) * (1 + amount);
     outB = y + (outB - y) * (1 + amount);
   }
 
   if (a.saturation.abs() >= 1e-8) {
-    final amount = a.saturation * PhotoAdjustConfig.saturationAmount;
-    // amount −1 → full desat toward luma; +1 → push away from luma.
-    final mix = 1 + amount;
+    final strength = a.saturation >= 0
+        ? PhotoAdjustConfig.saturationAmountPos
+        : PhotoAdjustConfig.saturationAmountNeg;
+    var weight = 1.0;
+    if (a.saturation > 0) {
+      // Already-vivid colors get less boost (ACR soft-limits chroma).
+      final sat = _chroma(outR, outG, outB);
+      weight = 1 -
+          gradeSmoothstep(
+            PhotoAdjustConfig.saturationChromaFadeLo,
+            PhotoAdjustConfig.saturationChromaFadeHi,
+            sat,
+          );
+    }
+    final mix = 1 + a.saturation * strength * weight;
     outR = y + (outR - y) * mix;
     outG = y + (outG - y) * mix;
     outB = y + (outB - y) * mix;

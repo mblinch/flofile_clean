@@ -151,6 +151,10 @@ void main() {
       CaptionV2SaveChord.save,
     );
     expect(
+      chord(key: LogicalKeyboardKey.keyS, meta: true, shift: true),
+      CaptionV2SaveChord.save,
+    );
+    expect(
       chord(key: LogicalKeyboardKey.keyS, control: true, ftpMode: false),
       CaptionV2SaveChord.save,
     );

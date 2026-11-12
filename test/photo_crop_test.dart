@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quick_cap/photo_edit/photo_crop.dart';
 
@@ -56,5 +58,23 @@ void main() {
     expect(next.left, closeTo(0.1, 0.001));
     expect(next.top, closeTo(0.1, 0.001));
     expect(next.width, greaterThan(0.5));
+  });
+
+  test('rotated AABB grows with angle', () {
+    const rect = Rect.fromLTWH(10, 10, 100, 50);
+    final aabb = rotatedAabb(rect, 0.3);
+    expect(aabb.width, greaterThan(rect.width));
+    expect(aabb.height, greaterThan(rect.height));
+    expect(aabb.center.dx, closeTo(rect.center.dx, 0.01));
+    expect(aabb.center.dy, closeTo(rect.center.dy, 0.01));
+  });
+
+  test('safe straighten crop is centered and inset', () {
+    final crop = safeCropForStraighten(imageAspect: 1.5, degrees: 5);
+    expect(crop.left, closeTo(crop.left, 0.001));
+    expect(crop.left + crop.width, closeTo(1 - crop.left, 0.02));
+    expect(crop.top + crop.height, closeTo(1 - crop.top, 0.02));
+    expect(crop.width, lessThan(1));
+    expect(crop.height, lessThan(1));
   });
 }

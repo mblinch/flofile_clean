@@ -11,13 +11,12 @@ import '../../../theme/ff_tokens.dart';
 import '../../../widgets/teal_action_button.dart';
 
 /// Blank field the caption structure still needs.
-const Color _captionWarn = FfTokens.danger;
-final Color _captionWarnLine = FfTokens.danger.withValues(alpha: 0.45);
+const Color _captionWarn = FfTokens.sessionWarn;
+final Color _captionWarnLine = FfTokens.sessionWarnRing;
 
-/// Blank field the wire still needs for filing (e.g. Getty) — muted grey so
-/// caption-required (red) stays the urgent signal.
-const Color _filingWarn = FfTokens.sessionT2;
-final Color _filingWarnLine = FfTokens.sessionT2.withValues(alpha: 0.45);
+/// Blank field the wire still needs for filing (e.g. Getty).
+const Color _filingWarn = FfTokens.sessionWarn;
+final Color _filingWarnLine = FfTokens.sessionWarnRing;
 
 enum _FieldAlert { none, caption, filing }
 
@@ -41,7 +40,7 @@ String _listMergeTip(String field) {
 
 enum _LegendFocus { none, caption, filing }
 
-/// Opens the IPTC editor with caption (red) or filing (yellow) fields highlighted.
+/// Opens the IPTC editor with caption or filing missing fields highlighted.
 enum IptcMissingHighlight { caption, filing }
 
 /// Shared tap group: fields + legend buttons. Outside taps dismiss focus mode.
@@ -362,6 +361,7 @@ class IptcTemplateEditor extends StatelessWidget {
     this.initialFocusField,
     this.initialMissingHighlight,
     this.templatePageHeader = false,
+    this.templateUpdateKeys = const {},
   });
 
   final WireStyle wire;
@@ -369,6 +369,8 @@ class IptcTemplateEditor extends StatelessWidget {
   final String selectedTemplateId;
   final Map<String, String> values;
   final Set<String> foundInFilesKeys;
+  /// Storage/preset keys the template is filling or updating (teal border).
+  final Set<String> templateUpdateKeys;
   final int revision;
   final bool fieldsEnabled;
   final ValueChanged<IptcTemplateCatalogEntry> onTemplateSelected;
@@ -457,11 +459,11 @@ class IptcTemplateEditor extends StatelessWidget {
           // Edit IPTC.html uses label-above fields; New Session keeps label-left.
           final editIptc = workspacePalette;
           final fieldH = embedded
-              ? 24.0
+              ? 22.0
               : editIptc
                   ? (compact ? 38.0 : 34.0)
                   : (narrow ? 36.0 : 32.0);
-          final gap = embedded ? 4.0 : (compact ? 8.0 : 10.0);
+          final gap = embedded ? 3.0 : (compact ? 8.0 : 10.0);
           final labelAbove = editIptc;
 
           final Widget fieldsBody;
@@ -840,15 +842,15 @@ class IptcTemplateEditor extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      flex: 12,
-                      child: _text(specs, 'Category', narrow, fieldH),
+                    _text(
+                      specs,
+                      'Category',
+                      narrow,
+                      fieldH,
+                      fieldWidth: embedded ? 44 : 52,
                     ),
-                    SizedBox(width: embedded ? 4 : 8),
-                    Expanded(
-                      flex: 18,
-                      child: _supp(specs, narrow, fieldH, colors),
-                    ),
+                    SizedBox(width: embedded ? 8 : 12),
+                    _supp(specs, narrow, fieldH, colors),
                   ],
                 ),
                 _urgency(specs, narrow, fieldH),
@@ -912,21 +914,21 @@ class IptcTemplateEditor extends StatelessWidget {
 
           final hasLeading = leading != null;
           final bodyPadL = embedded
-              ? 8.0
+              ? 6.0
               : editIptc
                   ? (hasLeading ? 0.0 : (compact ? 12.0 : 20.0))
                   : (compact ? 12.0 : 16.0);
           final bodyPadR = embedded
-              ? 8.0
+              ? 6.0
               : editIptc
                   ? (compact ? 16.0 : 24.0)
                   : (compact ? 12.0 : 16.0);
           final bodyPadT = embedded
-              ? 4.0
+              ? 2.0
               : editIptc
                   ? (compact ? 12.0 : 20.0)
                   : (compact ? 8.0 : 14.0);
-          final bodyPadB = embedded ? 4.0 : (compact ? 8.0 : 16.0);
+          final bodyPadB = embedded ? 2.0 : (compact ? 8.0 : 16.0);
           final body = embedded
               ? Padding(
                   padding: EdgeInsets.fromLTRB(
@@ -970,32 +972,40 @@ class IptcTemplateEditor extends StatelessWidget {
                   ],
                 );
 
+          // New Session inline IPTC: fields only — mode chrome lives above.
+          // Keep a slim header when Import is wired (Apply IPTC Template).
+          final hideEmbeddedHeader = embedded &&
+              !showTemplateControls &&
+              !templatePageHeader &&
+              !(loadEnabled && onLoadTemplate != null);
+
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _Header(
-                title: title,
-                subtitle: subtitle,
-                showTemplateControls: showTemplateControls,
-                templates: templates,
-                selectedTemplateId: selectedTemplateId,
-                onTemplateSelected: onTemplateSelected,
-                onDeleteTemplate: onDeleteTemplate,
-                onLoad: loadEnabled ? onLoadTemplate : null,
-                // Edit IPTC: Clear all lives under Filing, not the header.
-                onClear: editIptc
-                    ? null
-                    : (clearEnabled ? onClearTemplate : null),
-                onSave: fieldsEnabled ? onSaveTemplate : null,
-                loadingTemplate: loadingTemplate,
-                onClose: embedded ? null : onCancel,
-                compact: compact,
-                captionStyleLabel: captionStyleLabel,
-                wireLabels: wireLabels,
-                // Startup IPTC only — omit on in-session Edit IPTC.
-                showCaptionNote: false,
-                templatePageHeader: templatePageHeader,
-              ),
+              if (!hideEmbeddedHeader)
+                _Header(
+                  title: title,
+                  subtitle: subtitle,
+                  showTemplateControls: showTemplateControls,
+                  templates: templates,
+                  selectedTemplateId: selectedTemplateId,
+                  onTemplateSelected: onTemplateSelected,
+                  onDeleteTemplate: onDeleteTemplate,
+                  onLoad: loadEnabled ? onLoadTemplate : null,
+                  // Edit IPTC + New Session: Clear all lives under Filing.
+                  onClear: (editIptc || embedded)
+                      ? null
+                      : (clearEnabled ? onClearTemplate : null),
+                  onSave: fieldsEnabled ? onSaveTemplate : null,
+                  loadingTemplate: loadingTemplate,
+                  onClose: embedded ? null : onCancel,
+                  compact: compact,
+                  captionStyleLabel: captionStyleLabel,
+                  wireLabels: wireLabels,
+                  // Startup IPTC only — omit on in-session Edit IPTC.
+                  showCaptionNote: false,
+                  templatePageHeader: templatePageHeader,
+                ),
               Expanded(
                 child: !hasLeading
                     ? body
@@ -1059,6 +1069,20 @@ class IptcTemplateEditor extends StatelessWidget {
         foundInFilesKeys.contains(IptcTemplateApplyService.toPanelKey(preset));
   }
 
+  /// True when this field has a template value being applied (Fill Partial Gaps).
+  bool _isTemplateUpdate(String label, WireIptcFieldSpec? spec) {
+    if (templateUpdateKeys.isEmpty) return false;
+    final key = spec?.storageKey ?? label;
+    if (templateUpdateKeys.contains(key) ||
+        templateUpdateKeys.contains(label)) {
+      return true;
+    }
+    final preset = IptcTemplateApplyService.toPresetKey(key);
+    return templateUpdateKeys.contains(preset) ||
+        templateUpdateKeys
+            .contains(IptcTemplateApplyService.toPanelKey(preset));
+  }
+
   bool _required(WireIptcFieldSpec? spec) =>
       spec?.level == IptcFieldLevel.required;
 
@@ -1103,9 +1127,11 @@ class IptcTemplateEditor extends StatelessWidget {
   }
 
   /// Caption needs (red) win over wire filing needs (yellow).
+  /// A filled value (including a Fill Partial Gaps template write) clears both.
   _FieldAlert _alertFor(String label, WireIptcFieldSpec? spec) {
+    if (!_blank(label, spec)) return _FieldAlert.none;
     if (_captionMissing(label)) return _FieldAlert.caption;
-    if (_required(spec) && _blank(label, spec)) return _FieldAlert.filing;
+    if (_required(spec)) return _FieldAlert.filing;
     return _FieldAlert.none;
   }
 
@@ -1280,6 +1306,7 @@ class IptcTemplateEditor extends StatelessWidget {
         enabled: fieldsEnabled,
         mono: _monoKeys.contains(label),
         alert: alert,
+        templateUpdate: _isTemplateUpdate(label, spec),
         inCaptionGroup: _inCaptionGroup(label),
         inFilingGroup: _inFilingGroup(label, spec),
         height: fieldH,
@@ -1304,8 +1331,11 @@ class IptcTemplateEditor extends StatelessWidget {
     bool narrow,
     double fieldH,
   ) {
-    // Compact 3-char box sits flush beside the label (not stretched).
+    // Compact 3-char box stays flush beside the "Country Code" label.
     const codeBoxW = 52.0;
+    final codeSpec = specs['Country Code'];
+    final codeKey = codeSpec?.storageKey ?? 'Country Code';
+    final codeAlert = _alertFor('Country Code', codeSpec);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1313,13 +1343,61 @@ class IptcTemplateEditor extends StatelessWidget {
           child: _text(specs, 'Country', narrow, fieldH),
         ),
         SizedBox(width: narrow ? 6 : 8),
-        _text(
-          specs,
-          'Country Code',
-          narrow,
-          fieldH,
-          display: 'Country Code',
-          fieldWidth: codeBoxW,
+        Padding(
+          padding: const EdgeInsets.only(bottom: 2),
+          child: SizedBox(
+            height: fieldH,
+            child: Builder(
+              builder: (context) {
+                final colors = IptcEditorPalette.of(context);
+                final alertOn = codeAlert != _FieldAlert.none;
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Country Code',
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        color: alertOn
+                            ? _alertColor(codeAlert)
+                            : colors.t2,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: codeBoxW,
+                      child: _TextInput(
+                        key: ValueKey('$codeKey-$revision'),
+                        tabId: 'Country Code',
+                        value: _display('Country Code', codeSpec),
+                        enabled: fieldsEnabled,
+                        mono: true,
+                        alert: codeAlert,
+                        templateUpdate:
+                            _isTemplateUpdate('Country Code', codeSpec),
+                        inCaptionGroup: false,
+                        inFilingGroup:
+                            _inFilingGroup('Country Code', codeSpec),
+                        height: fieldH,
+                        narrow: narrow,
+                        maxLength: 3,
+                        center: false,
+                        needsCaptionFill: () =>
+                            _captionMissing('Country Code'),
+                        needsFilingFill: () =>
+                            _inFilingGroup('Country Code', codeSpec) &&
+                            _blank('Country Code', codeSpec),
+                        onChanged: (v) => onValueChanged(codeKey, v),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
         ),
       ],
     );
@@ -1334,8 +1412,8 @@ class IptcTemplateEditor extends StatelessWidget {
   }) {
     final labels = _suppLabels;
     final shorts = ['Supp 1', 'Supp 2', 'Supp 3'];
-    // Compact boxes stay beside "Supp cats" instead of stretching the row.
-    final boxW = narrow ? 56.0 : 64.0;
+    final boxW = narrow ? 56.0 : (embedded ? 48.0 : 64.0);
+    const gap = 4.0;
     final groupMissing = _gettyNeedsOneSupp && _allSuppBlank(specs);
     final alerts = [
       for (final label in labels)
@@ -1348,94 +1426,144 @@ class IptcTemplateEditor extends StatelessWidget {
         : (alerts.contains(_FieldAlert.filing)
             ? _FieldAlert.filing
             : _FieldAlert.none);
-    return _FieldSlot(
-      label: 'Supp cats',
-      alert: slotAlert,
-      inCaptionGroup: false,
-      inFilingGroup: labels.any((l) => _inFilingGroup(l, specs[l])),
-      // Compact fields already label each box (Supp 1–3). A second
-      // "Supp cats" label sits on top of those and overlaps them.
-      hideLabel: narrow,
-      narrow: narrow,
-      labelAbove: labelAbove,
-      height: fieldH,
-      fieldWidth: narrow ? null : (boxW * 3 + 8),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (var i = 0; i < 3; i++) ...[
-            if (i > 0) const SizedBox(width: 4),
-            SizedBox(
-              width: boxW,
-              child: Stack(
-                children: [
-                  _TextInput(
-                    key: ValueKey('${labels[i]}-$revision'),
-                    tabId: labels[i],
-                    value: _display(labels[i], specs[labels[i]]),
-                    enabled: fieldsEnabled,
-                    mono: true,
-                    alert: alerts[i],
-                    inCaptionGroup: false,
-                    inFilingGroup: _inFilingGroup(labels[i], specs[labels[i]]),
-                    height: fieldH,
-                    narrow: narrow,
-                    center: false,
-                    needsCaptionFill: () => _captionMissing(labels[i]),
-                    needsFilingFill: () {
-                      final label = labels[i];
-                      final spec = specs[label];
-                      if (_gettyNeedsOneSupp) {
-                        return _allSuppBlank(specs) && _blank(label, spec);
-                      }
-                      return _inFilingGroup(label, spec) &&
-                          _blank(label, spec);
-                    },
-                    onChanged: (v) => onValueChanged(
-                      specs[labels[i]]?.storageKey ?? labels[i],
-                      v,
-                    ),
-                  ),
-                  if (narrow)
-                    Positioned(
-                      top: 3,
-                      left: 10,
-                      right: 4,
-                      child: IgnorePointer(
-                        child: Builder(
-                          builder: (context) {
-                            final focus = _LegendFocusScope.maybeOf(context)
-                                    ?.focus ??
-                                _LegendFocus.none;
-                            final paint = focus == _LegendFocus.filing &&
-                                    _inFilingGroup(
-                                      labels[i],
-                                      specs[labels[i]],
-                                    )
-                                ? _FieldAlert.filing
-                                : alerts[i];
-                            return Text(
-                              shorts[i].toUpperCase(),
-                              textAlign: TextAlign.start,
-                              style: TextStyle(
-                                fontFamily: FfTokens.fontFamily,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.4,
-                                color: paint != _FieldAlert.none
-                                    ? _alertColor(paint)
-                                    : colors.t3,
-                              ),
-                            );
-                          },
-                        ),
+
+    // Narrow / stacked layouts keep the old FieldSlot chrome.
+    if (narrow || labelAbove) {
+      return _FieldSlot(
+        label: 'Supp cats',
+        alert: slotAlert,
+        inCaptionGroup: false,
+        inFilingGroup: labels.any((l) => _inFilingGroup(l, specs[l])),
+        hideLabel: narrow,
+        narrow: narrow,
+        labelAbove: labelAbove,
+        height: fieldH,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < 3; i++) ...[
+              if (i > 0) const SizedBox(width: gap),
+              SizedBox(
+                width: boxW,
+                child: Stack(
+                  children: [
+                    _TextInput(
+                      key: ValueKey('${labels[i]}-$revision'),
+                      tabId: labels[i],
+                      value: _display(labels[i], specs[labels[i]]),
+                      enabled: fieldsEnabled,
+                      mono: true,
+                      alert: alerts[i],
+                      templateUpdate:
+                          _isTemplateUpdate(labels[i], specs[labels[i]]),
+                      inCaptionGroup: false,
+                      inFilingGroup:
+                          _inFilingGroup(labels[i], specs[labels[i]]),
+                      height: fieldH,
+                      narrow: narrow,
+                      center: false,
+                      needsCaptionFill: () => _captionMissing(labels[i]),
+                      needsFilingFill: () {
+                        final label = labels[i];
+                        final spec = specs[label];
+                        if (_gettyNeedsOneSupp) {
+                          return _allSuppBlank(specs) && _blank(label, spec);
+                        }
+                        return _inFilingGroup(label, spec) &&
+                            _blank(label, spec);
+                      },
+                      onChanged: (v) => onValueChanged(
+                        specs[labels[i]]?.storageKey ?? labels[i],
+                        v,
                       ),
                     ),
-                ],
+                    if (narrow)
+                      Positioned(
+                        top: 3,
+                        left: 10,
+                        right: 4,
+                        child: IgnorePointer(
+                          child: Text(
+                            shorts[i].toUpperCase(),
+                            textAlign: TextAlign.start,
+                            style: TextStyle(
+                              fontFamily: FfTokens.fontFamily,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.4,
+                              color: alerts[i] != _FieldAlert.none
+                                  ? _alertColor(alerts[i])
+                                  : colors.t3,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    // Embedded / side-label: keep title flush against the three boxes.
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: SizedBox(
+        height: fieldH,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Supp cats',
+              maxLines: 1,
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 12,
+                fontWeight: FontWeight.w400,
+                color: slotAlert != _FieldAlert.none
+                    ? _alertColor(slotAlert)
+                    : colors.t2,
               ),
             ),
+            const SizedBox(width: 8),
+            for (var i = 0; i < 3; i++) ...[
+              if (i > 0) const SizedBox(width: gap),
+              SizedBox(
+                width: boxW,
+                child: _TextInput(
+                  key: ValueKey('${labels[i]}-$revision'),
+                  tabId: labels[i],
+                  value: _display(labels[i], specs[labels[i]]),
+                  enabled: fieldsEnabled,
+                  mono: true,
+                  alert: alerts[i],
+                  templateUpdate:
+                      _isTemplateUpdate(labels[i], specs[labels[i]]),
+                  inCaptionGroup: false,
+                  inFilingGroup: _inFilingGroup(labels[i], specs[labels[i]]),
+                  height: fieldH,
+                  narrow: narrow,
+                  center: false,
+                  needsCaptionFill: () => _captionMissing(labels[i]),
+                  needsFilingFill: () {
+                    final label = labels[i];
+                    final spec = specs[label];
+                    if (_gettyNeedsOneSupp) {
+                      return _allSuppBlank(specs) && _blank(label, spec);
+                    }
+                    return _inFilingGroup(label, spec) && _blank(label, spec);
+                  },
+                  onChanged: (v) => onValueChanged(
+                    specs[labels[i]]?.storageKey ?? labels[i],
+                    v,
+                  ),
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -1608,6 +1736,17 @@ class _Header extends StatelessWidget {
               ),
             ] else
               const Spacer(),
+            if (onLoad != null)
+              _LinkButton(
+                icon: PhosphorIconsRegular.uploadSimple,
+                label: loadingTemplate
+                    ? 'Importing…'
+                    : 'Import from JPG, Getty TXT, or XMP',
+                tooltip: 'Import from JPG, Getty TXT, or XMP',
+                onTap: onLoad,
+                fontSize: compact ? 11 : 12,
+                iconSize: 14,
+              ),
             if (onClear != null) _ClearLink(onTap: onClear),
             if (close != null)
               _IconButton(
@@ -2268,14 +2407,26 @@ class _FieldSlot extends StatelessWidget {
         color: floatLabel ? colors.t3 : labelColor,
       ),
     );
+    final fixedW = fieldWidth;
+    // Side-label row is always inside a fixed-width box, so Flexible is safe.
     final labelRow = Row(
       children: [
         Flexible(child: labelText),
         if (tipIcon != null) tipIcon,
       ],
     );
+    // Stacked labels may sit in an unbounded Row (e.g. Country Code). Never
+    // put Flexible there — it zeros the whole Edit IPTC field tree.
+    final stackedLabel = tipIcon == null
+        ? labelText
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              labelText,
+              tipIcon,
+            ],
+          );
 
-    final fixedW = fieldWidth;
     final Widget fieldChild = fixedW == null
         ? child
         : Align(
@@ -2285,18 +2436,20 @@ class _FieldSlot extends StatelessWidget {
 
     final Widget slot;
     if (stacked) {
-      slot = Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(height: 16, child: labelRow),
-          const SizedBox(height: 5),
-          SizedBox(
-            height: height,
-            width: fixedW,
-            child: fieldChild,
-          ),
-        ],
+      slot = SizedBox(
+        width: fixedW,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(height: 16, child: stackedLabel),
+            const SizedBox(height: 5),
+            SizedBox(
+              height: height,
+              child: fieldChild,
+            ),
+          ],
+        ),
       );
     } else if (narrow) {
       // Fixed height — never use Positioned.fill in a scroll view (unbounded).
@@ -2371,6 +2524,7 @@ class _TextInput extends StatefulWidget {
     this.needsFilingFill,
     this.inCaptionGroup = false,
     this.inFilingGroup = false,
+    this.templateUpdate = false,
     this.mono = false,
     this.center = false,
     this.maxLength,
@@ -2388,6 +2542,8 @@ class _TextInput extends StatefulWidget {
   final bool Function()? needsFilingFill;
   final bool inCaptionGroup;
   final bool inFilingGroup;
+  /// Fill Partial Gaps: template is writing this field — teal border.
+  final bool templateUpdate;
   final bool mono;
   final bool center;
   final int? maxLength;
@@ -2521,16 +2677,23 @@ class _TextInputState extends State<_TextInput> {
         height: widget.height,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: _hover && !focused ? colors.hover : colors.field,
+          color: _hover && !focused
+              ? colors.hover
+              : widget.templateUpdate
+                  ? FfTokens.sessionOnSoft
+                  : colors.field,
           borderRadius: BorderRadius.circular(7),
           border: Border.all(
             color: focused
                 ? colors.focus
-                : paintAlert != _FieldAlert.none
-                    ? _alertLine(paintAlert)
-                    : colors.workspace
-                        ? FfTokens.nocturneLn
-                        : Colors.transparent,
+                : widget.templateUpdate
+                    ? FfTokens.nocturneAc
+                    : paintAlert != _FieldAlert.none
+                        ? _alertLine(paintAlert)
+                        : colors.workspace
+                            ? FfTokens.nocturneLn
+                            : Colors.transparent,
+            width: widget.templateUpdate && !focused ? 1.2 : 1,
           ),
         ),
         child: TextField(

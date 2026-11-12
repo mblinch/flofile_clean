@@ -13,10 +13,14 @@ class PhotoPreviewInfoBar extends StatelessWidget {
     super.key,
     required this.controller,
     this.showExposure = true,
+    this.bare = false,
   });
 
   final CaptionV2Controller controller;
   final bool showExposure;
+
+  /// Inline meta for the Edit Photo chrome (no panel background).
+  final bool bare;
 
   String _meta(List<String> keys) {
     for (final key in keys) {
@@ -53,8 +57,22 @@ class PhotoPreviewInfoBar extends StatelessWidget {
     final style = tokens.metaStyle.copyWith(
       fontSize: 12,
       height: 1.2,
-      color: tokens.textTertiary,
+      color: bare ? FfTokens.nocturneT3 : tokens.textTertiary,
+      fontWeight: FontWeight.w500,
     );
+    final text = Text(
+      info,
+      maxLines: 1,
+      softWrap: false,
+      style: style,
+    );
+    // Scale down rather than ellipsize when the meta line is long.
+    final fitted = FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: text,
+    );
+    if (bare) return fitted;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(14, 8, 12, 8),
@@ -62,12 +80,7 @@ class PhotoPreviewInfoBar extends StatelessWidget {
         color: tokens.surface,
         border: Border(bottom: BorderSide(color: tokens.divider)),
       ),
-      child: Text(
-        info,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: style,
-      ),
+      child: fitted,
     );
   }
 }
@@ -113,8 +126,8 @@ String _formatShutter(String raw) {
       : '${value.toStringAsFixed(1)}s';
 }
 
-/// Filename, saved and uploaded marks, and the edit button.
-/// Sits on the bottom of the photo.
+/// Filename, saved/uploaded marks, and edit.
+/// Sits on the bottom of the photo panel (54px).
 class PhotoPreviewActionBar extends StatelessWidget {
   const PhotoPreviewActionBar({
     super.key,
@@ -130,42 +143,49 @@ class PhotoPreviewActionBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    final nameStyle = tokens.metaStyle.copyWith(
-      fontSize: 12,
-      height: 1.2,
-      color: tokens.textSecondary,
-      fontWeight: FontWeight.w500,
-    );
-    return Container(
+    return SizedBox(
+      height: 54,
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        border: Border(top: BorderSide(color: tokens.divider)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              controller.currentFileName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.left,
-              style: nameStyle,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 0, 10, 0),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                controller.currentFileName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                softWrap: false,
+                style: const TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  height: 1.2,
+                  color: FfTokens.nocturneTx,
+                ),
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          PhotoPreviewStatusIcons(
-            state: controller.frameStateFor(path),
-            tokens: tokens,
-          ),
-          const SizedBox(width: 8),
-          PhotoEditModeButton(
-            session: editSession,
-            controller: controller,
-            compact: true,
-          ),
-        ],
+            const SizedBox(width: 12),
+            if (!editSession.editing) ...[
+              PhotoPreviewStatusIcons(
+                state: controller.frameStateFor(path),
+                tokens: tokens,
+              ),
+              const SizedBox(width: 10),
+              Container(
+                width: 1,
+                height: 22,
+                color: FfTokens.nocturneLn,
+              ),
+              const SizedBox(width: 8),
+            ],
+            PhotoEditModeButton(
+              session: editSession,
+              controller: controller,
+              compact: true,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -183,6 +203,8 @@ class PhotoPreviewStatusIcons extends StatelessWidget {
   final FfTokens tokens;
   final bool bare;
 
+  static const Color _okGreen = Color(0xFF7FD6A0);
+
   @override
   Widget build(BuildContext context) {
     final saved = state != FrameState.todo;
@@ -195,16 +217,16 @@ class PhotoPreviewStatusIcons extends StatelessWidget {
           child: PhosphorIcon(
             PhosphorIconsRegular.floppyDisk,
             size: 15,
-            color: saved ? FrameStatusColors.saved : tokens.textTertiary,
+            color: FfTokens.nocturneT3,
           ),
         ),
-        const SizedBox(width: 6),
+        const SizedBox(width: 10),
         Tooltip(
           message: sent ? "FTP'd" : 'Not uploaded',
           child: PhosphorIcon(
-            PhosphorIconsRegular.cloudArrowUp,
+            PhosphorIconsRegular.cloudCheck,
             size: 15,
-            color: sent ? FrameStatusColors.sent : tokens.textTertiary,
+            color: sent ? _okGreen : FfTokens.nocturneT3,
           ),
         ),
       ],

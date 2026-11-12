@@ -540,14 +540,23 @@ class _PhotoCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                    if (controller.jerseyOcrEnabled)
-                      Positioned(
-                        top: 10,
-                        right: 10,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
+                    Positioned(
+                      top: 10,
+                      right: 12,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _PhotoFrameCounter(
+                            index: (shownIndex < 0
+                                    ? controller.currentIndex
+                                    : shownIndex) +
+                                1,
+                            total: controller.imagePaths.length,
+                            tokens: tokens,
+                          ),
+                          if (controller.jerseyOcrEnabled) ...[
+                            const SizedBox(height: 8),
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -567,18 +576,7 @@ class _PhotoCard extends StatelessWidget {
                               ),
                             ],
                           ],
-                        ),
-                      ),
-                    Positioned(
-                      right: 12,
-                      bottom: 12,
-                      child: _PhotoFrameCounter(
-                        index: (shownIndex < 0
-                                ? controller.currentIndex
-                                : shownIndex) +
-                            1,
-                        total: controller.imagePaths.length,
-                        tokens: tokens,
+                        ],
                       ),
                     ),
                     Positioned(
@@ -1032,8 +1030,7 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
                             ? PhotoCrop.full
                             : widget.editSession.cropFor(widget.path);
                         final comparing = widget.editSession.comparing;
-                        final debugMask = widget.editSession.debugMask;
-                        if (grade.isNeutral && crop.isFull && !debugMask) {
+                        if (grade.isNeutral && crop.isFull) {
                           return Image.memory(
                             bytes,
                             fit: BoxFit.contain,
@@ -1047,7 +1044,6 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
                           crop: crop,
                           fit: BoxFit.contain,
                           compareOriginal: comparing,
-                          debugMask: debugMask,
                         );
                       },
                     ),
@@ -1213,7 +1209,6 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
                           bytes: paintBytes,
                           adjustments: grade,
                           fit: BoxFit.fill,
-                          debugMask: widget.editSession.debugMask,
                         );
                       },
                     ),
@@ -2056,29 +2051,31 @@ class PhotoSaveArrow extends StatelessWidget {
   final AxisDirection direction;
   final VoidCallback onPressed;
 
+  static const Color _fill = Color(0xB8101418); // rgba(16,20,24,.72)
+  static const Color _hover = Color(0xEB101418); // rgba(16,20,24,.92)
+
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final previous = direction == AxisDirection.left;
     return Tooltip(
       message: previous ? 'Save & previous' : 'Save & next (⌘S)',
       child: Material(
-        color: t.bg.withValues(alpha: 0.65),
+        color: _fill,
         elevation: 0,
         shadowColor: Colors.transparent,
         shape: const CircleBorder(),
         child: InkWell(
           onTap: onPressed,
           customBorder: const CircleBorder(),
-          hoverColor: t.bg.withValues(alpha: 0.9),
+          hoverColor: _hover,
           child: SizedBox.square(
             dimension: 40,
             child: Icon(
               previous
                   ? PhosphorIconsRegular.caretLeft
                   : PhosphorIconsRegular.caretRight,
-              size: 15,
-              color: t.text,
+              size: 18,
+              color: FfTokens.nocturneTx,
             ),
           ),
         ),

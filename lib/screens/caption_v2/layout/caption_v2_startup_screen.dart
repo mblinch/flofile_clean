@@ -161,14 +161,18 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   Map<String, String> _iptcValuesFromFiles = const {};
   /// IPTC template values shown/edited for Apply / Fill missing.
   Map<String, String> _iptcValuesFromTemplate = const {};
+  /// Keys the user typed into this session (Fill Partial Gaps teal borders).
+  Set<String> _iptcTemplateTypedKeys = {};
   /// Panel keys present on folder photos (marks “Found in files”).
   Set<String> _iptcKeysFoundInFiles = const {};
   int _iptcInlineRevision = 0;
   /// When true, folder auto-select will not override the user's IPTC source pick.
   bool _iptcSourceManual = false;
+  /// Importing IPTC from JPG / Getty TXT / XMP on Apply IPTC Template.
+  bool _loadingExternalIptc = false;
 
-  /// Step 1 = wire; Step 2 = setup (folder/IPTC/league/teams);
-  /// Step 3 = Caption layout + Session options.
+  /// Step 1 = setup (wire / images / game / IPTC);
+  /// Step 2 = optional caption template + session options.
   int _setupStep = 1;
   /// Which setup field to focus when returning from the summary strip.
   String? _setupFocusTarget;
@@ -214,9 +218,10 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     '.png',
   };
 
-  /// Shared stage size for wire / setup / caption steps.
-  static const double _stageWidth = 1270;
-  static const double _stageHeight = 670;
+  /// Shared stage size for setup / caption steps.
+  static const double _stageWidth = 1180;
+  static const double _stageHeight = 760;
+  static const double _templateBtnWidth = 176;
 
   bool get _sportChosen => _sport != null && _sport!.isNotEmpty;
   bool get _folderChosen => _folderPath != null && _folderPath!.isNotEmpty;
@@ -234,13 +239,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   bool get _bothTeamsChosen =>
       _homeFilled && _awayFilled && _homeTeam != _awayTeam;
 
-  /// Go Time (step 3) require folder + sport + both teams.
+  /// Go Time (step 1 or 2): folder + both teams.
   bool get _canGo =>
-      _sportChosen && _folderChosen && _bothTeamsChosen && !_going;
-
-  /// Setup panel Continue (step 2 → 3).
-  bool get _canContinue =>
-      _folderChosen && _sportChosen && _bothTeamsChosen && !_going;
+      _folderChosen && _bothTeamsChosen && !_going;
 
   bool get _wireChosen {
     final token = _selectedStyleToken;
@@ -249,8 +250,8 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         CaptionStyleCatalog.isCustomMenuToken(token);
   }
 
-  /// Wire step Continue (step 1 → 2).
-  bool get _canContinueFromWire => _wireChosen && !_loadingStyles;
+  /// Caption template button / optional step 2.
+  bool get _canOpenCaptionTemplate => _canGo && !_loadingStyles;
 
   bool get _writeIptc => _iptcMode != IptcApplyMode.none;
 
@@ -312,27 +313,13 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   }
 
   String get _goHint {
-    if (_setupStep == 1) {
-      if (_canContinueFromWire) return 'Press Enter to continue';
-      return 'Choose a wire to continue';
-    }
-    if (_setupStep == 2) {
-      if (_canContinue) return 'Press Enter to continue';
-      if (!_folderChosen) return 'Choose an images folder';
-      if (!_sportChosen) return 'Pick a league to continue';
-      if (!_awayFilled || !_homeFilled) return 'Pick both teams to continue';
-      if (_homeTeam == _awayTeam) return 'Home and away must be different';
-      return 'Complete setup to continue';
-    }
     if (_canGo) return 'Ready';
-    // One step at a time: folder → league → teams.
-    if (!_folderChosen) return 'Choose an images folder to start';
-    if (!_sportChosen) return 'Choose a league to start';
-    if (!_awayFilled && !_homeFilled) return 'Choose away and home teams to start';
-    if (!_awayFilled) return 'Choose an away team to start';
-    if (!_homeFilled) return 'Choose a home team to start';
+    if (!_sportChosen) return 'Pick a league';
+    if (!_awayFilled || !_homeFilled) return 'Pick both teams to continue';
     if (_homeTeam == _awayTeam) return 'Home and away must be different';
-    return 'Complete setup to start.';
+    if (!_folderChosen) return 'Choose an images folder';
+    if (!_wireChosen) return 'Choose a wire';
+    return 'Complete setup to start';
   }
 
   void _swapTeams() {
@@ -398,8 +385,43 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       _missingCaptionIptc.isEmpty &&
       _missingFilingIptc.isEmpty;
 
-  /// Filing gaps stay muted grey; caption gaps stay red.
-  static const Color _filingWarnColor = FfTokens.sessionT2;
+  /// Missing IPTC gaps — yellow so they match the editor field highlights.
+  static const Color _filingWarnColor = FfTokens.sessionWarn;
+  static const Color _captionWarnColor = FfTokens.sessionWarn;
+
+  /// Named missing fields for the Fill gaps note — caption (red) then filing
+  /// (grey), matching the IPTC editor legend.
+  List<InlineSpan> _missingIptcNameSpans() {
+    final spans = <InlineSpan>[];
+    void addNames(List<String> names, Color color) {
+      for (final name in names) {
+        if (spans.isNotEmpty) {
+          spans.add(
+            const TextSpan(
+              text: ' · ',
+              style: TextStyle(
+                color: FfTokens.sessionT3,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          );
+        }
+        spans.add(
+          TextSpan(
+            text: name,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        );
+      }
+    }
+
+    addNames(_missingCaptionIptc, _captionWarnColor);
+    addNames(_missingFilingIptc, _filingWarnColor);
+    return spans;
+  }
 
   WireStyle get _iptcInlineWire {
     final wire = _captionTemplate?.wireStyle ?? WireStyle.getty;
@@ -423,11 +445,15 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     super.dispose();
   }
 
-  /// Setup unlocks in order: folder → league → teams → the rest.
-  bool get _leagueUnlocked => _folderChosen;
-  bool get _teamsUnlocked => _folderChosen && _sportChosen;
+  /// Setup unlocks in order: game → images → wire → IPTC.
+  bool get _gameUnlocked => true;
+  bool get _leagueUnlocked => _gameUnlocked;
+  bool get _teamsUnlocked => _gameUnlocked && _sportChosen;
   bool get _postTeamsUnlocked =>
-      _folderChosen && _sportChosen && _bothTeamsChosen;
+      _gameUnlocked && _sportChosen && _bothTeamsChosen;
+  bool get _imagesUnlocked => _postTeamsUnlocked;
+  bool get _wireUnlocked => _postTeamsUnlocked && _folderChosen;
+  bool get _iptcUnlocked => _wireUnlocked && _wireChosen;
 
   /// Locked steps stay unreadable: heavy blur + fade until the prior pick.
   Widget _setupGate({required bool unlocked, required Widget child}) {
@@ -1214,17 +1240,17 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                             children: [
                               option(
                                 mode: _IptcSourceMode.apply,
-                                label: 'Apply my template',
+                                label: 'Apply IPTC Template',
                                 primary: true,
                               ),
                               option(
                                 mode: _IptcSourceMode.fill,
-                                label: 'Fill missing IPTC',
+                                label: 'Fill Partial Gaps in IPTC',
                                 primary: false,
                               ),
                               option(
                                 mode: _IptcSourceMode.files,
-                                label: 'Already in files',
+                                label: 'Use Existing IPTC in Files',
                                 primary: false,
                               ),
                             ],
@@ -1252,9 +1278,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   void _showSetupStep(int step, {String? focus}) {
     setState(() {
       _setupStep = step;
-      _setupFocusTarget = step == 2 ? focus : null;
+      _setupFocusTarget = step == 1 ? focus : null;
     });
-    if (step == 2 && focus != null) {
+    if (step == 1 && focus != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         switch (focus) {
@@ -1269,29 +1295,44 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     }
   }
 
-  Future<void> _continueFromWire() async {
-    if (!_canContinueFromWire || _setupStep != 1) return;
+  Future<void> _openCaptionTemplateStep() async {
+    if (!_canOpenCaptionTemplate || _setupStep != 1) return;
     await Future<void>.delayed(const Duration(milliseconds: 50));
     if (!mounted || _setupStep != 1) return;
-    _showSetupStep(2);
-  }
-
-  Future<void> _continueToCaptionStep() async {
-    if (!_canContinue || _setupStep != 2) return;
-    // Defer past pointer-up. Any setState during the Continue gesture
-    // (including IPTC sync) disposes the button under the cursor and
-    // blanks Step 3 via MouseTracker asserts.
-    await Future<void>.delayed(const Duration(milliseconds: 50));
-    if (!mounted || _setupStep != 2) return;
-
     // Fresh visit leaves write off — sync the visible Apply/Fill choice on.
     if (!_iptcAppliedElsewhere && !_writeIptc) {
       await _setIptcSource(
         _iptcFillGapsOnly ? _IptcSourceMode.fill : _IptcSourceMode.apply,
       );
-      if (!mounted || _setupStep != 2) return;
+      if (!mounted || _setupStep != 1) return;
     }
-    _showSetupStep(3);
+    _showSetupStep(2);
+  }
+
+  void _toggleCaptionTemplateStep() {
+    if (_setupStep == 2) {
+      _showSetupStep(1);
+      return;
+    }
+    unawaited(_openCaptionTemplateStep());
+  }
+
+  Future<void> _goTimeFromSetup() async {
+    if (!_canGo) return;
+    // Sync visible IPTC mode before starting from step 1.
+    if (!_iptcAppliedElsewhere && !_writeIptc) {
+      await _setIptcSource(
+        _iptcFillGapsOnly ? _IptcSourceMode.fill : _IptcSourceMode.apply,
+      );
+      if (!mounted) return;
+    }
+    // Flush inline template edits so apply-on-import sees the latest values
+    // (keystroke persists are async and can lag behind Go time).
+    if (_writeIptc) {
+      await _persistInlineIptcTemplate();
+      if (!mounted) return;
+    }
+    await _goTime();
   }
 
   List<(String, String)> get _wireStepOptions {
@@ -1338,6 +1379,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         _iptcScanTotal = 0;
         _iptcValuesFromFiles = const {};
         _iptcValuesFromTemplate = const {};
+        _iptcTemplateTypedKeys = {};
         _iptcKeysFoundInFiles = const {};
         _scanningIptc = false;
       });
@@ -1530,6 +1572,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         _iptcScanTotal = files.length;
         _iptcValuesFromFiles = Map<String, String>.from(fromFiles);
         _iptcValuesFromTemplate = Map<String, String>.from(templatePanel);
+        _iptcTemplateTypedKeys = {};
         _iptcKeysFoundInFiles = foundKeys;
         _iptcInlineRevision++;
         _scanningIptc = false;
@@ -1543,6 +1586,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         _iptcScanTotal = 0;
         _iptcValuesFromFiles = const {};
         _iptcValuesFromTemplate = const {};
+        _iptcTemplateTypedKeys = {};
         _iptcKeysFoundInFiles = const {};
         _scanningIptc = false;
       });
@@ -1723,6 +1767,34 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     return null;
   }
 
+  /// Recalc missing caption/filing lists from the live inline panel values.
+  /// Call inside [setState] after template edits so the note/footer update.
+  void _recomputeMissingIptcWarnings() {
+    final captionTemplate = _captionTemplate;
+    if (captionTemplate == null || !_folderChosen) {
+      _missingCaptionIptc = const [];
+      _missingFilingIptc = const [];
+      return;
+    }
+    final wire = _iptcInlineWire;
+    final effective = _inlineIptcDisplayValues;
+    final missing = CaptionFormulaRenderer.missingCaptionIptcLabels(
+      template: captionTemplate,
+      game: IptcTemplateApplyService.gameInfoFromPanelValues(effective),
+      includeCreator: false,
+    );
+    final filingMissing =
+        IptcTemplateApplyService.missingRequiredLabels(wire, effective)
+            .where(
+              (label) => !missing.any(
+                (m) => m.toLowerCase() == label.toLowerCase(),
+              ),
+            )
+            .toList();
+    _missingCaptionIptc = missing;
+    _missingFilingIptc = filingMissing;
+  }
+
   Future<void> _openIptcForMissingFields({
     IptcMissingHighlight? highlight,
   }) {
@@ -1899,14 +1971,18 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   }
 
   Future<bool> _confirmWriteIptc() async {
+    final overwrite = _iptcSource == _IptcSourceMode.apply;
     final confirmed = await showAppConfirmDialog(
       context: context,
-      title: 'Apply IPTC?',
-      message:
-          'Template fields will be written to these photos. Existing captions '
-          'stay as they are.',
+      title: overwrite ? 'Overwrite IPTC on photos?' : 'Fill IPTC gaps?',
+      message: overwrite
+          ? 'Apply IPTC Template will overwrite IPTC fields already in your '
+              'photos with this template. Existing captions stay as they are.'
+          : 'Empty IPTC fields will be filled from the template. Values '
+              'already in the photos are kept. Existing captions stay as '
+              'they are.',
       cancelLabel: 'Cancel',
-      confirmLabel: 'Apply IPTC',
+      confirmLabel: overwrite ? 'Overwrite IPTC' : 'Fill gaps',
     );
     return confirmed == true;
   }
@@ -1961,6 +2037,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       _iptcScanTotal = 0;
       _iptcValuesFromFiles = const {};
       _iptcValuesFromTemplate = const {};
+      _iptcTemplateTypedKeys = {};
       _iptcKeysFoundInFiles = const {};
       _iptcInlineRevision = 0;
       _iptcSourceManual = false;
@@ -1998,6 +2075,10 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     if (!iptcReady || !mounted) return;
 
     if (_writeIptc) {
+      // Ensure selected_metadata_preset matches the inline editor before
+      // the session's on-import write runs.
+      await _persistInlineIptcTemplate();
+      if (!mounted) return;
       final confirmed = await _confirmWriteIptc();
       if (confirmed != true || !mounted) return;
     }
@@ -2058,10 +2139,6 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
     if (event.logicalKey == LogicalKeyboardKey.escape) {
       if (_openMenuId != null) return KeyEventResult.ignored;
-      if (_setupStep == 3) {
-        _showSetupStep(2);
-        return KeyEventResult.handled;
-      }
       if (_setupStep == 2) {
         _showSetupStep(1);
         return KeyEventResult.handled;
@@ -2077,28 +2154,14 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     final chord = mods.contains(LogicalKeyboardKey.meta) ||
         mods.contains(LogicalKeyboardKey.control);
 
+    // Plain Enter never submits. ⌘/Ctrl+Enter starts the session from setup.
+    if (!chord) return KeyEventResult.ignored;
+    if (_setupStep != 1) return KeyEventResult.ignored;
     if (_awayFocus.hasFocus || _homeFocus.hasFocus || _openMenuId != null) {
       return KeyEventResult.ignored;
     }
-
-    if (_setupStep == 1) {
-      if (chord) return KeyEventResult.ignored;
-      if (!_canContinueFromWire) return KeyEventResult.ignored;
-      unawaited(_continueFromWire());
-      return KeyEventResult.handled;
-    }
-
-    if (_setupStep == 2) {
-      if (chord) return KeyEventResult.ignored;
-      if (!_canContinue) return KeyEventResult.ignored;
-      unawaited(_continueToCaptionStep());
-      return KeyEventResult.handled;
-    }
-
-    // Step 3: ⌘/Ctrl+Enter starts the session.
-    if (!chord) return KeyEventResult.ignored;
     if (!_canGo) return KeyEventResult.ignored;
-    unawaited(_goTime());
+    unawaited(_goTimeFromSetup());
     return KeyEventResult.handled;
   }
 
@@ -2245,8 +2308,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    final stackTeams =
-        MediaQuery.sizeOf(context).width <= 620;
+    final narrow = MediaQuery.sizeOf(context).width <= 620;
 
     return Focus(
       focusNode: _rootFocus,
@@ -2259,7 +2321,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
           children: [
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 12, 24, 12),
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final w = math.min(_stageWidth, constraints.maxWidth);
@@ -2268,23 +2330,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                       child: SizedBox(
                         width: w,
                         height: h,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: FfTokens.sessionPanel,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: FfTokens.sessionLn),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(14),
-                            child: switch (_setupStep) {
-                              1 => _buildV5WireStep(),
-                              2 => _buildV5SetupPanel(
-                                  stackTeams: stackTeams,
-                                ),
-                              _ => _buildV5CaptionStep(t),
-                            },
-                          ),
-                        ),
+                        child: _setupStep == 1
+                            ? _buildV6SetupPanel(t, narrow: narrow)
+                            : _buildV6CaptionStep(t, narrow: narrow),
                       ),
                     );
                   },
@@ -2293,7 +2341,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
             ),
             if (_error != null)
               Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 6),
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 10),
                 child: Text(
                   _error!,
                   maxLines: 1,
@@ -2305,175 +2353,608 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                   ),
                 ),
               ),
-            _buildV5Footer(t),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildV5CaptionStep(FfTokens t) {
-    // Fills the shared stage frame so Structure / Player Output get height.
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+  IconData _wireIconFor(String? token) {
+    switch (token) {
+      case CaptionStyleCatalog.tokImagn:
+        return PhosphorIconsRegular.camera;
+      case CaptionStyleCatalog.tokAp:
+        return PhosphorIconsRegular.broadcast;
+      case CaptionStyleCatalog.tokCp:
+        return PhosphorIconsRegular.flag;
+      case CaptionStyleCatalog.tokGettyIntl:
+        return PhosphorIconsRegular.globeHemisphereWest;
+      case CaptionStyleCatalog.tokGetty:
+      default:
+        return PhosphorIconsRegular.newspaper;
+    }
+  }
+
+  /// Step 2 — edit caption template, then back to setup (no Go time).
+  Widget _buildV6CaptionStep(FfTokens t, {required bool narrow}) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+      decoration: BoxDecoration(
+        color: FfTokens.sessionPanel,
+        borderRadius: BorderRadius.circular(14),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildV5SummaryStrip(),
-          const SizedBox(height: 12),
-          Expanded(
-            child: ValueListenableBuilder<bool>(
-              valueListenable: AdminService.previewAsNonAdmin,
-              builder: (context, _, __) {
-                final showAdminSave =
-                    AdminService.isCurrentUserAdminSync();
-                return _buildV4CaptionCard(showAdminSave: showAdminSave);
-              },
-            ),
+          ValueListenableBuilder<bool>(
+            valueListenable: AdminService.previewAsNonAdmin,
+            builder: (context, _, __) {
+              return _buildV4CaptionHeader(
+                showAdminSave: AdminService.isCurrentUserAdminSync(),
+              );
+            },
           ),
           const SizedBox(height: 12),
-          _buildSessionStep(t, compact: true),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: _buildStepBackButton(
-              onPressed: _going ? null : () => _showSetupStep(2),
-            ),
+          Expanded(
+            child: _buildEmbeddedCaptionBuilder(showAdminSave: false),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Expanded(
+                child: _FooterStatus(
+                  icon: PhosphorIconsRegular.textAa,
+                  iconColor: FfTokens.sessionT3,
+                  text: 'Edit caption template',
+                ),
+              ),
+              _buildStepBackButton(
+                onPressed: _going ? null : () => _showSetupStep(1),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  /// Step 1 — pick the wire before IPTC / teams / caption layout.
-  Widget _buildV5WireStep() {
+  /// Step 1 — centered setup panel (v6).
+  Widget _buildV6SetupPanel(FfTokens t, {required bool narrow}) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: FfTokens.sessionPanel,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildV6SetupRow(
+              label: 'Game',
+              narrow: narrow,
+              child: _buildV6GameField(narrow: narrow),
+            ),
+            _buildV6SetupRow(
+              label: 'Images',
+              narrow: narrow,
+              child: _setupGate(
+                unlocked: _imagesUnlocked,
+                child: _buildV5ImagesField(),
+              ),
+            ),
+            _buildV6SetupRow(
+              label: 'Wire',
+              narrow: narrow,
+              child: _setupGate(
+                unlocked: _wireUnlocked,
+                child: _buildV6WireRow(narrow: narrow),
+              ),
+            ),
+            Expanded(
+              child: _buildV6SetupRow(
+                label: 'IPTC',
+                narrow: narrow,
+                showDivider: false,
+                expand: true,
+                child: _setupGate(
+                  unlocked: _iptcUnlocked,
+                  child: _buildV6IptcField(narrow: narrow),
+                ),
+              ),
+            ),
+            _buildV6ActionRow(
+              showBack: false,
+              onGo: () => unawaited(_goTimeFromSetup()),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildV6SetupRow({
+    required String label,
+    required Widget child,
+    required bool narrow,
+    bool showDivider = true,
+    bool expand = false,
+  }) {
+    final body = narrow
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(label, style: _kSectionLabel),
+              const SizedBox(height: 4),
+              if (expand) Expanded(child: child) else child,
+            ],
+          )
+        : Row(
+            crossAxisAlignment:
+                expand ? CrossAxisAlignment.stretch : CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 72,
+                height: expand ? null : 34,
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: Padding(
+                    padding: EdgeInsets.only(top: expand ? 8 : 8),
+                    child: Text(label, style: _kSectionLabel),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: child),
+            ],
+          );
+    return Container(
+      padding: EdgeInsets.fromLTRB(8, expand ? 6 : 8, 8, expand ? 4 : 8),
+      decoration: showDivider
+          ? const BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: FfTokens.sessionLn),
+              ),
+            )
+          : null,
+      child: expand ? SizedBox.expand(child: body) : body,
+    );
+  }
+
+  Widget _buildV6TemplateButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback? onPressed,
+    bool active = false,
+    bool fullWidth = false,
+  }) {
+    return SizedBox(
+      width: fullWidth ? null : _templateBtnWidth,
+      child: _Pressable(
+        height: 34,
+        radius: 8,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        color: active ? FfTokens.nocturneAccentSoft : Colors.transparent,
+        hoverColor: FfTokens.sessionHv,
+        hoverForeground: true,
+        foreground: active ? FfTokens.sessionTx : FfTokens.sessionT2,
+        borderColor: active ? FfTokens.nocturneAccentEdge : FfTokens.sessionLn,
+        borderWidth: 1,
+        onPressed: onPressed,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            PhosphorIcon(icon, size: 14),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildV6WireRow({required bool narrow}) {
     final options = _wireStepOptions;
     final selected = _selectedStyleToken;
     final current = options.any((o) => o.$1 == selected)
         ? selected
         : (options.isNotEmpty ? options.first.$1 : null);
-
-    IconData iconFor(String token) {
-      switch (token) {
-        case CaptionStyleCatalog.tokImagn:
-          return PhosphorIconsRegular.camera;
-        case CaptionStyleCatalog.tokAp:
-          return PhosphorIconsRegular.broadcast;
-        case CaptionStyleCatalog.tokCp:
-          return PhosphorIconsRegular.flag;
-        case CaptionStyleCatalog.tokGettyIntl:
-          return PhosphorIconsRegular.globeHemisphereWest;
-        case CaptionStyleCatalog.tokGetty:
-        default:
-          return PhosphorIconsRegular.newspaper;
-      }
+    final wireField = _SessionSelect(
+      value: current,
+      hint: _loadingStyles ? 'Loading…' : 'Select wire',
+      enabled: !_loadingStyles && options.isNotEmpty,
+      height: 34,
+      fontSize: 13,
+      leading: PhosphorIcon(
+        _wireIconFor(current),
+        size: 15,
+        color: FfTokens.sessionT3,
+      ),
+      options: options,
+      onChanged: (token) => unawaited(_selectStyle(token)),
+    );
+    final captionBtn = _buildV6TemplateButton(
+      icon: PhosphorIconsRegular.textAa,
+      label: 'Caption template',
+      active: _setupStep == 2,
+      fullWidth: true,
+      onPressed: _canOpenCaptionTemplate ? _toggleCaptionTemplateStep : null,
+    );
+    if (narrow) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          wireField,
+          const SizedBox(height: 6),
+          captionBtn,
+          const SizedBox(height: 6),
+          _buildV6WireCaptionPreview(),
+        ],
+      );
     }
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: _templateBtnWidth,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                wireField,
+                const SizedBox(height: 6),
+                captionBtn,
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: _buildV6WireCaptionPreview(fillHeight: true)),
+        ],
+      ),
+    );
+  }
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(40, 36, 40, 28),
+  Widget _buildV6WireCaptionPreview({bool fillHeight = false}) {
+    final previewText = _CaptionPreviewLive(
+      sport: _sport,
+      awayTeam: _awayTeam,
+      homeTeam: _homeTeam,
+      gameInfo: _buildPreviewGameInfo(),
+      previewPlayers: _captionPreviewPlayers,
+      sampleSeed: _captionPreviewSeed,
+      template: _captionTemplate,
+      gettyNbaeNote: _gettyNoteIsNbae,
+      fontSize: 12,
+      maxLines: fillHeight ? 4 : 2,
+    );
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+      decoration: BoxDecoration(
+        color: FfTokens.nocturneSf,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      alignment: Alignment.topLeft,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Spacer(flex: 2),
           const Text(
-            'Choose your wire',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: FfTokens.sessionTx,
-            ),
+            'Caption Example (Randomly generated)',
+            style: _kSectionLabel,
           ),
-          const SizedBox(height: 8),
-          const Text(
-            'This sets the caption layout and IPTC fields for the session.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontSize: 13,
-              color: FfTokens.sessionT2,
-            ),
-          ),
-          const SizedBox(height: 36),
-          if (_loadingStyles)
-            const Center(
-              child: SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
+          const SizedBox(height: 3),
+          if (fillHeight) Expanded(child: previewText) else previewText,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildV6GameField({required bool narrow}) {
+    final league = SizedBox(
+      width: narrow ? null : 112,
+      child: _buildV5LeagueField(),
+    );
+    final away = _TeamDropdown(
+      menuId: 0,
+      openMenuId: _openMenuId,
+      label: 'Away',
+      value: _awayTeam,
+      teams: _sortedTeams(exclude: _homeTeam),
+      enabled: _teamsUnlocked && !_loadingTeams,
+      sideFavorite: _favoriteAway,
+      favoriteNames: _favoriteTeamNames,
+      focusNode: _awayFocus,
+      hideLabel: true,
+      fieldHeight: 34,
+      hintText: _sportChosen ? 'Select team' : 'Pick a league first',
+      onChanged: _setAwayTeam,
+      onToggleFavorite: (team) =>
+          unawaited(_toggleFavoriteTeam(team, isHome: false)),
+      onMenuOpenChanged: (open) => setState(() {
+        _openMenuId = open ? 0 : (_openMenuId == 0 ? null : _openMenuId);
+      }),
+    );
+    final home = _TeamDropdown(
+      menuId: 1,
+      openMenuId: _openMenuId,
+      label: 'Home',
+      value: _homeTeam,
+      teams: _sortedTeams(exclude: _awayTeam),
+      enabled: _teamsUnlocked && !_loadingTeams,
+      sideFavorite: _favoriteHome,
+      favoriteNames: _favoriteTeamNames,
+      focusNode: _homeFocus,
+      hideLabel: true,
+      fieldHeight: 34,
+      hintText: _sportChosen ? 'Select team' : 'Pick a league first',
+      onChanged: _setHomeTeam,
+      onToggleFavorite: (team) =>
+          unawaited(_toggleFavoriteTeam(team, isHome: true)),
+      onMenuOpenChanged: (open) => setState(() {
+        _openMenuId = open ? 1 : (_openMenuId == 1 ? null : _openMenuId);
+      }),
+    );
+    final swap = _Pressable(
+      height: 32,
+      width: 32,
+      radius: 8,
+      padding: EdgeInsets.zero,
+      color: Colors.transparent,
+      hoverColor: FfTokens.sessionHv,
+      onPressed: _teamsUnlocked ? _swapTeams : null,
+      child: PhosphorIcon(
+        PhosphorIconsRegular.arrowsLeftRight,
+        size: 16,
+        color: FfTokens.sessionT3,
+      ),
+    );
+    final teams = _setupGate(
+      unlocked: _teamsUnlocked,
+      child: narrow
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                away,
+                const SizedBox(height: 6),
+                Center(child: Transform.rotate(angle: 1.5708, child: swap)),
+                const SizedBox(height: 6),
+                home,
+              ],
             )
-          else
-            Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 920),
-                child: Row(
-                  children: [
-                    for (var i = 0; i < options.length; i++) ...[
-                      if (i > 0) const SizedBox(width: 12),
-                      Expanded(
-                        child: _Pressable(
-                          height: 132,
-                          radius: 12,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 16,
-                          ),
-                          color: options[i].$1 == current
-                              ? FfTokens.nocturneAccentSoft
-                              : FfTokens.nocturneSf,
-                          borderColor: options[i].$1 == current
-                              ? FfTokens.nocturneAccentEdge
-                              : FfTokens.sessionLn,
-                          borderWidth: options[i].$1 == current ? 1.4 : 1,
-                          hoverColor: FfTokens.sessionHv,
-                          onPressed: () =>
-                              unawaited(_selectStyle(options[i].$1)),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              PhosphorIcon(
-                                iconFor(options[i].$1),
-                                size: 28,
-                                color: options[i].$1 == current
-                                    ? FfTokens.nocturneAc
-                                    : FfTokens.sessionT2,
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                options[i].$2,
-                                textAlign: TextAlign.center,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontFamily: FfTokens.fontFamily,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  color: options[i].$1 == current
-                                      ? FfTokens.sessionTx
-                                      : FfTokens.sessionT2,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
+          : Row(
+              children: [
+                Expanded(child: away),
+                const SizedBox(width: 6),
+                swap,
+                const SizedBox(width: 6),
+                Expanded(child: home),
+              ],
+            ),
+    );
+
+    if (narrow) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          league,
+          const SizedBox(height: 6),
+          teams,
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            league,
+            const SizedBox(width: 6),
+            Expanded(child: teams),
+          ],
+        ),
+        const SizedBox(height: 4),
+        _setupGate(
+          unlocked: _teamsUnlocked,
+          child: const Row(
+            children: [
+              SizedBox(width: 112),
+              SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Away',
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 11,
+                    color: FfTokens.sessionT3,
+                  ),
                 ),
               ),
+              SizedBox(width: 38),
+              Expanded(
+                child: Text(
+                  'Home',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 11,
+                    color: FfTokens.sessionT3,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildV6IptcField({required bool narrow}) {
+    final applyMode = _iptcSource == _IptcSourceMode.apply;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _V5Segmented<_IptcSourceMode>(
+          value: _iptcSource,
+          small: true,
+          selectedColor:
+              applyMode ? FfTokens.sessionHot : FfTokens.nocturneAccentSoft,
+          selectedBorder:
+              applyMode ? FfTokens.nocturneAc : FfTokens.nocturneAccentEdge,
+          onChanged: (next) => unawaited(_setIptcSource(next)),
+          options: const [
+            (_IptcSourceMode.apply, 'Apply IPTC Template'),
+            (_IptcSourceMode.fill, 'Fill Partial Gaps in IPTC'),
+            (_IptcSourceMode.files, 'Use Existing IPTC in Files'),
+          ],
+        ),
+        const SizedBox(height: 6),
+        _buildV6IptcNote(),
+        const SizedBox(height: 6),
+        Expanded(child: _buildV5InlineIptcMenu()),
+      ],
+    );
+  }
+
+  Widget _buildV6IptcNote() {
+    final missingCount =
+        _missingCaptionIptc.length + _missingFilingIptc.length;
+    final IconData icon;
+    final Color iconColor;
+    final List<InlineSpan> spans;
+
+    if (_iptcSource == _IptcSourceMode.files) {
+      icon = PhosphorIconsRegular.fileMagnifyingGlass;
+      iconColor = FfTokens.sessionOk;
+      final scanWarn =
+          _iptcScanTotal > 0 && _iptcScanWithCityDate < _iptcScanTotal;
+      spans = [
+        const TextSpan(
+          text:
+              'Captions read place and date from each photo’s own IPTC. ',
+        ),
+        const TextSpan(
+          text: 'Nothing is written',
+          style: TextStyle(
+            color: FfTokens.sessionTx,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const TextSpan(text: ' except the caption. '),
+        if (_iptcScanTotal > 0)
+          TextSpan(
+            text:
+                '$_iptcScanWithCityDate of $_iptcScanTotal have city and date.',
+            style: TextStyle(
+              color: scanWarn ? FfTokens.sessionWarn : FfTokens.sessionOk,
+              fontWeight: FontWeight.w600,
             ),
-          const Spacer(flex: 3),
-          Align(
-            alignment: Alignment.centerRight,
-            child: _GoTimeButton(
-              enabled: _canContinueFromWire,
-              loading: false,
-              compact: false,
-              label: 'Continue',
-              shortcut: '↵',
-              onPressed: () => unawaited(_continueFromWire()),
+          )
+        else if (_scanningIptc)
+          const TextSpan(text: 'Scanning folder…')
+        else
+          const TextSpan(text: 'Choose a folder to scan IPTC.'),
+      ];
+    } else if (_iptcSource == _IptcSourceMode.apply) {
+      final warn = _hasIptcFieldWarnings;
+      icon = PhosphorIconsFill.warningCircle;
+      iconColor = FfTokens.nocturneAc;
+      spans = [
+        const TextSpan(
+          text: 'Overwrites IPTC already on each photo with this template. ',
+          style: TextStyle(
+            color: FfTokens.nocturneAc,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        if (warn)
+          TextSpan(
+            text: '$missingCount fields missing for $_filingWireLabel.',
+          )
+        else
+          const TextSpan(text: 'Template complete.'),
+      ];
+    } else {
+      final warn = _hasIptcFieldWarnings;
+      icon = warn
+          ? PhosphorIconsFill.warningCircle
+          : PhosphorIconsFill.checkCircle;
+      iconColor = warn
+          ? (_missingCaptionIptc.isNotEmpty
+              ? _captionWarnColor
+              : _filingWarnColor)
+          : FfTokens.sessionOk;
+      spans = [
+        const TextSpan(
+          text: 'Fills empty fields only — anything already in a file is kept. ',
+        ),
+        const TextSpan(
+          text: 'Highlighted fields will update on ingest. ',
+          style: TextStyle(
+            color: FfTokens.sessionTx,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        if (warn) ...[
+          TextSpan(
+            text: 'Still need for $_filingWireLabel: ',
+            style: const TextStyle(
+              color: FfTokens.sessionT2,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          ..._missingIptcNameSpans(),
+          const TextSpan(text: '.'),
+        ] else
+          const TextSpan(
+            text: 'Template complete.',
+            style: TextStyle(
+              color: FfTokens.sessionOk,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+      ];
+    }
+
+    final applyMode = _iptcSource == _IptcSourceMode.apply;
+    final fillMissing =
+        _iptcSource == _IptcSourceMode.fill && _hasIptcFieldWarnings;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+      decoration: BoxDecoration(
+        color: applyMode ? FfTokens.sessionHot : FfTokens.nocturneSf,
+        borderRadius: BorderRadius.circular(8),
+        border: applyMode ? Border.all(color: FfTokens.nocturneAc) : null,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          PhosphorIcon(icon, size: 14, color: iconColor),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                style: const TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 12,
+                  height: 1.3,
+                  color: FfTokens.sessionT2,
+                ),
+                children: spans,
+              ),
+              maxLines: fillMissing ? 3 : 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -2481,120 +2962,103 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     );
   }
 
-  /// Step 2 — setup panel (Images / IPTC / League / Teams).
-  Widget _buildV5SetupPanel({required bool stackTeams}) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget _buildV6ActionRow({
+    required bool showBack,
+    required VoidCallback onGo,
+  }) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: FfTokens.sessionLn)),
+      ),
+      child: Row(
         children: [
-            // Images + League + Teams on one row.
-            Container(
-              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-              decoration: const BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: FfTokens.sessionLn),
-                ),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: 56,
-                    height: 40,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text('Images', style: _kSectionLabel),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 280,
-                    child: _buildV5ImagesField(),
-                  ),
-                  const SizedBox(width: 16),
-                  SizedBox(
-                    width: 52,
-                    height: 40,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text('League', style: _kSectionLabel),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 180,
-                    child: _setupGate(
-                      unlocked: _leagueUnlocked,
-                      child: _buildV5LeagueField(),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  SizedBox(
-                    width: 48,
-                    height: 40,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text('Teams', style: _kSectionLabel),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _setupGate(
-                      unlocked: _teamsUnlocked,
-                      child: _buildV5TeamsField(stack: false),
-                    ),
-                  ),
-                ],
-              ),
+          Expanded(child: _buildV6Status()),
+          if (showBack) ...[
+            _buildStepBackButton(
+              onPressed: _going ? null : () => _showSetupStep(1),
             ),
-            // IPTC template only after both teams are chosen.
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 6, 10, 4),
-                child: _bothTeamsChosen
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const Text('IPTC', style: _kSectionLabel),
-                          const SizedBox(height: 6),
-                          Expanded(child: _buildV5IptcSourceField()),
-                        ],
-                      )
-                    : const Center(
-                        child: Text(
-                          'Select away and home teams to set up IPTC',
-                          style: TextStyle(
-                            fontFamily: FfTokens.fontFamily,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: FfTokens.sessionT3,
-                          ),
-                        ),
-                      ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 4, 10, 6),
-              child: Row(
-                children: [
-                  _buildStepBackButton(
-                    onPressed: () => _showSetupStep(1),
-                  ),
-                  const Spacer(),
-                  _GoTimeButton(
-                    enabled: _canContinue,
-                    loading: false,
-                    compact: false,
-                    label: 'Continue',
-                    shortcut: '↵',
-                    onPressed: () => unawaited(_continueToCaptionStep()),
-                  ),
-                ],
-              ),
-            ),
+            const SizedBox(width: 8),
           ],
-        ),
+          _GoTimeButton(
+            enabled: _canGo,
+            loading: _going,
+            compact: false,
+            label: 'Go time',
+            shortcut: '⌘↵',
+            onPressed: onGo,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildV6Status() {
+    final missingCount =
+        _missingCaptionIptc.length + _missingFilingIptc.length;
+    if (_setupStep == 1) {
+      if (!_sportChosen) {
+        return const _FooterStatus(
+          icon: PhosphorIconsRegular.info,
+          iconColor: FfTokens.sessionT3,
+          text: 'Pick a league to continue',
+        );
+      }
+      if (!_awayFilled || !_homeFilled) {
+        return const _FooterStatus(
+          icon: PhosphorIconsRegular.info,
+          iconColor: FfTokens.sessionT3,
+          text: 'Pick both teams to continue',
+        );
+      }
+      if (!_folderChosen) {
+        return const _FooterStatus(
+          icon: PhosphorIconsRegular.info,
+          iconColor: FfTokens.sessionT3,
+          text: 'Choose an images folder',
+        );
+      }
+      if (!_wireChosen) {
+        return const _FooterStatus(
+          icon: PhosphorIconsRegular.info,
+          iconColor: FfTokens.sessionT3,
+          text: 'Choose Getty, Imagn, AP, or CP',
+        );
+      }
+      if (_iptcSource != _IptcSourceMode.files && _hasIptcFieldWarnings) {
+        return _FooterStatus(
+          icon: PhosphorIconsFill.warningCircle,
+          iconColor: FfTokens.sessionWarn,
+          linkLabel: '$missingCount IPTC fields missing for $_filingWireLabel',
+          onLink: () => unawaited(_openIptcForMissingFields()),
+        );
+      }
+      return const _FooterStatus(
+        icon: PhosphorIconsFill.checkCircle,
+        iconColor: FfTokens.sessionOk,
+        text: 'Ready',
+      );
+    }
+    if (_iptcSource == _IptcSourceMode.files) {
+      return const _FooterStatus(
+        icon: PhosphorIconsRegular.fileMagnifyingGlass,
+        iconColor: FfTokens.sessionT3,
+        text: 'Underlined values are read from each file',
+      );
+    }
+    if (_hasIptcFieldWarnings) {
+      return _FooterStatus(
+        icon: PhosphorIconsFill.warningCircle,
+        iconColor: FfTokens.sessionWarn,
+        linkLabel:
+            'IPTC warning — $missingCount fields missing to file to $_filingWireLabel',
+        onLink: () => unawaited(_openIptcForMissingFields()),
+      );
+    }
+    return const _FooterStatus(
+      icon: PhosphorIconsFill.checkCircle,
+      iconColor: FfTokens.sessionOk,
+      text: 'IPTC template complete',
     );
   }
 
@@ -2731,62 +3195,87 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
   Widget _buildV5ImagesField() {
     final chosen = _folderChosen;
-    final title = chosen ? p.basename(_folderPath!) : 'Choose a folder…';
-    final subtitle = chosen
+    final buttonLabel = _pickingFolder
+        ? 'Opening…'
+        : (chosen ? 'Change folder' : 'Choose a folder…');
+    final path = chosen ? _folderPath! : '';
+    final photoLabel = chosen
         ? (_imageCount == 1 ? '1 photo' : '$_imageCount photos')
         : '';
     return DropTarget(
       onDragEntered: (_) => setState(() => _folderDragOver = true),
       onDragExited: (_) => setState(() => _folderDragOver = false),
       onDragDone: _onFolderDropped,
-      child: _Pressable(
-        height: 40,
-        radius: 9,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        color: _folderDragOver
-            ? FfTokens.sessionOnSoft
-            : FfTokens.sessionEl,
-        hoverColor: FfTokens.sessionHv,
-        borderColor: _folderDragOver ? FfTokens.sessionOn : Colors.transparent,
-        borderWidth: _folderDragOver ? 1 : 0,
-        onPressed: _pickingFolder ? null : _pickFolder,
-        child: Row(
-          children: [
-            PhosphorIcon(
-              chosen
-                  ? PhosphorIconsRegular.folder
-                  : PhosphorIconsRegular.folderSimpleDashed,
-              size: 17,
-              color: FfTokens.sessionT3,
+      child: Row(
+        children: [
+          SizedBox(
+            width: _templateBtnWidth,
+            child: _Pressable(
+              height: 34,
+              radius: 8,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              color: _folderDragOver
+                  ? FfTokens.sessionOnSoft
+                  : FfTokens.sessionEl,
+              hoverColor: FfTokens.sessionHv,
+              borderColor:
+                  _folderDragOver ? FfTokens.sessionOn : Colors.transparent,
+              borderWidth: _folderDragOver ? 1 : 0,
+              onPressed: _pickingFolder ? null : _pickFolder,
+              child: Row(
+                children: [
+                  PhosphorIcon(
+                    chosen
+                        ? PhosphorIconsRegular.folder
+                        : PhosphorIconsRegular.folderSimpleDashed,
+                    size: 15,
+                    color: FfTokens.sessionT3,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      buttonLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 13,
+                        fontWeight: chosen ? FontWeight.w600 : FontWeight.w500,
+                        color: chosen ? FfTokens.sessionTx : FfTokens.sessionT3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
+          ),
+          if (chosen) ...[
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                _pickingFolder ? 'Opening…' : title,
+                path,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontSize: 14,
-                  fontWeight: chosen ? FontWeight.w600 : FontWeight.w500,
-                  color: chosen ? FfTokens.sessionTx : FfTokens.sessionT3,
-                ),
-              ),
-            ),
-            if (subtitle.isNotEmpty) ...[
-              const SizedBox(width: 8),
-              Text(
-                subtitle,
                 style: const TextStyle(
                   fontFamily: FfTokens.fontFamily,
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
-                  color: FfTokens.sessionT3,
+                  color: FfTokens.sessionT2,
                 ),
               ),
-            ],
+            ),
+            const SizedBox(width: 8),
+            Text(
+              photoLabel,
+              style: const TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: FfTokens.sessionT3,
+              ),
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -2800,6 +3289,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       includeInAppGenerated: true,
     );
     await prefs.saveIptcWirePreset(wire, preset: preset);
+    // Apply-on-import/save reads selected_metadata_preset — keep it in sync
+    // with the wire preset the inline editor just wrote.
+    await prefs.syncActiveMetadataPresetFromWire(wire);
     if (!mounted) return;
     setState(() {
       final preview = Map<String, String>.from(_iptcValuesFromFiles);
@@ -2817,16 +3309,30 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
   void _onInlineIptcValueChanged(String storageKey, String value) {
     if (_iptcSource == _IptcSourceMode.files) return;
+    // Do not bump [_iptcInlineRevision] here — that remounts every field
+    // (ValueKey includes revision) and drops focus after the first character.
     setState(() {
       final next = Map<String, String>.from(_iptcValuesFromTemplate);
+      final typed = Set<String>.from(_iptcTemplateTypedKeys);
       final trimmed = value.trim();
+      final preset = IptcTemplateApplyService.toPresetKey(storageKey);
+      final panel = IptcTemplateApplyService.toPanelKey(preset);
       if (trimmed.isEmpty) {
         next.remove(storageKey);
+        next.remove(preset);
+        next.remove(panel);
+        typed.remove(storageKey);
+        typed.remove(preset);
+        typed.remove(panel);
       } else {
         next[storageKey] = value;
+        typed.add(storageKey);
+        typed.add(preset);
+        typed.add(panel);
       }
       _iptcValuesFromTemplate = next;
-      _iptcInlineRevision++;
+      _iptcTemplateTypedKeys = typed;
+      _recomputeMissingIptcWarnings();
     });
     unawaited(_persistInlineIptcTemplate());
   }
@@ -2835,9 +3341,105 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     if (_iptcSource == _IptcSourceMode.files) return;
     setState(() {
       _iptcValuesFromTemplate = const {};
+      _iptcTemplateTypedKeys = {};
       _iptcInlineRevision++;
+      _recomputeMissingIptcWarnings();
     });
     unawaited(_persistInlineIptcTemplate());
+  }
+
+  Map<String, String> _withDefaultUrgency(Map<String, String> values) {
+    final next = Map<String, String>.from(values);
+    final current = IptcTemplateApplyService.lookupValue(next, 'Urgency');
+    if (current == null || current.trim().isEmpty) {
+      next['Urgency'] = '5';
+    }
+    return next;
+  }
+
+  Future<void> _loadExternalIptcTemplate() async {
+    if (_loadingExternalIptc || _iptcSource != _IptcSourceMode.apply) return;
+    String? lastDir;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      lastDir = prefs.getString('last_template_folder');
+    } catch (_) {}
+    final filePath = await NativeFilePicker.pickFile(
+      allowedExtensions: const ['txt', 'xmp', 'jpg', 'jpeg'],
+      initialDirectory: lastDir,
+    );
+    if (filePath == null || !mounted) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        'last_template_folder',
+        File(filePath).parent.path,
+      );
+    } catch (_) {}
+
+    setState(() => _loadingExternalIptc = true);
+    try {
+      final result = await IptcTemplateImportService.importFromPath(filePath);
+      if (!mounted) return;
+      if (result == null || result.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No IPTC fields found in that file.')),
+        );
+        return;
+      }
+      setState(() {
+        _iptcValuesFromTemplate = _withDefaultUrgency(
+          IptcTemplateApplyService.panelValuesFromImportedTemplate(
+            result.values,
+            _iptcInlineWire,
+          ),
+        );
+        _iptcTemplateTypedKeys = {};
+        _iptcInlineRevision++;
+        _recomputeMissingIptcWarnings();
+      });
+      await _persistInlineIptcTemplate();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not load template: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _loadingExternalIptc = false);
+    }
+  }
+
+  /// True when [files] already has a non-empty value for [key] (any alias).
+  bool _iptcFileHasValue(Map<String, String> files, String key) {
+    final v = IptcTemplateApplyService.lookupValue(files, key);
+    if (v == null) return false;
+    final trimmed = v.trim();
+    return trimmed.isNotEmpty &&
+        !IptcTemplateApplyService.isInAppGeneratedPlaceholder(trimmed);
+  }
+
+  bool _iptcKeyInSet(Set<String> keys, String key) {
+    if (keys.contains(key)) return true;
+    final preset = IptcTemplateApplyService.toPresetKey(key);
+    return keys.contains(preset) ||
+        keys.contains(IptcTemplateApplyService.toPanelKey(preset));
+  }
+
+  /// Template keys that will write into empty file slots on ingest (teal).
+  Set<String> get _iptcFillUpdateKeys {
+    final keys = <String>{..._iptcTemplateTypedKeys};
+    final files = _iptcValuesFromFiles;
+    for (final e in _iptcValuesFromTemplate.entries) {
+      final trimmed = e.value.trim();
+      if (trimmed.isEmpty) continue;
+      if (IptcTemplateApplyService.isInAppGeneratedPlaceholder(trimmed)) {
+        continue;
+      }
+      if (!_iptcFileHasValue(files, e.key)) {
+        keys.add(e.key);
+      }
+    }
+    return keys;
   }
 
   /// Values shown in the inline IPTC builder — always seeded from folder files.
@@ -2848,7 +3450,8 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       case _IptcSourceMode.files:
         return files;
       case _IptcSourceMode.fill:
-        // Keep file values; template only fills blanks.
+        // Keep file values; template only fills blanks. Typed keys always win
+        // so filling a yellow gap clears the warning immediately.
         final out = Map<String, String>.from(files);
         for (final e in template.entries) {
           final trimmed = e.value.trim();
@@ -2856,7 +3459,10 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
           if (IptcTemplateApplyService.isInAppGeneratedPlaceholder(trimmed)) {
             continue;
           }
-          out.putIfAbsent(e.key, () => e.value);
+          final typed = _iptcKeyInSet(_iptcTemplateTypedKeys, e.key);
+          if (typed || !_iptcFileHasValue(out, e.key)) {
+            out[e.key] = e.value;
+          }
         }
         return out;
       case _IptcSourceMode.apply:
@@ -2886,6 +3492,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         : _styleCatalog!.labelFor(
             _selectedStyleToken ?? _styleCatalog!.activeToken,
           );
+    final applyMode = source == _IptcSourceMode.apply;
     final title = fromFiles
         ? 'From files'
         : 'TEMPLATE PAGE';
@@ -2897,15 +3504,20 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
     return Container(
       decoration: BoxDecoration(
-        color: onTemplate ? FfTokens.nocturneAccentSoft : FfTokens.nocturneSf,
-        borderRadius: BorderRadius.circular(12),
+        color: applyMode
+            ? FfTokens.sessionHot
+            : onTemplate
+                ? FfTokens.nocturneAccentSoft
+                : FfTokens.nocturneSf,
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: onTemplate ? FfTokens.nocturneAccentEdge : FfTokens.sessionLn,
-          width: onTemplate ? 1.2 : 1,
+          color: applyMode
+              ? FfTokens.nocturneAc
+              : onTemplate
+                  ? FfTokens.nocturneAccentEdge
+                  : FfTokens.sessionLn,
+          width: onTemplate || applyMode ? 1.1 : 1,
         ),
-        boxShadow: onTemplate
-            ? FfTokens.accentButtonGlow(FfTokens.nocturneAc)
-            : null,
       ),
       clipBehavior: Clip.antiAlias,
       child: !_folderChosen
@@ -2914,7 +3526,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                 'Choose a folder to see IPTC fields.',
                 style: TextStyle(
                   fontFamily: FfTokens.fontFamily,
-                  fontSize: 13,
+                  fontSize: 12,
                   color: FfTokens.sessionT3,
                 ),
               ),
@@ -2922,39 +3534,52 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
           : scanning
               ? const Center(
                   child: SizedBox(
-                    width: 18,
-                    height: 18,
+                    width: 16,
+                    height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   ),
                 )
               : IptcTemplateEditor(
+                  // Remount on wire/source/highlight group — not on every
+                  // keystroke, so Fill-gaps legend focus stays put while typing.
+                  // Don't remount when missing-warning lists shrink — that
+                  // would drop focus mid-keystroke while filling a yellow gap.
                   key: ValueKey(
-                    'inline-iptc-$_iptcInlineRevision-${_iptcInlineWire.name}-$source',
+                    'inline-iptc-${_iptcInlineWire.name}-$source',
                   ),
                   wire: _iptcInlineWire,
                   templates: const [],
                   selectedTemplateId: '',
                   values: values,
                   foundInFilesKeys: _iptcKeysFoundInFiles,
+                  // Fill Partial Gaps: teal on fields that will write on ingest.
+                  templateUpdateKeys: source == _IptcSourceMode.fill
+                      ? _iptcFillUpdateKeys
+                      : const {},
                   revision: _iptcInlineRevision,
                   fieldsEnabled: onTemplate,
                   onTemplateSelected: (_) {},
                   onValueChanged: fromFiles
                       ? (_, __) {}
                       : _onInlineIptcValueChanged,
-                  onLoadTemplate: null,
+                  onLoadTemplate:
+                      applyMode ? _loadExternalIptcTemplate : null,
                   onClearTemplate:
                       fromFiles ? null : _clearInlineIptcTemplate,
                   onSaveTemplate: null,
-                  loadEnabled: false,
+                  loadEnabled: applyMode && !_loadingExternalIptc,
                   clearEnabled: onTemplate,
+                  loadingTemplate: _loadingExternalIptc,
                   embedded: true,
                   showTemplateControls: false,
-                  templatePageHeader: onTemplate,
+                  templatePageHeader: applyMode,
                   title: title,
                   subtitle: subtitle,
                   captionTemplate: _captionTemplate,
                   captionStyleLabel: styleLabel,
+                  // Don't auto-enter legend focus — it greys out the other
+                  // fields. Missing blanks already get yellow borders/dots.
+                  initialMissingHighlight: null,
                   onCancel: () {},
                   onDone: () {},
                 ),
@@ -2969,9 +3594,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
           value: _iptcSource,
           onChanged: (next) => unawaited(_setIptcSource(next)),
           options: const [
-            (_IptcSourceMode.apply, 'Apply my template'),
-            (_IptcSourceMode.fill, 'Fill missing IPTC'),
-            (_IptcSourceMode.files, 'Already in files'),
+            (_IptcSourceMode.apply, 'Apply IPTC Template'),
+            (_IptcSourceMode.fill, 'Fill Partial Gaps in IPTC'),
+            (_IptcSourceMode.files, 'Use Existing IPTC in Files'),
           ],
         ),
         const SizedBox(height: 10),
@@ -2986,13 +3611,13 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       builder: (context, _, __) {
         return _SessionSelect(
           value: _sport,
-          hint: _leagueUnlocked ? 'Select league' : 'Pick a folder first',
+          hint: 'Select league',
           enabled: _leagueUnlocked,
-          height: 40,
-          fontSize: 14,
+          height: 34,
+          fontSize: 13,
           leading: PhosphorIcon(
             _sportIcon(_sport),
-            size: 17,
+            size: 15,
             color: FfTokens.sessionT3,
           ),
           options: [
@@ -3130,9 +3755,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     final countLabel =
         _imageCount == 1 ? '1' : '$_imageCount';
     final srcLabel = switch (_iptcSource) {
-      _IptcSourceMode.apply => 'My template',
-      _IptcSourceMode.fill => 'Fill missing',
-      _IptcSourceMode.files => 'From files',
+      _IptcSourceMode.apply => 'Apply template',
+      _IptcSourceMode.fill => 'Fill gaps',
+      _IptcSourceMode.files => 'Existing in files',
     };
     final iptcDot = _iptcSource != _IptcSourceMode.files &&
             _hasIptcFieldWarnings
@@ -3145,7 +3770,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     Widget chip({
       required String focus,
       required Widget child,
-      int step = 2,
+      int step = 1,
     }) {
       return _Pressable(
         height: 32,
@@ -3177,7 +3802,6 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         children: [
           chip(
             focus: 'wire',
-            step: 1,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -3236,6 +3860,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
           divider(),
           chip(
             focus: 'src',
+            // IPTC lives on step 1 in v6.
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -3352,7 +3977,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
             hoverColor: FfTokens.sessionHv,
             hoverForeground: true,
             foreground: FfTokens.sessionT2,
-            onPressed: () => _showSetupStep(2),
+            onPressed: () => _showSetupStep(1),
             child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -3864,21 +4489,21 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
           ),
         ),
         const SizedBox(width: 10),
-        // Must be Expanded — _V5Segmented uses Expanded chips and cannot
-        // sit loose in a Row (unbounded width collapses the caption header).
         if (tokens.isNotEmpty)
-          Expanded(
-            child: _V5Segmented<String>(
+          SizedBox(
+            width: 128,
+            child: _SessionSelect(
               value: current ?? tokens.first,
-              small: true,
-              onChanged: (token) => unawaited(_selectStyle(token)),
+              hint: 'Wire',
+              height: 30,
+              fontSize: 13,
               options: [
                 for (final token in tokens) (token, catalog!.labelFor(token)),
               ],
+              onChanged: (token) => unawaited(_selectStyle(token)),
             ),
-          )
-        else
-          const Spacer(),
+          ),
+        const Spacer(),
         if (showSave)
           _Pressable(
             height: 32,
@@ -4574,7 +5199,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
           const SizedBox(height: 8),
           LayoutBuilder(
             builder: (context, constraints) {
-              final cols = constraints.maxWidth >= 1100
+              final cols = constraints.maxWidth >= 1000
                   ? 5
                   : constraints.maxWidth >= 900
                       ? 3
@@ -4606,22 +5231,23 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         _missingCaptionIptc.length + _missingFilingIptc.length;
     final Widget status;
     if (_setupStep == 1) {
-      status = _FooterStatus(
-        icon: _wireChosen
-            ? PhosphorIconsFill.checkCircle
-            : PhosphorIconsRegular.info,
-        iconColor:
-            _wireChosen ? FfTokens.sessionOk : FfTokens.sessionT3,
-        text: _wireChosen
-            ? 'Filing to $_selectedWireLabel'
-            : 'Choose Getty, Imagn, AP, or CP',
-      );
-    } else if (_setupStep == 2) {
-      if (!_folderChosen) {
+      if (!_wireChosen) {
         status = const _FooterStatus(
           icon: PhosphorIconsRegular.info,
           iconColor: FfTokens.sessionT3,
-          text: 'Choose an images folder',
+          text: 'Choose Getty, Imagn, AP, or CP',
+        );
+      } else if (!_folderChosen) {
+        status = _FooterStatus(
+          icon: PhosphorIconsRegular.info,
+          iconColor: FfTokens.sessionT3,
+          text: 'Filing to $_selectedWireLabel — choose an images folder',
+        );
+      } else if (!_sportChosen) {
+        status = const _FooterStatus(
+          icon: PhosphorIconsRegular.info,
+          iconColor: FfTokens.sessionT3,
+          text: 'Pick a league to continue',
         );
       } else if (!_awayFilled || !_homeFilled) {
         status = const _FooterStatus(
@@ -4629,8 +5255,15 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
           iconColor: FfTokens.sessionT3,
           text: 'Pick both teams to continue',
         );
-      } else if (_iptcSource != _IptcSourceMode.files &&
-          _hasIptcFieldWarnings) {
+      } else {
+        status = _FooterStatus(
+          icon: PhosphorIconsFill.checkCircle,
+          iconColor: FfTokens.sessionOk,
+          text: 'Filing to $_selectedWireLabel',
+        );
+      }
+    } else if (_setupStep == 2) {
+      if (_iptcSource != _IptcSourceMode.files && _hasIptcFieldWarnings) {
         status = _FooterStatus(
           icon: PhosphorIconsFill.warningCircle,
           iconColor: FfTokens.sessionWarn,
@@ -4892,6 +5525,7 @@ class _CaptionPreviewLive extends StatelessWidget {
     required this.template,
     required this.gettyNbaeNote,
     required this.fontSize,
+    this.maxLines = 6,
   });
 
   final String? sport;
@@ -4903,6 +5537,7 @@ class _CaptionPreviewLive extends StatelessWidget {
   final CaptionTemplate? template;
   final bool gettyNbaeNote;
   final double fontSize;
+  final int maxLines;
 
   static const _awayPlaceholder = 'Away team';
   static const _homePlaceholder = 'Home team';
@@ -5015,7 +5650,7 @@ class _CaptionPreviewLive extends StatelessWidget {
           rule: FfTokens.sessionLn2,
         ),
       ),
-      maxLines: 6,
+      maxLines: maxLines,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
         fontFamily: FfTokens.fontFamily,
@@ -5540,6 +6175,7 @@ class _SessionSelect extends StatelessWidget {
     required this.options,
     required this.onChanged,
     this.leading,
+    this.trailing,
     this.fontWeight = FontWeight.w600,
     this.enabled = true,
     this.height = 32,
@@ -5551,6 +6187,7 @@ class _SessionSelect extends StatelessWidget {
   final List<(String, String)> options;
   final ValueChanged<String> onChanged;
   final Widget? leading;
+  final Widget? trailing;
   final FontWeight fontWeight;
   final bool enabled;
   final double height;
@@ -5570,8 +6207,8 @@ class _SessionSelect extends StatelessWidget {
       opacity: enabled ? 1 : 0.55,
       child: _Pressable(
         height: height,
-        radius: 7,
-        padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
+        radius: 9,
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
         color: FfTokens.sessionEl,
         hoverColor: enabled ? FfTokens.sessionHv : FfTokens.sessionEl,
         onPressed: enabled ? () => _open(context) : null,
@@ -5579,9 +6216,9 @@ class _SessionSelect extends StatelessWidget {
           children: [
             if (leading != null) ...[
               leading!,
-              const SizedBox(width: 6),
+              const SizedBox(width: 10),
             ],
-            Expanded(
+            Flexible(
               child: Text(
                 hasValue ? label : hint,
                 maxLines: 1,
@@ -5590,15 +6227,19 @@ class _SessionSelect extends StatelessWidget {
                 style: TextStyle(
                   fontFamily: FfTokens.fontFamily,
                   fontSize: fontSize,
-                  fontWeight: fontWeight,
+                  fontWeight: hasValue ? fontWeight : FontWeight.w500,
                   color: hasValue ? FfTokens.sessionTx : FfTokens.sessionT3,
                 ),
               ),
             ),
+            if (trailing != null) ...[
+              const SizedBox(width: 10),
+              Flexible(child: trailing!),
+            ],
             const SizedBox(width: 8),
             const PhosphorIcon(
               PhosphorIconsRegular.caretDown,
-              size: 12,
+              size: 14,
               color: FfTokens.sessionT3,
             ),
           ],
@@ -6913,15 +7554,21 @@ class _V5Segmented<T> extends StatelessWidget {
     required this.options,
     required this.onChanged,
     this.small = false,
+    this.selectedColor,
+    this.selectedBorder,
   });
 
   final T value;
   final List<(T, String)> options;
   final ValueChanged<T> onChanged;
   final bool small;
+  final Color? selectedColor;
+  final Color? selectedBorder;
 
   @override
   Widget build(BuildContext context) {
+    final activeColor = selectedColor ?? FfTokens.nocturneAccentSoft;
+    final activeBorder = selectedBorder ?? FfTokens.nocturneAccentEdge;
     return Focus(
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
@@ -6951,12 +7598,9 @@ class _V5Segmented<T> extends StatelessWidget {
                   height: small ? 28 : 36,
                   radius: 7,
                   padding: EdgeInsets.symmetric(horizontal: small ? 10 : 12),
-                  color: option.$1 == value
-                      ? FfTokens.nocturneAccentSoft
-                      : Colors.transparent,
-                  borderColor: option.$1 == value
-                      ? FfTokens.nocturneAccentEdge
-                      : Colors.transparent,
+                  color: option.$1 == value ? activeColor : Colors.transparent,
+                  borderColor:
+                      option.$1 == value ? activeBorder : Colors.transparent,
                   borderWidth: option.$1 == value ? 1 : 0,
                   hoverColor: FfTokens.sessionHv,
                   hoverForeground: option.$1 != value,

@@ -665,7 +665,6 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
           !keys.isAltPressed;
       final confirmCmdS = isS &&
           (keys.isMetaPressed || keys.isControlPressed) &&
-          !keys.isShiftPressed &&
           !keys.isAltPressed;
       if (confirmSelected || confirmCmdS) {
         _confirmBurstSaveSelected?.call();

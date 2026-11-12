@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -44,48 +45,69 @@ void main() {
     expect(cool.r, closeTo(0.5, 1e-9));
   });
 
-  test('contrast pivots on 18% gray and keeps channel ratios', () {
+  test('contrast pivots near 0.35 linear and keeps channel ratios', () {
     const grade = PhotoAdjustments(contrast: 100);
-    final gray = gradeLinearRgb(0.18, 0.18, 0.18, grade);
-    expect(gray.r, closeTo(0.18, 1e-6));
+    final gray = gradeLinearRgb(0.35, 0.35, 0.35, grade);
+    expect(gray.r, closeTo(0.35, 1e-6));
     final colored = gradeLinearRgb(0.20, 0.05, 0.08, grade);
     expect(colored.r / colored.g, closeTo(0.20 / 0.05, 0.001));
     expect(colored.b / colored.g, closeTo(0.08 / 0.05, 0.001));
     final dark = gradeLinearRgb(0.04, 0.04, 0.04, grade);
-    final bright = gradeLinearRgb(0.60, 0.60, 0.60, grade);
+    final bright = gradeLinearRgb(0.55, 0.55, 0.55, grade);
     expect(dark.r, lessThan(0.04));
-    expect(bright.r, greaterThan(0.60));
+    expect(bright.r, greaterThan(0.55));
+    // ACR-like: shadows move more (in stops) than near-white highlights.
+    final darkStops = math.log(dark.r / 0.04) / math.ln2;
+    final hi = gradeLinearRgb(0.90, 0.90, 0.90, grade);
+    final hiStops = math.log(hi.r / 0.90) / math.ln2;
+    expect(darkStops.abs(), greaterThan(hiStops.abs()));
   });
 
-  test('whites and blacks leave middle gray and move the ends', () {
+  test('whites lift upper-mids more than speculars; blacks move the toe', () {
     const whites = PhotoAdjustments(whites: 100);
-    final mid = gradeLinearRgb(0.18, 0.18, 0.18, whites);
-    final high = gradeLinearRgb(0.80, 0.80, 0.80, whites);
-    expect(mid.r, closeTo(0.18, 1e-5));
-    expect(high.r, greaterThan(0.80));
+    final low = gradeLinearRgb(0.08, 0.08, 0.08, whites);
+    final upper = gradeLinearRgb(0.55, 0.55, 0.55, whites);
+    final specular = gradeLinearRgb(0.95, 0.95, 0.95, whites);
+    expect(low.r, closeTo(0.08, 0.01));
+    expect(upper.r, greaterThan(0.55));
+    // ACR-like fade: specular whites move less (in stops) than upper mids.
+    final upperStops = math.log(upper.r / 0.55) / math.ln2;
+    final specStops = math.log(specular.r / 0.95) / math.ln2;
+    expect(upperStops, greaterThan(specStops));
 
     const blacks = PhotoAdjustments(blacks: 100);
-    final still = gradeLinearRgb(0.18, 0.18, 0.18, blacks);
+    final still = gradeLinearRgb(0.40, 0.40, 0.40, blacks);
     final toe = gradeLinearRgb(0.004, 0.004, 0.004, blacks);
-    expect(still.r, closeTo(0.18, 1e-5));
+    expect(still.r, closeTo(0.40, 0.02));
     expect(toe.r, greaterThan(0.004));
+    const crush = PhotoAdjustments(blacks: -100);
+    final crushed = gradeLinearRgb(0.04, 0.04, 0.04, crush);
+    expect(crushed.r, lessThan(0.04));
   });
 
-  test('positive shadows lift a dark field via the mask', () {
+  test('positive shadows lift darks hard and spare highlights', () {
     const grade = PhotoAdjustments(shadows: 100);
     final black = gradeDisplayRgb(0, 0, 0, grade, mask01: 0.0);
-    final dark = gradeDisplayRgb(0.15, 0.15, 0.15, grade, mask01: 0.05);
-    final mid = gradeDisplayRgb(0.5, 0.5, 0.5, grade, mask01: 0.55);
+    final dark = gradeLinearRgb(0.04, 0.04, 0.04, grade, mask01: 0.05);
+    final open = gradeLinearRgb(0.12, 0.12, 0.12, grade, mask01: 0.30);
+    final bright = gradeDisplayRgb(0.8, 0.8, 0.8, grade, mask01: 0.85);
     expect(black.r, closeTo(0, 0.02));
-    expect(dark.r, greaterThan(0.15));
-    expect(mid.r, closeTo(0.5, 0.08));
+    expect(dark.r, greaterThan(0.04));
+    // ACR-like: deeper mask weight lifts more (in stops) than open lower-mids.
+    final darkStops = math.log(dark.r / 0.04) / math.ln2;
+    final openStops = math.log(open.r / 0.12) / math.ln2;
+    expect(darkStops, greaterThan(openStops));
+    expect(bright.r, closeTo(0.8, 0.04));
   });
 
-  test('negative highlights darken bright regions via the mask', () {
+  test('negative highlights darken soft brights more than speculars', () {
     const grade = PhotoAdjustments(highlights: -100);
-    final bright = gradeDisplayRgb(0.85, 0.85, 0.85, grade, mask01: 0.9);
+    final soft = gradeDisplayRgb(0.75, 0.75, 0.75, grade, mask01: 0.65);
+    final specular = gradeDisplayRgb(0.95, 0.95, 0.95, grade, mask01: 0.98);
     final mid = gradeDisplayRgb(0.5, 0.5, 0.5, grade, mask01: 0.4);
-    expect(bright.r, lessThan(0.85));
+    expect(soft.r, lessThan(0.75));
+    // ACR-like fade: specular whites move less than soft highlights.
+    expect((0.75 - soft.r), greaterThan((0.95 - specular.r)));
     expect(mid.r, closeTo(0.5, 0.06));
   });
 
@@ -119,6 +141,12 @@ void main() {
     final gray = gradeDisplayRgb(0.5, 0.5, 0.5, grade);
     expect(black.r, closeTo(0, 0.002));
     expect(gray.r, greaterThan(gray.b + 0.02));
+    // Cool is weaker than warm (ACR-matched asymmetry).
+    const cool = PhotoAdjustments(temperature: -100);
+    final coolGray = gradeDisplayRgb(0.5, 0.5, 0.5, cool);
+    final warmSplit = gray.r - gray.b;
+    final coolSplit = coolGray.b - coolGray.r;
+    expect(warmSplit, greaterThan(coolSplit));
   });
 
   test('magenta tint reduces green relative to red/blue', () {
@@ -126,24 +154,81 @@ void main() {
     final gray = gradeDisplayRgb(0.5, 0.5, 0.5, grade);
     expect(gray.r, greaterThan(gray.g));
     expect(gray.b, greaterThan(gray.g));
+    // ACR-like: green-side tint is stronger than magenta at the same |value|.
+    const green = PhotoAdjustments(tint: -100);
+    final greenGray = gradeDisplayRgb(0.5, 0.5, 0.5, green);
+    final magentaSplit = ((gray.r + gray.b) / 2) - gray.g;
+    final greenSplit = greenGray.g - ((greenGray.r + greenGray.b) / 2);
+    expect(greenSplit, greaterThan(magentaSplit));
   });
 
   test('vibrance boosts low-sat more than high-sat', () {
     const grade = PhotoAdjustments(vibrance: 100);
     final dull = gradeLinearRgb(0.40, 0.38, 0.37, grade);
     final vivid = gradeLinearRgb(0.70, 0.20, 0.15, grade);
-    final dullChroma = ((dull.r - dull.luma).abs() +
-            (dull.g - dull.luma).abs() +
-            (dull.b - dull.luma).abs()) /
-        3;
-    final vividChroma = ((vivid.r - vivid.luma).abs() +
-            (vivid.g - vivid.luma).abs() +
-            (vivid.b - vivid.luma).abs()) /
-        3;
-    final dullBase = ((0.40 - 0.388).abs()); // roughly
-    expect(dullChroma, greaterThan(dullBase * 0.5));
-    // Vivid should not explode saturation as hard as a uniform sat boost.
-    expect(vividChroma, lessThan(0.55));
+    double chromaOf(GradeRgb c) {
+      final y = c.luma;
+      final dr = c.r - y;
+      final dg = c.g - y;
+      final db = c.b - y;
+      return math.sqrt(dr * dr + dg * dg + db * db);
+    }
+
+    final dullRatio =
+        chromaOf(dull) / chromaOf(const GradeRgb(0.40, 0.38, 0.37));
+    final vividRatio =
+        chromaOf(vivid) / chromaOf(const GradeRgb(0.70, 0.20, 0.15));
+    expect(dullRatio, greaterThan(1.2));
+    // Vivid should barely move vs low-sat (ACR soft-limits).
+    expect(vividRatio, lessThan(1.15));
+    expect(dullRatio, greaterThan(vividRatio));
+  });
+
+  test('negative vibrance hits low-sat harder than vivid', () {
+    const grade = PhotoAdjustments(vibrance: -40);
+    final dull = gradeLinearRgb(0.42, 0.40, 0.39, grade);
+    final vivid = gradeLinearRgb(0.70, 0.20, 0.15, grade);
+    double chromaOf(GradeRgb c) {
+      final y = c.luma;
+      final dr = c.r - y;
+      final dg = c.g - y;
+      final db = c.b - y;
+      return math.sqrt(dr * dr + dg * dg + db * db);
+    }
+
+    final dullRatio =
+        chromaOf(dull) / chromaOf(const GradeRgb(0.42, 0.40, 0.39));
+    final vividRatio =
+        chromaOf(vivid) / chromaOf(const GradeRgb(0.70, 0.20, 0.15));
+    expect(dullRatio, lessThan(0.75));
+    expect(vividRatio, greaterThan(dullRatio));
+    expect(vividRatio, lessThan(1.0));
+  });
+
+  test('saturation −100 fully desaturates; +sat soft-limits vivid', () {
+    const desat = PhotoAdjustments(saturation: -100);
+    final gray = gradeLinearRgb(0.55, 0.22, 0.18, desat);
+    expect((gray.r - gray.g).abs(), lessThan(1e-6));
+    expect((gray.g - gray.b).abs(), lessThan(1e-6));
+
+    const boost = PhotoAdjustments(saturation: 100);
+    final dull = gradeLinearRgb(0.42, 0.40, 0.39, boost);
+    final vivid = gradeLinearRgb(0.70, 0.20, 0.15, boost);
+    double chromaOf(GradeRgb c) {
+      final y = c.luma;
+      final dr = c.r - y;
+      final dg = c.g - y;
+      final db = c.b - y;
+      return math.sqrt(dr * dr + dg * dg + db * db);
+    }
+
+    final dullRatio = chromaOf(dull) /
+        chromaOf(const GradeRgb(0.42, 0.40, 0.39));
+    final vividRatio = chromaOf(vivid) /
+        chromaOf(const GradeRgb(0.70, 0.20, 0.15));
+    expect(dullRatio, greaterThan(1.5));
+    expect(vividRatio, lessThan(dullRatio));
+    expect(vividRatio, lessThan(1.4));
   });
 
   test('preset round-trip preserves all sliders', () {
