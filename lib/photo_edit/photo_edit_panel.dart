@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
 import '../screens/caption_v2/data/caption_v2_controller.dart';
-import '../services/admin_service.dart';
 import '../screens/caption_v2/widgets/mobile_photo_filmstrip.dart';
 import '../screens/caption_v2/widgets/photo_preview_bar.dart';
 import '../theme/ff_tokens.dart';
@@ -35,9 +34,6 @@ class PhotoEditModeButton extends StatelessWidget {
     return AnimatedBuilder(
       animation: Listenable.merge([session, controller]),
       builder: (context, _) {
-        if (!AdminService.isCurrentUserAdminSync()) {
-          return const SizedBox.shrink();
-        }
         final path = controller.currentPath;
         final on = session.editing;
         final dirty = session.isDirty(path);
@@ -138,9 +134,6 @@ class PhotoCropModeButton extends StatelessWidget {
     return AnimatedBuilder(
       animation: Listenable.merge([session, controller]),
       builder: (context, _) {
-        if (!AdminService.isCurrentUserAdminSync()) {
-          return const SizedBox.shrink();
-        }
         final path = controller.currentPath;
         final on = session.cropping;
         final enabled = path != null && !session.saving;
@@ -239,9 +232,6 @@ class PhotoRotateButtons extends StatelessWidget {
     return AnimatedBuilder(
       animation: Listenable.merge([session, controller]),
       builder: (context, _) {
-        if (!AdminService.isCurrentUserAdminSync()) {
-          return const SizedBox.shrink();
-        }
         final path = controller.currentPath;
         final enabled = path != null && !session.saving;
         final active = session.rotationFor(path) != 0;

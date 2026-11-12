@@ -2,7 +2,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
-import '../services/admin_service.dart';
 import 'photo_adjustments.dart';
 import 'photo_crop.dart';
 import 'photo_grade_bake.dart';
@@ -102,7 +101,7 @@ class PhotoEditSession extends ChangeNotifier {
   }
 
   void toggleEditing() {
-    if (saving || !AdminService.isCurrentUserAdminSync()) return;
+    if (saving) return;
     editing = !editing;
     if (!editing) {
       cropping = false;
@@ -112,7 +111,7 @@ class PhotoEditSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Leaves edit/crop without requiring admin (used when previewing as user).
+  /// Leaves edit/crop (e.g. when switching layouts).
   void exitEditing() {
     if (!editing && !cropping && !comparing) return;
     editing = false;
@@ -129,7 +128,7 @@ class PhotoEditSession extends ChangeNotifier {
   }
 
   void toggleCropping() {
-    if (saving || !AdminService.isCurrentUserAdminSync()) return;
+    if (saving) return;
     cropping = !cropping;
     if (cropping) editing = true;
     error = null;
@@ -181,7 +180,7 @@ class PhotoEditSession extends ChangeNotifier {
 
   /// Rotate 90° clockwise. Crop stays in source space; preview uses [RotatedBox].
   void rotateClockwise(String path) {
-    if (saving || !AdminService.isCurrentUserAdminSync()) return;
+    if (saving) return;
     editing = true;
     _rotations[path] = (rotationFor(path) + 1) % 4;
     if (_rotations[path] == 0) _rotations.remove(path);
@@ -191,7 +190,7 @@ class PhotoEditSession extends ChangeNotifier {
 
   /// Rotate 90° counter-clockwise.
   void rotateCounterClockwise(String path) {
-    if (saving || !AdminService.isCurrentUserAdminSync()) return;
+    if (saving) return;
     editing = true;
     _rotations[path] = (rotationFor(path) + 3) % 4;
     if (_rotations[path] == 0) _rotations.remove(path);
@@ -201,7 +200,7 @@ class PhotoEditSession extends ChangeNotifier {
 
   /// Fine straighten for horizon fixes. Crop is reset to a safe inscribed frame.
   void setStraighten(String path, double degrees) {
-    if (saving || !AdminService.isCurrentUserAdminSync()) return;
+    if (saving) return;
     editing = true;
     cropping = true;
     final next = clampStraightenDegrees(degrees);

@@ -1676,14 +1676,6 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
             body: _onGround(
               t,
               ValueListenableBuilder<bool>(
-                valueListenable: AdminService.previewAsNonAdmin,
-                builder: (context, previewAsUser, _) {
-                  if (previewAsUser && _photoEdit.editing) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      _photoEdit.exitEditing();
-                    });
-                  }
-                  return ValueListenableBuilder<bool>(
                 valueListenable: captionV2ForceMobilePreview,
                 builder: (context, forceMobile, _) {
                   return LayoutBuilder(
@@ -1696,9 +1688,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                         AnimatedBuilder(
                           animation: _photoEdit,
                           builder: (context, _) {
-                            if (!useMobile &&
-                                _photoEdit.editing &&
-                                AdminService.isCurrentUserAdminSync()) {
+                            if (!useMobile && _photoEdit.editing) {
                               return PhotoEditWorkspace(
                                 session: _photoEdit,
                                 controller: c,
@@ -1735,8 +1725,6 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                         mobile: false,
                       );
                     },
-                  );
-                },
                   );
                 },
               ),
