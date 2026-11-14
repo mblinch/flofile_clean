@@ -490,10 +490,17 @@ class VerbDefaultsBundle {
 
   /// Keep wantsOpponent / omitAgainst aligned with opponentJoiner text.
   /// A blank joiner drops the connector word and still names the other team.
-  /// Post Game Win/Loss stay opponent-free even when a legacy joiner remains.
+  /// Post Game Win/Loss default opponent-free, but honor an explicit opt-in.
   static void _normalizeOpponentFields(String key, Map<String, dynamic> merged) {
     if (key == 'Post Game Win' || key == 'Post Game Loss') {
-      merged['wantsOpponent'] = false;
+      final joiner = (merged['opponentJoiner'] ?? 'against').toString().trim();
+      merged['opponentJoiner'] = joiner.isEmpty ? 'against' : joiner;
+      if (merged['wantsOpponent'] is! bool) {
+        merged['wantsOpponent'] = false;
+      }
+      if (merged['wantsOpponent'] == true) {
+        merged['omitAgainst'] = joiner.isEmpty;
+      }
       return;
     }
     final joiner = (merged['opponentJoiner'] ?? 'against').toString().trim();

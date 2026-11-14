@@ -1958,10 +1958,8 @@ class PreferencesService {
         m['pluralPhrase'] = plurals[canonical];
         changed = true;
       }
-      if (m['wantsOpponent'] != false) {
-        m['wantsOpponent'] = false;
-        changed = true;
-      }
+      // Do not force wantsOpponent off — authoring may opt in so captions
+      // can name the club they won/lost against.
       return changed;
     }
 

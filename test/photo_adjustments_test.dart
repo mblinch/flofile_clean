@@ -111,6 +111,50 @@ void main() {
     expect(mid.r, closeTo(0.5, 0.06));
   });
 
+  test('negative highlights do not leave a bright ring when mask bleeds dark', () {
+    // Ice pixel next to a shadow: guided mask is pulled down by the dark edge,
+    // but local luma is still bright — must darken like interior ice.
+    const grade = PhotoAdjustments(highlights: -100);
+    final interior = gradeDisplayRgb(0.85, 0.85, 0.85, grade, mask01: 0.85);
+    final edgeBleed = gradeDisplayRgb(0.85, 0.85, 0.85, grade, mask01: 0.45);
+    expect(edgeBleed.r, closeTo(interior.r, 0.04));
+    expect(edgeBleed.r, lessThan(0.85));
+  });
+
+  test('positive shadows do not lift bright ice when mask bleeds dark', () {
+    // Same edge: depressed mask must not lift white ice around a shadow.
+    const grade = PhotoAdjustments(shadows: 100);
+    final iceBleed = gradeDisplayRgb(0.85, 0.85, 0.85, grade, mask01: 0.35);
+    final iceClean = gradeDisplayRgb(0.85, 0.85, 0.85, grade, mask01: 0.85);
+    expect(iceBleed.r, closeTo(iceClean.r, 0.03));
+    expect(iceBleed.r, closeTo(0.85, 0.04));
+  });
+
+  test('positive shadows lift cast-shadow body but spare outer penumbra', () {
+    const grade = PhotoAdjustments(shadows: 100);
+    final deep = gradeLinearRgb(0.04, 0.04, 0.04, grade, mask01: 0.08);
+    // Typical ice cast-shadow body — must still move at +100.
+    final body = gradeDisplayRgb(0.32, 0.32, 0.32, grade, mask01: 0.32);
+    // Outer soft rim on ice — keep nearly still to avoid a glowing halo.
+    final penumbra = gradeDisplayRgb(0.52, 0.52, 0.52, grade, mask01: 0.52);
+    final deepStops = math.log(deep.r / 0.04) / math.ln2;
+    expect(deepStops, greaterThan(1.0));
+    expect(body.r, greaterThan(0.38));
+    expect(penumbra.r, closeTo(0.52, 0.08));
+  });
+
+  test('positive shadows keep mid-shadow order (no light halo ring)', () {
+    // Early hard fades invert ~0.4–0.5 tones into a flat light band on ice.
+    const grade = PhotoAdjustments(shadows: 100);
+    final inner = gradeDisplayRgb(0.38, 0.38, 0.38, grade, mask01: 0.38);
+    final mid = gradeDisplayRgb(0.45, 0.45, 0.45, grade, mask01: 0.45);
+    final outer = gradeDisplayRgb(0.52, 0.52, 0.52, grade, mask01: 0.52);
+    expect(inner.r, lessThan(mid.r));
+    expect(mid.r, lessThan(outer.r));
+    // Soft rim must not pile up with the body into one bright plateau.
+    expect(mid.r - inner.r, greaterThan(0.02));
+  });
+
   test('guided mask stays dark on the dark side of a hard edge (no halo)', () {
     // Dark left / bright right — classic player-on-ice edge.
     const width = 256;

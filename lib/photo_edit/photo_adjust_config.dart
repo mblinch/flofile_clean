@@ -79,11 +79,12 @@ class PhotoAdjustConfig {
   // automatically (same fraction of the mask width).
   // ---------------------------------------------------------------------------
 
-  static const double guidedRadiusWidthFraction = 0.015;
-  static const double guidedEps = 0.01;
+  static const double guidedRadiusWidthFraction = 0.012;
+  static const double guidedEps = 0.004;
 
   /// mask = maskFilterBlend * filtered + (1 − blend) * sharp
-  static const double maskFilterBlend = 0.8;
+  /// Keep more sharp so highlight recovery doesn't ring around shadows.
+  static const double maskFilterBlend = 0.65;
 
   /// ACR Highlights weight: rises into soft brights, then fades before specular white.
   /// hiW = smoothstep(lo, hi, mask) * (1 − smoothstep(fadeLo, fadeHi, mask))
@@ -92,12 +93,13 @@ class PhotoAdjustConfig {
   static const double highlightFadeLo = 0.85;
   static const double highlightFadeHi = 1.00;
 
-  /// ACR Shadows weight: strongest in deep darks, falls through lower mids,
-  /// hard cut before highlights.
+  /// ACR Shadows weight: strongest in deep darks / cast-shadow body.
+  /// Steep power + late fade keeps mid-shadow ordering (no flat light ring /
+  /// halo on ice at Shadows +100). Early hard fades invert 0.4–0.5 tones.
   /// shW = pow(1 − mask, power) * (1 − smoothstep(fadeLo, fadeHi, mask))
-  static const double shadowMaskPower = 1.2;
+  static const double shadowMaskPower = 3.2;
   static const double shadowFadeLo = 0.55;
-  static const double shadowFadeHi = 0.75;
+  static const double shadowFadeHi = 0.85;
 
   /// Highlight gain in stops: exp2(hiW * amount * strength).
   /// Negative (recover) and positive (push) are asymmetric, ACR-matched.
@@ -105,7 +107,7 @@ class PhotoAdjustConfig {
   static const double highlightStrengthPos = 0.70;
 
   /// Shadow gain in stops: exp2(shW * amount * strength).
-  static const double shadowStrengthPos = 2.8;
+  static const double shadowStrengthPos = 3.4;
   static const double shadowStrengthNeg = 3.5;
 
   /// Log-luma encode range for the mask texture (approx 1e−4 … 4).

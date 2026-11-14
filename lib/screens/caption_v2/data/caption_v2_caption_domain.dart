@@ -170,13 +170,13 @@ class CaptionV2CaptionDomain {
     }
   }
 
-  /// Replaces a written "their team" with the opposing side.
+  /// Replaces a written "their team" with [teamTarget].
   ///
-  /// Verb phrases use that wording as a stand-in (for example
-  /// "celebrate after their team"). When the other club is known, the caption
-  /// names it instead of leaving the placeholder.
-  static String fillTheirTeam(String action, String opponentTarget) {
-    final target = opponentTarget.trim();
+  /// Only used when a verb wants an opponent and treats that wording as a
+  /// stand-in (for example "celebrate after their team"). Authored phrases
+  /// that keep "their team" as English (Post Game Win/Loss) skip this.
+  static String fillTheirTeam(String action, String teamTarget) {
+    final target = teamTarget.trim();
     if (target.isEmpty || !action.toLowerCase().contains('their team')) {
       return action;
     }

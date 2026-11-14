@@ -136,11 +136,21 @@ vec3 applyContrast(vec3 c, float amount) {
 
 vec3 applyLocalTone(vec3 c, float mask01, float highlights, float shadows) {
   if (abs(highlights) < 1e-6 && abs(shadows) < 1e-6) return c;
+  // Anchor H/S weights to this pixel's own luma so guided-filter bleed
+  // can't ring bright ice around a shadow (Highlights− or Shadows+).
+  float yLin = dot(max(c, 0.0), kLuma);
+  float y = linearToSrgb(clamp(yLin, 0.0, 1.0));
+  // Highlights−: keep bright pixels bright in the mask (full recover).
+  // Highlights+: don't push into darks from bright-mask bleed.
+  float hiMask = (highlights < 0.0) ? max(mask01, y) : min(mask01, y);
+  // Shadows+: use local luma only so soft penumbrae on ice don't pick up a
+  // guided-filter plateau and glow. Shadows− still rejects bright-mask bleed.
+  float shMask = (shadows > 0.0) ? y : max(mask01, y);
   // ACR-like lobe: soft brights, fade before specular white.
-  float hiW = gradeSmoothstep(uHiMaskLo, uHiMaskHi, mask01)
-            * (1.0 - gradeSmoothstep(uHiFadeLo, uHiFadeHi, mask01));
-  float shW = pow(max(0.0, 1.0 - mask01), uShMaskPower)
-            * (1.0 - gradeSmoothstep(uShFadeLo, uShFadeHi, mask01));
+  float hiW = gradeSmoothstep(uHiMaskLo, uHiMaskHi, hiMask)
+            * (1.0 - gradeSmoothstep(uHiFadeLo, uHiFadeHi, hiMask));
+  float shW = pow(max(0.0, 1.0 - shMask), uShMaskPower)
+            * (1.0 - gradeSmoothstep(uShFadeLo, uShFadeHi, shMask));
   float hiStr = (highlights < 0.0) ? uHiStrengthNeg : uHiStrengthPos;
   float shStr = (shadows < 0.0) ? uShStrengthNeg : uShStrengthPos;
   // Negative highlights darken brights; positive shadows lift darks.

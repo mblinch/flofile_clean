@@ -269,6 +269,49 @@ void main() {
     expect(body.toLowerCase(), isNot(contains('their team')));
   });
 
+  test('Post Game Win keeps authored wording and can name the opponent', () {
+    final controller = CaptionV2Controller()
+      ..sport = 'hockey'
+      ..homeTeam = 'Toronto Maple Leafs'
+      ..awayTeam = 'Minnesota Wild';
+    controller.showVerbBundle({
+      'verbOverrides': {
+        'Post Game Win': {
+          'label': 'Post Game Win',
+          'verbPhrase': 'celebrates after their team won',
+          'pluralPhrase': 'celebrate after their team won',
+          'wantsOpponent': true,
+          'opponentJoiner': 'against',
+        },
+        'Post Game Loss': {
+          'label': 'Post Game Loss',
+          'verbPhrase': 'reacts after their team lost',
+          'pluralPhrase': 'react after their team lost',
+          'wantsOpponent': true,
+          'opponentJoiner': 'against',
+        },
+      },
+    });
+
+    controller.selectPlayer(player('Jesper Wallstedt', '30'), isHome: false);
+    controller.selectVerb('Post Game Win');
+    final winBody = controller.buildCaptionBody();
+    expect(
+      winBody,
+      contains('celebrates after their team won against the Toronto Maple Leafs'),
+    );
+    expect(winBody, isNot(contains('following the game')));
+    expect(winBody, isNot(contains('after the game against')));
+
+    controller.selectVerb('Post Game Loss');
+    final lossBody = controller.buildCaptionBody();
+    expect(
+      lossBody,
+      contains('reacts after their team lost against the Toronto Maple Leafs'),
+    );
+    expect(lossBody, isNot(contains('following the game')));
+  });
+
   test('captions always name the other team', () {
     final controller = CaptionV2Controller()
       ..homeTeam = 'Toronto Blue Jays'
@@ -281,13 +324,14 @@ void main() {
       contains('against the Cincinnati Reds'),
     );
 
+    // Post Game Win/Loss stay opponent-free and use the authored phrase only.
     controller.selectPlayer(player('Bo Bichette', '11'), isHome: true);
     controller.selectPlayer(player('Elly De La Cruz', '44'), isHome: false);
     controller.selectVerb('Post Game Win');
-    expect(
-      controller.buildCaptionBody(),
-      contains('against the Toronto Blue Jays'),
-    );
+    final postGameBody = controller.buildCaptionBody();
+    expect(postGameBody, contains('celebrates'));
+    expect(postGameBody, isNot(contains('following the game')));
+    expect(postGameBody.toLowerCase(), isNot(contains('against')));
   });
 
   test('custom verb supports pin and last-used session actions', () {

@@ -489,6 +489,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
 
   bool _handleHardwareKey(KeyEvent event) {
     if (_finishCropOnEnter(event)) return true;
+    if (_handleCropShortcut(event)) return true;
+    if (_handleCropSwapShortcut(event)) return true;
     if (_handleSaveShortcut(event)) return true;
     if (_handleBurstReviewShortcut(event)) return true;
     if (_handleFirebarUndoShortcut(event)) return true;
@@ -518,6 +520,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         key != LogicalKeyboardKey.numpadEnter) {
       return false;
     }
+    if (captionV2FocusIsEditable()) return false;
     final keys = HardwareKeyboard.instance;
     if (keys.isMetaPressed ||
         keys.isControlPressed ||
@@ -526,6 +529,44 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       return false;
     }
     _photoEdit.finishCropping();
+    return true;
+  }
+
+  /// C toggles crop while editing: enter the tool, or finish and show the crop.
+  bool _handleCropShortcut(KeyEvent event) {
+    if (event is! KeyDownEvent || !_photoEdit.editing) return false;
+    final isC = event.logicalKey == LogicalKeyboardKey.keyC ||
+        event.character?.toLowerCase() == 'c';
+    if (!isC) return false;
+    final keys = HardwareKeyboard.instance;
+    if (keys.isMetaPressed ||
+        keys.isControlPressed ||
+        keys.isAltPressed ||
+        keys.isShiftPressed) {
+      return false;
+    }
+    // Grade slider / firebar fields keep focus; C isn't needed in those.
+    if (captionV2FocusIsEditable()) {
+      FocusManager.instance.primaryFocus?.unfocus();
+    }
+    return _photoEdit.shortcutToggleCrop();
+  }
+
+  /// X swaps the crop between portrait and landscape (Lightroom/Photoshop).
+  bool _handleCropSwapShortcut(KeyEvent event) {
+    if (event is! KeyDownEvent || !_photoEdit.cropping) return false;
+    if (event.logicalKey != LogicalKeyboardKey.keyX) return false;
+    if (captionV2FocusIsEditable()) return false;
+    final keys = HardwareKeyboard.instance;
+    if (keys.isMetaPressed ||
+        keys.isControlPressed ||
+        keys.isAltPressed ||
+        keys.isShiftPressed) {
+      return false;
+    }
+    final path = _controller.currentPath;
+    if (path == null) return false;
+    _photoEdit.swapOrientation(path);
     return true;
   }
 
@@ -1685,40 +1726,16 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                       final useMobile = forceMobile ||
                           constraints.maxWidth < kCaptionV2MobileBreakpoint;
                       return _withChrome(
-                        AnimatedBuilder(
-                          animation: _photoEdit,
-                          builder: (context, _) {
-                            if (!useMobile && _photoEdit.editing) {
-                              return PhotoEditWorkspace(
-                                session: _photoEdit,
-                                controller: c,
-                              );
-                            }
-                            if (!useMobile) {
-                              return _buildDesktopWorkspace(
-                                c,
-                                t,
-                                constraints.maxWidth,
-                              );
-                            }
-                            // Forced preview: phone-width column, full height.
-                            // Natural narrow windows: fill the workspace.
-                            final mobile = _buildMobileWorkspace(c, t);
-                            if (!forceMobile) return mobile;
-                            return ColoredBox(
-                              color: t.bg,
-                              child: Align(
-                                alignment: Alignment.topCenter,
-                                child: SizedBox(
-                                  width: math.min(
-                                    kCaptionV2MobilePreviewWidth,
-                                    constraints.maxWidth,
-                                  ),
-                                  child: mobile,
-                                ),
-                              ),
-                            );
-                          },
+                        _PhotoEditShell(
+                          session: _photoEdit,
+                          controller: c,
+                          tokens: t,
+                          useMobile: useMobile,
+                          forceMobile: forceMobile,
+                          maxWidth: constraints.maxWidth,
+                          buildDesktop: (width) =>
+                              _buildDesktopWorkspace(c, t, width),
+                          buildMobile: () => _buildMobileWorkspace(c, t),
                         ),
                         sessionActive: true,
                         // Keep desktop chrome (with the toggle) while previewing.
@@ -2145,6 +2162,94 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       return;
     }
     await c.reloadCaptionStyle();
+  }
+}
+
+/// Switches edit vs caption workspace only when [PhotoEditSession.editing]
+/// flips — crop/grade notifies must not rebuild this shell or pan gestures
+/// on the crop overlay get cancelled mid-drag.
+class _PhotoEditShell extends StatefulWidget {
+  const _PhotoEditShell({
+    required this.session,
+    required this.controller,
+    required this.tokens,
+    required this.useMobile,
+    required this.forceMobile,
+    required this.maxWidth,
+    required this.buildDesktop,
+    required this.buildMobile,
+  });
+
+  final PhotoEditSession session;
+  final CaptionV2Controller controller;
+  final FfTokens tokens;
+  final bool useMobile;
+  final bool forceMobile;
+  final double maxWidth;
+  final Widget Function(double width) buildDesktop;
+  final Widget Function() buildMobile;
+
+  @override
+  State<_PhotoEditShell> createState() => _PhotoEditShellState();
+}
+
+class _PhotoEditShellState extends State<_PhotoEditShell> {
+  late bool _editing = widget.session.editing;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.session.addListener(_onSession);
+  }
+
+  @override
+  void didUpdateWidget(covariant _PhotoEditShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.session != widget.session) {
+      oldWidget.session.removeListener(_onSession);
+      widget.session.addListener(_onSession);
+      _editing = widget.session.editing;
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.session.removeListener(_onSession);
+    super.dispose();
+  }
+
+  void _onSession() {
+    final next = widget.session.editing;
+    if (next == _editing) return;
+    setState(() => _editing = next);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.useMobile && _editing) {
+      return PhotoEditWorkspace(
+        session: widget.session,
+        controller: widget.controller,
+      );
+    }
+    if (!widget.useMobile) {
+      return widget.buildDesktop(widget.maxWidth);
+    }
+    final mobile = widget.buildMobile();
+    if (!widget.forceMobile) return mobile;
+    return ColoredBox(
+      color: widget.tokens.bg,
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: SizedBox(
+          width: math.min(
+            kCaptionV2MobilePreviewWidth,
+            widget.maxWidth,
+          ),
+          child: mobile,
+        ),
+      ),
+    );
   }
 }
 

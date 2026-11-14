@@ -2660,13 +2660,21 @@ class CaptionV2Controller extends ChangeNotifier {
 
     final namedOpponents = _namedOpponentsForCaption();
     final hasNamedOpposingPlayers = namedOpponents.isNotEmpty;
+    final wantsOpponent = definition?.wantsOpponent ?? true;
     final includeOpponent = hasOpponentTeam &&
-        ((definition?.wantsOpponent ?? true) || hasNamedOpposingPlayers);
+        (wantsOpponent || hasNamedOpposingPlayers);
     final opponentName = hasOpponentTeam ? opponentTeam.trim() : '';
     final opponentTarget = hasNamedOpposingPlayers
         ? namedOpponents
         : (opponentName.isEmpty ? '' : 'the $opponentName');
-    action = CaptionV2CaptionDomain.fillTheirTeam(action, opponentTarget);
+    final isPostGameOutcome =
+        verb == 'Post Game Win' || verb == 'Post Game Loss';
+    // "their team" is an opposing-club stand-in for normal verbs. Post Game
+    // Win/Loss keep that wording as authored English ("…after their team won")
+    // and name the other club with the opponent joiner instead.
+    if (wantsOpponent && !isPostGameOutcome) {
+      action = CaptionV2CaptionDomain.fillTheirTeam(action, opponentTarget);
+    }
     // Pre/Post + players from both teams: names are in the lead; skip against.
     final skipOpponentJoiner =
         (preGame || postGame) && hasNamedOpposingPlayers;
@@ -2679,6 +2687,9 @@ class CaptionV2Controller extends ChangeNotifier {
           lower.contains(opponentName.toLowerCase());
       if (!alreadyNamed && !alreadyTeam) {
         final joiner = (definition?.opponentJoiner ?? 'against').trim();
+        // Post Game Win/Loss already carry outcome timing in the verb phrase;
+        // keep the authored joiner (usually "against") instead of folding in
+        // the Pre/Post "before/after the game against" connector.
         action = CaptionV2CaptionDomain.withOpponent(
           verb: verb,
           action: action,
@@ -2686,20 +2697,26 @@ class CaptionV2Controller extends ChangeNotifier {
           opposingPlayers: hasNamedOpposingPlayers ? namedOpponents : null,
           omitAgainst: definition?.omitAgainst ?? joiner.isEmpty,
           opponentJoiner: joiner,
-          preGame: CaptionV2CaptionDomain.usePreGameOpponentJoiner(
-            preGame: preGame,
-            hasNamedOpposingPlayers: hasNamedOpposingPlayers,
-          ),
-          postGame: CaptionV2CaptionDomain.usePostGameOpponentJoiner(
-            postGame: postGame,
-            hasNamedOpposingPlayers: hasNamedOpposingPlayers,
-          ),
+          preGame: isPostGameOutcome
+              ? false
+              : CaptionV2CaptionDomain.usePreGameOpponentJoiner(
+                  preGame: preGame,
+                  hasNamedOpposingPlayers: hasNamedOpposingPlayers,
+                ),
+          postGame: isPostGameOutcome
+              ? false
+              : CaptionV2CaptionDomain.usePostGameOpponentJoiner(
+                  postGame: postGame,
+                  hasNamedOpposingPlayers: hasNamedOpposingPlayers,
+                ),
         );
       }
     }
 
     if (verb == 'Post Game Win' || verb == 'Post Game Loss') {
-      return '$action following the game';
+      // Authored phrase owns the wording (e.g. "celebrates after their team
+      // won") — do not append a second timing clause.
+      return action;
     }
     if (preGame) {
       // Team-only Pre already folded timing into "before the game against …".

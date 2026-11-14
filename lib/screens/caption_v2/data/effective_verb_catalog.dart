@@ -496,8 +496,8 @@ class EffectiveVerbCatalog {
   }
 
   /// A joiner is only the connector word. Blank still attaches the opposing
-  /// team (`scores the Ottawa Senators`). Post Game Win/Loss never take an
-  /// opponent unless explicitly enabled.
+  /// team (`scores the Ottawa Senators`). Post Game Win/Loss stay
+  /// opponent-free unless authoring explicitly enables the opponent.
   ///
   /// Records that stored `opponentJoiner: against` with `wantsOpponent: false`
   /// (e.g. Stands in Net) are healed the same way: the team clause stays.

@@ -336,23 +336,32 @@ GradeRgb applyShadowsHighlights(
   if (a.shadows.abs() < 1e-8 && a.highlights.abs() < 1e-8) {
     return GradeRgb(r, g, b);
   }
+  // Anchor weights to this pixel's luma so guided-filter bleed can't ring
+  // bright ice around a shadow (Highlights− under-darken, or Shadows+ lift).
+  final localY = perceptualMask01(_luma(r, g, b));
+  final hiMask =
+      a.highlights < 0 ? math.max(mask01, localY) : math.min(mask01, localY);
+  // Shadows+: local luma only — soft penumbrae must not glow from a guided
+  // plateau. Shadows− still rejects bright-mask bleed into darks.
+  final shMask =
+      a.shadows > 0 ? localY : math.max(mask01, localY);
   final hiW = gradeSmoothstep(
         PhotoAdjustConfig.highlightMaskLo,
         PhotoAdjustConfig.highlightMaskHi,
-        mask01,
+        hiMask,
       ) *
       (1 -
           gradeSmoothstep(
             PhotoAdjustConfig.highlightFadeLo,
             PhotoAdjustConfig.highlightFadeHi,
-            mask01,
+            hiMask,
           ));
-  final shW = math.pow(math.max(0.0, 1 - mask01), PhotoAdjustConfig.shadowMaskPower) *
+  final shW = math.pow(math.max(0.0, 1 - shMask), PhotoAdjustConfig.shadowMaskPower) *
       (1 -
           gradeSmoothstep(
             PhotoAdjustConfig.shadowFadeLo,
             PhotoAdjustConfig.shadowFadeHi,
-            mask01,
+            shMask,
           ));
   final hiStrength = a.highlights < 0
       ? PhotoAdjustConfig.highlightStrengthNeg

@@ -17,11 +17,12 @@ class MobilePhotoFilmstrip extends StatefulWidget {
   final CaptionV2Controller controller;
   final PhotoEditSession? editSession;
 
-  /// Edit Photo chrome: 72px thumbs, teal selection ring, gold dirty dots.
+  /// Edit Photo chrome: slide-mount thumbs + gold dirty dots.
   final bool editStyle;
 
   static const double height = 76;
   static const double itemExtent = 72;
+  static const double editMount = 76;
 
   @override
   State<MobilePhotoFilmstrip> createState() => _MobilePhotoFilmstripState();
@@ -71,11 +72,16 @@ class _MobilePhotoFilmstripState extends State<MobilePhotoFilmstrip> {
     if (mounted) setState(() {});
   }
 
+  double get _stride {
+    return widget.editStyle
+        ? MobilePhotoFilmstrip.editMount + 6
+        : MobilePhotoFilmstrip.itemExtent + 6;
+  }
+
   void _reveal({required bool animate}) {
     if (!_scroll.hasClients) return;
-    final target =
-        (widget.controller.currentIndex * MobilePhotoFilmstrip.itemExtent)
-            .clamp(0.0, _scroll.position.maxScrollExtent);
+    final target = (widget.controller.currentIndex * _stride)
+        .clamp(0.0, _scroll.position.maxScrollExtent);
     if (animate) {
       _scroll.animateTo(
         target,
@@ -105,92 +111,76 @@ class _MobilePhotoFilmstripState extends State<MobilePhotoFilmstrip> {
             final h = constraints.maxHeight.isFinite
                 ? constraints.maxHeight
                 : MobilePhotoFilmstrip.height;
-            final extent = editStyle
-                ? 72.0
-                : (h - 4).clamp(48.0, MobilePhotoFilmstrip.itemExtent);
+            if (editStyle) {
+              return SizedBox(
+                height: h,
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context).copyWith(
+                    scrollbars: false,
+                  ),
+                  child: ListView.builder(
+                    controller: _scroll,
+                    scrollDirection: Axis.horizontal,
+                    itemExtent: MobilePhotoFilmstrip.editMount + 6,
+                    itemCount: paths.length,
+                    itemBuilder: (context, index) {
+                      final path = paths[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: _EditFilmstripThumb(
+                          path: path,
+                          version:
+                              widget.controller.imageContentStamp(path),
+                          selected: index == current,
+                          dirty:
+                              widget.editSession?.isDirty(path) ?? false,
+                          onTap: () => widget.controller.goToIndex(index),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              );
+            }
+            final gap = 6.0;
+            final extent =
+                (h - 4).clamp(48.0, MobilePhotoFilmstrip.itemExtent);
             return SizedBox(
               height: h,
               child: ListView.builder(
                 controller: _scroll,
                 scrollDirection: Axis.horizontal,
-                itemExtent: extent + (editStyle ? 8 : 6),
+                itemExtent: extent + gap,
                 itemCount: paths.length,
                 itemBuilder: (context, index) {
                   final path = paths[index];
                   final selected = index == current;
-                  final dirty =
-                      widget.editSession?.isDirty(path) ?? false;
                   return Padding(
                     padding: EdgeInsets.only(
-                      right: editStyle ? 8 : 6,
-                      bottom: editStyle ? 0 : 2,
-                      top: editStyle ? 0 : 2,
+                      right: gap,
+                      bottom: 2,
+                      top: 2,
                     ),
                     child: GestureDetector(
                       onTap: () => widget.controller.goToIndex(index),
-                      child: Opacity(
-                        opacity: editStyle
-                            ? (selected ? 1 : 0.7)
-                            : 1,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            borderRadius:
-                                BorderRadius.circular(editStyle ? 8 : 6),
-                            border: Border.all(
-                              color: selected
-                                  ? (editStyle
-                                      ? FfTokens.nocturneAc
-                                      : tokens.accent)
-                                  : (editStyle
-                                      ? Colors.transparent
-                                      : tokens.divider),
-                              width: selected ? 2 : (editStyle ? 2 : 1),
-                            ),
-                            boxShadow: editStyle && selected
-                                ? const [
-                                    BoxShadow(
-                                      color: FfTokens.sessionOnRing,
-                                      blurRadius: 0,
-                                      spreadRadius: 3,
-                                    ),
-                                  ]
-                                : null,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: selected
+                                ? tokens.accent
+                                : tokens.divider,
+                            width: selected ? 2 : 1,
                           ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(
-                              editStyle ? 6 : 5,
-                            ),
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                OrientedFilePreview(
-                                  path: path,
-                                  version: widget.controller
-                                      .imageContentStamp(path),
-                                  fit: BoxFit.cover,
-                                  cacheWidth: 144,
-                                ),
-                                if (editStyle && dirty)
-                                  const Positioned(
-                                    right: 5,
-                                    top: 5,
-                                    child: DecoratedBox(
-                                      decoration: BoxDecoration(
-                                        color: FfTokens.gold,
-                                        shape: BoxShape.circle,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: FfTokens.photoHeader,
-                                            blurRadius: 0,
-                                            spreadRadius: 2,
-                                          ),
-                                        ],
-                                      ),
-                                      child: SizedBox(width: 8, height: 8),
-                                    ),
-                                  ),
-                              ],
-                            ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(5),
+                          child: OrientedFilePreview(
+                            path: path,
+                            version: widget.controller
+                                .imageContentStamp(path),
+                            fit: BoxFit.cover,
+                            cacheWidth: 144,
                           ),
                         ),
                       ),
@@ -202,6 +192,103 @@ class _MobilePhotoFilmstripState extends State<MobilePhotoFilmstrip> {
           },
         );
       },
+    );
+  }
+}
+
+/// Slide-mount thumb: 76×76 sunken square, image contained at ≤60×60.
+class _EditFilmstripThumb extends StatefulWidget {
+  const _EditFilmstripThumb({
+    required this.path,
+    required this.version,
+    required this.selected,
+    required this.dirty,
+    required this.onTap,
+  });
+
+  final String path;
+  final int version;
+  final bool selected;
+  final bool dirty;
+  final VoidCallback onTap;
+
+  @override
+  State<_EditFilmstripThumb> createState() => _EditFilmstripThumbState();
+}
+
+class _EditFilmstripThumbState extends State<_EditFilmstripThumb> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = widget.selected;
+    final hover = _hover;
+    final fill = selected
+        ? FfTokens.nocturneAccentSoft
+        : hover
+            ? FfTokens.nocturneHv
+            : FfTokens.nocturneSunken;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: SizedBox(
+          width: MobilePhotoFilmstrip.editMount,
+          height: MobilePhotoFilmstrip.editMount,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            decoration: BoxDecoration(
+              color: fill,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: selected
+                    ? FfTokens.nocturneAc
+                    : const Color(0x0FE8EEF4), // ~.06 white hairline
+                width: selected ? 1.5 : 1,
+              ),
+            ),
+            child: Stack(
+              children: [
+                Center(
+                  child: Opacity(
+                    opacity: selected || hover ? 1 : 0.6,
+                    child: SizedBox(
+                      width: 60,
+                      height: 60,
+                      child: OrientedFilePreview(
+                        path: widget.path,
+                        version: widget.version,
+                        fit: BoxFit.contain,
+                        cacheWidth: 120,
+                      ),
+                    ),
+                  ),
+                ),
+                if (widget.dirty)
+                  const Positioned(
+                    right: 5,
+                    top: 5,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: FfTokens.gold,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Color(0xCC101418),
+                            blurRadius: 0,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: SizedBox(width: 7, height: 7),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
