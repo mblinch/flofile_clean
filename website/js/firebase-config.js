@@ -16,7 +16,7 @@ window.FLOFILE_ADMIN_EMAILS = [
 
 /** Mac beta zip (GitHub Releases). Shown on /download.html after Google sign-in. */
 window.FLOFILE_MAC_DOWNLOAD = {
-  version: '2.0.16',
-  label: 'FloFile Beta 2.0.16',
-  url: 'https://github.com/mblinch/flofile_clean/releases/download/v2.0.16/FloFileBeta.zip',
+  version: '2.0.44',
+  label: 'FloFile Beta 2.0.44',
+  url: 'https://github.com/mblinch/flofile_clean/releases/download/v2.0.44/FloFileBeta.zip',
 };
