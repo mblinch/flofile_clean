@@ -2057,25 +2057,29 @@ class PhotoSaveArrow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final previous = direction == AxisDirection.left;
-    return Tooltip(
-      message: previous ? 'Save & previous' : 'Save & next (⌘S)',
-      child: Material(
-        color: _fill,
-        elevation: 0,
-        shadowColor: Colors.transparent,
-        shape: const CircleBorder(),
-        child: InkWell(
-          onTap: onPressed,
-          customBorder: const CircleBorder(),
-          hoverColor: _hover,
-          child: SizedBox.square(
-            dimension: 40,
-            child: Icon(
-              previous
-                  ? PhosphorIconsRegular.caretLeft
-                  : PhosphorIconsRegular.caretRight,
-              size: 18,
-              color: FfTokens.nocturneTx,
+    return Semantics(
+      button: true,
+      label: previous ? 'Previous photo' : 'Next photo',
+      child: Tooltip(
+        message: previous ? 'Save & previous' : 'Save & next (⌘S)',
+        child: Material(
+          color: _fill,
+          elevation: 0,
+          shadowColor: Colors.transparent,
+          shape: const CircleBorder(),
+          child: InkWell(
+            onTap: onPressed,
+            customBorder: const CircleBorder(),
+            hoverColor: _hover,
+            child: SizedBox.square(
+              dimension: 40,
+              child: Icon(
+                previous
+                    ? PhosphorIconsRegular.caretLeft
+                    : PhosphorIconsRegular.caretRight,
+                size: 18,
+                color: FfTokens.nocturneTx,
+              ),
             ),
           ),
         ),
@@ -2676,7 +2680,11 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                                     final ftp =
                                         controller.sentImages.contains(path);
                                     final borderColor = tokens.accent;
-                                    return GestureDetector(
+                                    return Semantics(
+                                      button: true,
+                                      selected: selected,
+                                      label: 'Photo thumbnail ${i + 1}',
+                                      child: GestureDetector(
                                       key: ValueKey(path),
                                       onTap: () => _selectThumbnail(paths, i),
                                       onSecondaryTapDown: (details) =>
@@ -2789,6 +2797,7 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                                             ),
                                           ),
                                         ),
+                                      ),
                                       ),
                                     );
                                   },

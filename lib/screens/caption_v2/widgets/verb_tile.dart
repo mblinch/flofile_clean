@@ -136,9 +136,14 @@ class _VerbTileState extends State<VerbTile> {
       fill = t.hover;
     }
 
+    final code = widget.code.trim();
+    final name = widget.label.trim();
+    final semanticLabel =
+        code.isEmpty ? name : (name.isEmpty ? code : '$code $name');
     return Semantics(
       button: true,
       selected: widget.selected,
+      label: semanticLabel,
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         onEnter: (_) => setState(() => _hovered = true),

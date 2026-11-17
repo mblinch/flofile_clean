@@ -296,6 +296,7 @@ class _ThumbsButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return _BarTap(
       tooltip: selected ? 'Hide thumbs' : 'Show thumbs',
+      semanticLabel: 'Thumbnails',
       enabled: onPressed != null,
       onTap: onPressed,
       builder: (hovered, pressed) {
@@ -850,6 +851,7 @@ class _FtpSendButton extends StatelessWidget {
 
     return _BarTap(
       tooltip: 'FTP · $label',
+      semanticLabel: 'FTP',
       enabled: canSend,
       onTap: onPressed,
       builder: (hovered, pressed) {
@@ -906,10 +908,13 @@ class _BarTap extends StatefulWidget {
     required this.enabled,
     required this.onTap,
     required this.builder,
+    this.semanticLabel,
     this.dimWhenDisabled = true,
   });
 
   final String tooltip;
+  /// VoiceOver / test label. Defaults to [tooltip].
+  final String? semanticLabel;
   final bool enabled;
   final bool dimWhenDisabled;
   final VoidCallback? onTap;
@@ -926,25 +931,35 @@ class _BarTapState extends State<_BarTap> {
   @override
   Widget build(BuildContext context) {
     final enabled = widget.enabled;
-    return Tooltip(
-      message: widget.tooltip,
-      child: Opacity(
-        opacity: enabled || !widget.dimWhenDisabled ? 1 : 0.4,
-        child: MouseRegion(
-        cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-        onEnter: enabled ? (_) => setState(() => _hovered = true) : null,
-        onExit: (_) => setState(() {
-          _hovered = false;
-          _pressed = false;
-        }),
-        child: GestureDetector(
-          onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
-          onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
-          onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
-          onTap: enabled ? widget.onTap : null,
-          child: widget.builder(enabled && _hovered, enabled && _pressed),
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: widget.semanticLabel ?? widget.tooltip,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: widget.tooltip,
+        child: Opacity(
+          opacity: enabled || !widget.dimWhenDisabled ? 1 : 0.4,
+          child: MouseRegion(
+            cursor:
+                enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+            onEnter: enabled ? (_) => setState(() => _hovered = true) : null,
+            onExit: (_) => setState(() {
+              _hovered = false;
+              _pressed = false;
+            }),
+            child: GestureDetector(
+              onTapDown:
+                  enabled ? (_) => setState(() => _pressed = true) : null,
+              onTapUp:
+                  enabled ? (_) => setState(() => _pressed = false) : null,
+              onTapCancel:
+                  enabled ? () => setState(() => _pressed = false) : null,
+              onTap: enabled ? widget.onTap : null,
+              child: widget.builder(enabled && _hovered, enabled && _pressed),
+            ),
+          ),
         ),
-      ),
       ),
     );
   }
@@ -1273,7 +1288,11 @@ class _UtilityButtonState extends State<_UtilityButton> {
               )
             : _kActionTealGradient;
 
-    return MouseRegion(
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: widget.label,
+      child: MouseRegion(
       cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: enabled ? (_) => setState(() => _hovered = true) : null,
       onExit: enabled
@@ -1342,6 +1361,7 @@ class _UtilityButtonState extends State<_UtilityButton> {
             ),
           ),
         ),
+      ),
       ),
     );
   }
@@ -1425,7 +1445,11 @@ class _OutlinedActionButtonState extends State<_OutlinedActionButton> {
         : Colors.transparent;
     final glow = !enabled ? null : FfTokens.accentButtonGlow(glowColor);
 
-    return Opacity(
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: widget.label,
+      child: Opacity(
       opacity: emphasized ? 1 : (enabled ? 1 : 0.55),
       child: MouseRegion(
         cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
@@ -1500,6 +1524,7 @@ class _OutlinedActionButtonState extends State<_OutlinedActionButton> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

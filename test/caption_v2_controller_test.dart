@@ -815,6 +815,33 @@ void main() {
     );
   });
 
+  test('selectPlayerByCode selects home and visitor jerseys', () {
+    final home = player('Home Ace', '34');
+    final away = player('Away Ace', '88');
+    final controller = CaptionV2Controller()
+      ..homeTeam = 'Home'
+      ..awayTeam = 'Away'
+      ..homeRoster = [home]
+      ..awayRoster = [away];
+
+    expect(controller.selectPlayerByCode('h34'), isTrue);
+    expect(controller.selectedPlayers.single.player, same(home));
+    expect(controller.selectedIsHome, isTrue);
+
+    expect(controller.selectPlayerByCode('v88'), isTrue);
+    expect(
+      controller.selectedPlayers.map((row) => row.player).toList(),
+      containsAll(<Player>[home, away]),
+    );
+
+    // Retype does not toggle off.
+    expect(controller.selectPlayerByCode('h34'), isTrue);
+    expect(controller.selectedPlayers.where((row) => row.isHome), hasLength(1));
+
+    expect(controller.selectPlayerByCode('h99'), isFalse);
+    expect(controller.statusMessage, 'No player wearing #99');
+  });
+
   test('caption box h34 / v88 expands to select roster players', () {
     final home = player('Home Ace', '34');
     final away = player('Away Ace', '88');
@@ -856,6 +883,8 @@ void main() {
     final controller = CaptionV2Controller()
       ..manualCaptionOverride = 'Caption'
       ..headline = 'Headline'
+      ..showPersonalityField = true
+      ..showKeywordsField = true
       ..personality = 'Manual Person;Player'
       ..keywords = 'manual, action';
 
@@ -867,6 +896,18 @@ void main() {
     expect(values['XMP-getty:Personality'], 'Manual Person;Player');
     expect(values['IPTC:Keywords'], 'manual, action');
     expect(values['XMP-dc:Subject'], 'manual, action');
+  });
+
+  test('keyword mode off omits Keywords tags from caption values', () {
+    final controller = CaptionV2Controller()
+      ..showKeywordsField = false
+      ..keywords = 'should, not, write';
+
+    final values = controller.captionValues();
+    expect(values.containsKey('IPTC:Keywords'), isFalse);
+    expect(values.containsKey('Keywords'), isFalse);
+    expect(values.containsKey('XMP:Subject'), isFalse);
+    expect(values.containsKey('XMP-dc:Subject'), isFalse);
   });
 
   test('personality selection overwrites IPTC leftovers like PLAYERS IN FRAME',

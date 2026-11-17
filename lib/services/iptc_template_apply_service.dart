@@ -253,9 +253,17 @@ class IptcTemplateApplyService {
       }
       if (presetKey == 'Urgency') {
         out[presetKey] = normalizeUrgencyValue(v);
-      } else {
-        out[presetKey] = v;
+        continue;
       }
+      // Venue is stored as Stadium; the panel also mirrors Location. A Fill
+      // display can hold Stadium=<edited> and Location=<old file>. Prefer the
+      // explicit Stadium key so Location does not clobber a Venue edit.
+      if (presetKey == 'Stadium') {
+        if (e.key == 'Location' && out.containsKey('Stadium')) continue;
+        out['Stadium'] = v;
+        continue;
+      }
+      out[presetKey] = v;
     }
     return out;
   }
@@ -838,11 +846,20 @@ class IptcTemplateApplyService {
       // Panel import keys (e.g. Job Title) differ from preset keys
       // (Creator's Job Title) — look up every alias so fill-empty does not
       // treat a filled By-lineTitle as blank and overwrite it.
-      // Creator fill checks By-line / XMP-dc:Creator only — EXIF Artist alone
-      // must not block writing Photographer.
-      final existingVal = (fillEmptyOnly && toPresetKey(key) == 'Creator')
-          ? IptcTemplateImportService.creatorPrimaryFromExiftool(existingMeta)
-          : (lookupValue(existing, key) ?? '');
+      // Creator / Copyright fill checks only the PM-visible stores — EXIF
+      // Artist or IFD0:Copyright alone must not block writing.
+      final presetKey = toPresetKey(key);
+      final String existingVal;
+      if (fillEmptyOnly && presetKey == 'Creator') {
+        existingVal =
+            IptcTemplateImportService.creatorPrimaryFromExiftool(existingMeta);
+      } else if (fillEmptyOnly && presetKey == 'Copyright') {
+        existingVal = IptcTemplateImportService.copyrightPrimaryFromExiftool(
+          existingMeta,
+        );
+      } else {
+        existingVal = lookupValue(existing, key) ?? '';
+      }
       if (_fieldNeedsWrite(
         key,
         v,
@@ -1288,6 +1305,22 @@ class IptcTemplateApplyService {
           args.addAll(['-charset', 'iptc=UTF8']);
           args.add('-overwrite_original');
           args.add(imagePath);
+
+          final copyrightInPlan = fieldsToWrite.keys.any(
+            (k) => toPresetKey(k) == 'Copyright',
+          );
+          final copyrightArgs = args
+              .where(
+                (a) =>
+                    a.contains('Copyright') ||
+                    a.contains('Rights') ||
+                    a.contains('CopyrightNotice'),
+              )
+              .toList();
+          print(
+            'DEBUG IPTC Copyright plan=$copyrightInPlan '
+            'args=$copyrightArgs file=$imagePath',
+          );
 
           await ExiftoolHelper.run(args);
         }

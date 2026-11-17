@@ -15,6 +15,7 @@ class PlayerRow extends StatefulWidget {
     required this.jersey,
     required this.name,
     required this.selected,
+    this.semanticLabel,
     this.height,
     this.usageCount,
     this.selectionRole,
@@ -34,6 +35,8 @@ class PlayerRow extends StatefulWidget {
 
   final String jersey;
   final String name;
+  /// VoiceOver / test label, e.g. "Home 34 Auston Matthews".
+  final String? semanticLabel;
   final bool selected;
   final double? height;
   final int? usageCount;
@@ -90,10 +93,17 @@ class _PlayerRowState extends State<PlayerRow> {
       fill = t.hover;
     }
 
+    final jersey = widget.jersey.trim();
+    final name = widget.name.trim();
+    final fallbackLabel = (jersey.isEmpty || jersey == '—')
+        ? name
+        : '$jersey $name';
     return Semantics(
       button: enabled,
       enabled: enabled,
       selected: widget.selected,
+      label: (widget.semanticLabel ?? fallbackLabel).trim(),
+      excludeSemantics: true,
       child: MouseRegion(
         cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
         opaque: false,

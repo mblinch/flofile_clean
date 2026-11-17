@@ -20,6 +20,7 @@ import 'screens/caption_builder_screen.dart';
 import 'screens/caption_v2/caption_v2_flag.dart';
 import 'screens/caption_v2/caption_v2_screen.dart';
 import 'services/auth_service.dart';
+import 'services/crash_reporting_service.dart';
 import 'widgets/app_auth_shell.dart';
 import 'widgets/click_hand_cursor.dart';
 import 'widgets/preferences_dialog.dart';
@@ -36,6 +37,8 @@ Future<void> main() async {
 
   await _initFirebaseIfConfigured();
   await AuthService.instance.initialize();
+  // Sentry covers macOS + Windows (Crashlytics does not support Flutter Windows).
+  await CrashReportingService.init();
 
   // Suppress debug output in console
   debugPrint = (String? message, {int? wrapWidth}) {

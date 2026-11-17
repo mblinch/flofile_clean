@@ -1302,6 +1302,7 @@ class IptcTemplateEditor extends StatelessWidget {
       child: _TextInput(
         key: ValueKey('$key-$revision'),
         tabId: label,
+        semanticLabel: display ?? label,
         value: value,
         enabled: fieldsEnabled,
         mono: _monoKeys.contains(label),
@@ -2520,6 +2521,7 @@ class _TextInput extends StatefulWidget {
     required this.narrow,
     required this.onChanged,
     this.tabId,
+    this.semanticLabel,
     this.needsCaptionFill,
     this.needsFilingFill,
     this.inCaptionGroup = false,
@@ -2538,6 +2540,7 @@ class _TextInput extends StatefulWidget {
   final bool narrow;
   final ValueChanged<String> onChanged;
   final String? tabId;
+  final String? semanticLabel;
   final bool Function()? needsCaptionFill;
   final bool Function()? needsFilingFill;
   final bool inCaptionGroup;
@@ -2696,33 +2699,39 @@ class _TextInputState extends State<_TextInput> {
             width: widget.templateUpdate && !focused ? 1.2 : 1,
           ),
         ),
-        child: TextField(
-          controller: _controller,
-          focusNode: _focus,
+        child: Semantics(
+          textField: true,
           enabled: widget.enabled,
-          maxLength: widget.maxLength,
-          textAlign: widget.center ? TextAlign.center : TextAlign.start,
-          style: TextStyle(
-            fontFamily: widget.mono ? FfTokens.monoFamily : FfTokens.fontFamily,
-            fontSize: widget.mono ? 12 : 13,
-            color: colors.tx,
-          ),
-          cursorColor: colors.focus,
-          inputFormatters: widget.maxLength == null
-              ? null
-              : [LengthLimitingTextInputFormatter(widget.maxLength)],
-          decoration: InputDecoration(
-            isDense: true,
-            counterText: '',
-            border: InputBorder.none,
-            contentPadding: EdgeInsets.fromLTRB(
-              widget.center ? 6 : 10,
-              widget.narrow ? 14 : 0,
-              widget.center ? 6 : 10,
-              0,
+          label: widget.semanticLabel ?? widget.tabId,
+          child: TextField(
+            controller: _controller,
+            focusNode: _focus,
+            enabled: widget.enabled,
+            maxLength: widget.maxLength,
+            textAlign: widget.center ? TextAlign.center : TextAlign.start,
+            style: TextStyle(
+              fontFamily:
+                  widget.mono ? FfTokens.monoFamily : FfTokens.fontFamily,
+              fontSize: widget.mono ? 12 : 13,
+              color: colors.tx,
             ),
+            cursorColor: colors.focus,
+            inputFormatters: widget.maxLength == null
+                ? null
+                : [LengthLimitingTextInputFormatter(widget.maxLength)],
+            decoration: InputDecoration(
+              isDense: true,
+              counterText: '',
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.fromLTRB(
+                widget.center ? 6 : 10,
+                widget.narrow ? 14 : 0,
+                widget.center ? 6 : 10,
+                0,
+              ),
+            ),
+            onChanged: widget.onChanged,
           ),
-          onChanged: widget.onChanged,
         ),
       ),
     );

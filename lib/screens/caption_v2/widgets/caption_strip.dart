@@ -2105,35 +2105,40 @@ class _InningSquareState extends State<_InningSquare> {
   @override
   Widget build(BuildContext context) {
     final t = widget.tokens;
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          height: 24,
-          width: double.infinity,
-          alignment: Alignment.center,
-          clipBehavior: Clip.none,
-          decoration: BoxDecoration(
-            color: widget.selected ? t.hover : Colors.transparent,
-            borderRadius: BorderRadius.circular(7),
-            border: widget.selected
-                ? Border.all(color: t.inputBorder)
-                : null,
-            boxShadow: null,
-          ),
-          child: Text(
-            widget.label,
-            style: TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontSize: widget.label.length > 2 ? 11 : 13,
-              fontWeight: widget.selected ? FontWeight.w600 : FontWeight.w400,
-              letterSpacing: 0,
-              color: widget.selected ? t.text : t.textSecondary,
+    return Semantics(
+      button: true,
+      selected: widget.selected,
+      label: widget.label,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            height: 24,
+            width: double.infinity,
+            alignment: Alignment.center,
+            clipBehavior: Clip.none,
+            decoration: BoxDecoration(
+              color: widget.selected ? t.hover : Colors.transparent,
+              borderRadius: BorderRadius.circular(7),
+              border: widget.selected
+                  ? Border.all(color: t.inputBorder)
+                  : null,
+              boxShadow: null,
+            ),
+            child: Text(
+              widget.label,
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: widget.label.length > 2 ? 11 : 13,
+                fontWeight: widget.selected ? FontWeight.w600 : FontWeight.w400,
+                letterSpacing: 0,
+                color: widget.selected ? t.text : t.textSecondary,
+              ),
             ),
           ),
         ),
@@ -2163,26 +2168,31 @@ class _InningNavSquareState extends State<_InningNavSquare> {
   @override
   Widget build(BuildContext context) {
     final t = widget.tokens;
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          height: 24,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: _hovered ? t.hover : t.bg,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: t.divider),
-          ),
-          child: PhosphorIcon(
-            widget.icon,
-            size: 16,
-            color: t.text.withValues(alpha: 0.75),
+    final previous = widget.icon == PhosphorIconsRegular.arrowLeft;
+    return Semantics(
+      button: true,
+      label: previous ? 'Earlier periods' : 'Later periods',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            height: 24,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: _hovered ? t.hover : t.bg,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: t.divider),
+            ),
+            child: PhosphorIcon(
+              widget.icon,
+              size: 16,
+              color: t.text.withValues(alpha: 0.75),
+            ),
           ),
         ),
       ),
@@ -2260,16 +2270,21 @@ class _StepButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 24,
-      height: 24,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(6),
-        child: PhosphorIcon(
-          icon,
-          size: 15,
-          color: tokens.text.withValues(alpha: 0.65),
+    final decrease = icon == PhosphorIconsRegular.minus;
+    return Semantics(
+      button: true,
+      label: decrease ? 'Previous period' : 'Next period',
+      child: SizedBox(
+        width: 24,
+        height: 24,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(6),
+          child: PhosphorIcon(
+            icon,
+            size: 15,
+            color: tokens.text.withValues(alpha: 0.65),
+          ),
         ),
       ),
     );
@@ -2613,7 +2628,11 @@ class _ToggleChipState extends State<_ToggleChip> {
   Widget build(BuildContext context) {
     final tokens = widget.tokens;
     final selected = widget.selected;
-    return MouseRegion(
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: widget.label,
+      child: MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -2642,6 +2661,7 @@ class _ToggleChipState extends State<_ToggleChip> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

@@ -40,6 +40,7 @@ import '../../../services/preferences_service.dart';
 import '../../../services/roster_history_service.dart';
 import '../../../services/camera_serial_service.dart';
 import '../../../services/admin_service.dart';
+import '../../../services/crash_reporting_service.dart';
 import '../../../config/tank01_config.dart';
 import '../../../utils/exiftool_helper.dart';
 import '../../../utils/default_verb_keywords.dart';
@@ -2535,11 +2536,15 @@ class CaptionV2Controller extends ChangeNotifier {
       'IPTC:Headline': headline,
       'Headline': headline,
       'XMP:Headline': headline,
-      'IPTC:Keywords': keywords,
-      'Keywords': keywords,
-      'XMP:Subject': keywords,
-      'XMP-dc:Subject': keywords,
     };
+    // Keyword mode off → leave Keywords / Subject on the file alone (do not
+    // clear or rewrite). When on, always include the keys so empty can clear.
+    if (showKeywordsField) {
+      values['IPTC:Keywords'] = keywords;
+      values['Keywords'] = keywords;
+      values['XMP:Subject'] = keywords;
+      values['XMP-dc:Subject'] = keywords;
+    }
     // When Write to IPTC Personality is off, leave the file tag alone
     // (do not re-stamp Photo Mechanic placeholders). When on, always include
     // the key so an empty value can clear the tag on save.
@@ -2958,6 +2963,11 @@ class CaptionV2Controller extends ChangeNotifier {
     await _loadCaptionStyleCatalog();
     await _refreshFtpDestination();
     await _loadFtpHistory();
+    CrashReportingService.updateSessionContext(
+      league: sport,
+      wire: captionTemplate.wireStyle.name,
+    );
+    await CrashReportingService.syncIptcModeFromPrefs(_prefs!);
     notifyListeners();
   }
 
@@ -3147,6 +3157,10 @@ class CaptionV2Controller extends ChangeNotifier {
     this.region = region;
     this.country = country;
     this.countryCode = countryCode;
+    CrashReportingService.updateSessionContext(
+      league: sport,
+      wire: captionTemplate.wireStyle.name,
+    );
     pinnedVerb = null;
     pinnedPlayer = null;
     customVerbPhrase = '';
@@ -5193,6 +5207,44 @@ class CaptionV2Controller extends ChangeNotifier {
     if (!exists) {
       selectedPlayers.add(RosterHit(player: player, isHome: isHome));
     }
+  }
+
+  /// Keyboard / caption player codes: `h34`, `v88`, `hh27`, `vv15`.
+  ///
+  /// Selects the matching roster player without toggling off. Returns true
+  /// when a player was found.
+  bool selectPlayerByCode(String code) {
+    final match = RegExp(
+      r'^([hv])\1?(\d{1,3})$',
+      caseSensitive: false,
+    ).firstMatch(code.trim());
+    if (match == null) return false;
+    final isHome = match.group(1)!.toLowerCase() == 'h';
+    if (singleTeamMode && !isHome) return false;
+    final jersey = match.group(2)!;
+    final roster = isHome ? homeRoster : awayRoster;
+    Player? found;
+    for (final player in roster) {
+      if ((player.jerseyNumber ?? '').trim() == jersey) {
+        found = player;
+        break;
+      }
+    }
+    if (found == null) {
+      statusMessage = 'No player wearing #$jersey';
+      notifyListeners();
+      return false;
+    }
+    _ensurePlayerSelected(found, isHome: isHome);
+    captionSelectionStarted = true;
+    manualCaptionOverride = null;
+    teamPlayersIsHome = null;
+    _rememberRecentPick(found, isHome: isHome);
+    _syncPrimaryPlayer();
+    _syncKeywords();
+    statusMessage = null;
+    notifyListeners();
+    return true;
   }
 
   Future<void> applyTransferredCaption(CaptionTransferPayload payload) async {

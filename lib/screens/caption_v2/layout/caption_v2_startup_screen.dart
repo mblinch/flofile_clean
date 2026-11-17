@@ -2541,6 +2541,8 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         foreground: active ? FfTokens.sessionTx : FfTokens.sessionT2,
         borderColor: active ? FfTokens.nocturneAccentEdge : FfTokens.sessionLn,
         borderWidth: 1,
+        semanticLabel: label,
+        semanticSelected: active,
         onPressed: onPressed,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -2574,6 +2576,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     final wireField = _SessionSelect(
       value: current,
       hint: _loadingStyles ? 'Loading…' : 'Select wire',
+      semanticLabel: 'Wire',
       enabled: !_loadingStyles && options.isNotEmpty,
       height: 34,
       fontSize: 13,
@@ -2713,6 +2716,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       padding: EdgeInsets.zero,
       color: Colors.transparent,
       hoverColor: FfTokens.sessionHv,
+      semanticLabel: 'Swap home and away',
       onPressed: _teamsUnlocked ? _swapTeams : null,
       child: PhosphorIcon(
         PhosphorIconsRegular.arrowsLeftRight,
@@ -3335,6 +3339,12 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         typed.remove(panel);
       } else {
         next[storageKey] = value;
+        // Keep Venue aliases in lockstep so Fill display→normalize cannot
+        // keep a stale Location beside an edited Stadium (or vice versa).
+        if (preset == 'Stadium') {
+          next['Stadium'] = value;
+          next['Location'] = value;
+        }
         typed.add(storageKey);
         typed.add(preset);
         typed.add(panel);
@@ -3628,6 +3638,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         return _SessionSelect(
           value: _sport,
           hint: 'Select league',
+          semanticLabel: 'League',
           enabled: _leagueUnlocked,
           height: 34,
           fontSize: 13,
@@ -3697,6 +3708,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       padding: EdgeInsets.zero,
       color: Colors.transparent,
       hoverColor: FfTokens.sessionHv,
+      semanticLabel: 'Swap home and away',
       onPressed: _teamsUnlocked ? _swapTeams : null,
       child: PhosphorIcon(
         PhosphorIconsRegular.arrowsLeftRight,
@@ -6067,6 +6079,7 @@ class _FolderDropRow extends StatelessWidget {
           padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 12),
           color: FfTokens.sessionPanel,
           hoverColor: FfTokens.sessionHv,
+          semanticLabel: buttonLabel,
           onPressed: onPressed,
           child: Text(
             buttonLabel,
@@ -6087,28 +6100,34 @@ class _FolderDropRow extends StatelessWidget {
       child: row,
     );
     if (empty) {
-      return SizedBox(
-        height: height,
-        child: CustomPaint(
-          painter: _DottedRRectPainter(
-            color: emphasized ? FfTokens.sessionOn : FfTokens.sessionLn2,
-            radius: 9,
+      return Semantics(
+        label: 'Images folder',
+        child: SizedBox(
+          height: height,
+          child: CustomPaint(
+            painter: _DottedRRectPainter(
+              color: emphasized ? FfTokens.sessionOn : FfTokens.sessionLn2,
+              radius: 9,
+            ),
+            child: child,
           ),
-          child: child,
         ),
       );
     }
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
-      height: height,
-      decoration: BoxDecoration(
-        color: FfTokens.sessionEl,
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(
-          color: emphasized ? FfTokens.sessionOn : FfTokens.sessionLn2,
+    return Semantics(
+      label: 'Images folder',
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        height: height,
+        decoration: BoxDecoration(
+          color: FfTokens.sessionEl,
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(
+            color: emphasized ? FfTokens.sessionOn : FfTokens.sessionLn2,
+          ),
         ),
+        child: child,
       ),
-      child: child,
     );
   }
 }
@@ -6196,6 +6215,7 @@ class _SessionSelect extends StatelessWidget {
     this.enabled = true,
     this.height = 32,
     this.fontSize = 13,
+    this.semanticLabel,
   });
 
   final String? value;
@@ -6208,6 +6228,7 @@ class _SessionSelect extends StatelessWidget {
   final bool enabled;
   final double height;
   final double fontSize;
+  final String? semanticLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -6219,6 +6240,9 @@ class _SessionSelect extends StatelessWidget {
             .map((option) => option.$2)
             .firstOrNull;
     final hasValue = label != null && current != null;
+    final resolvedLabel = semanticLabel == null
+        ? (hasValue ? label! : hint)
+        : (hasValue ? '$semanticLabel, $label' : semanticLabel!);
     return Opacity(
       opacity: enabled ? 1 : 0.55,
       child: _Pressable(
@@ -6227,6 +6251,7 @@ class _SessionSelect extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
         color: FfTokens.sessionEl,
         hoverColor: enabled ? FfTokens.sessionHv : FfTokens.sessionEl,
+        semanticLabel: resolvedLabel,
         onPressed: enabled ? () => _open(context) : null,
         child: Row(
           children: [
@@ -7074,6 +7099,9 @@ class _TeamDropdownState extends State<_TeamDropdown> {
               padding: const EdgeInsets.fromLTRB(4, 0, 8, 0),
               color: FfTokens.sessionEl,
               hoverColor: FfTokens.sessionHv,
+              semanticLabel: hasValue
+                  ? '${widget.label} team, $value'
+                  : '${widget.label} team',
               onPressed: widget.enabled ? _toggle : null,
               child: Row(
                 children: [
@@ -7307,61 +7335,66 @@ class _GoTimeButtonState extends State<_GoTimeButton> {
             : _hover
                 ? _hoverGrad
                 : _rest;
-    return MouseRegion(
-      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() {
-        _hover = false;
-        _pressed = false;
-      }),
-      child: GestureDetector(
-        onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
-        onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
-        onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
-        onTap: enabled ? widget.onPressed : null,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 100),
-          height: widget.compact ? 32 : 36,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: active
-                ? null
-                : const Color(0xFF15242E).withValues(alpha: 0.55),
-            gradient: gradient,
-            borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-            border: Border.all(
-              color: !active
-                  ? FfTokens.nocturneLn
-                  : (_hover
-                      ? Colors.white.withValues(alpha: 0.92)
-                      : FfTokens.nocturneAc.withValues(alpha: 0.95)),
-            ),
-            boxShadow: active
-                ? FfTokens.accentButtonGlow(
-                    _hover ? Colors.white : FfTokens.nocturneAc,
-                  )
-                : null,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                widget.loading ? 'Starting…' : widget.label,
-                style: TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: -0.2,
-                  color: fg,
-                ),
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: widget.label,
+      child: MouseRegion(
+        cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) => setState(() {
+          _hover = false;
+          _pressed = false;
+        }),
+        child: GestureDetector(
+          onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+          onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+          onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
+          onTap: enabled ? widget.onPressed : null,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 100),
+            height: widget.compact ? 32 : 36,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: active
+                  ? null
+                  : const Color(0xFF15242E).withValues(alpha: 0.55),
+              gradient: gradient,
+              borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+              border: Border.all(
+                color: !active
+                    ? FfTokens.nocturneLn
+                    : (_hover
+                        ? Colors.white.withValues(alpha: 0.92)
+                        : FfTokens.nocturneAc.withValues(alpha: 0.95)),
               ),
-              if (!widget.loading) ...[
-                const SizedBox(width: 10),
-                _KbdHint(widget.shortcut, onDark: true),
+              boxShadow: active
+                  ? FfTokens.accentButtonGlow(
+                      _hover ? Colors.white : FfTokens.nocturneAc,
+                    )
+                  : null,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  widget.loading ? 'Starting…' : widget.label,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: -0.2,
+                    color: fg,
+                  ),
+                ),
+                if (!widget.loading) ...[
+                  const SizedBox(width: 10),
+                  _KbdHint(widget.shortcut, onDark: true),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -7424,6 +7457,8 @@ class _Pressable extends StatefulWidget {
     this.borderWidth = 0,
     this.hoverForeground = false,
     this.foreground = FfTokens.sessionTx,
+    this.semanticLabel,
+    this.semanticSelected,
   });
 
   final Widget child;
@@ -7439,6 +7474,8 @@ class _Pressable extends StatefulWidget {
   final double borderWidth;
   final bool hoverForeground;
   final Color foreground;
+  final String? semanticLabel;
+  final bool? semanticSelected;
 
   @override
   State<_Pressable> createState() => _PressableState();
@@ -7451,7 +7488,7 @@ class _PressableState extends State<_Pressable> {
   Widget build(BuildContext context) {
     final enabled = widget.onPressed != null;
     final hovering = _hover && enabled;
-    return MouseRegion(
+    final body = MouseRegion(
       cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
@@ -7495,6 +7532,15 @@ class _PressableState extends State<_Pressable> {
           ),
         ),
       ),
+    );
+    final label = widget.semanticLabel;
+    if (label == null) return body;
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      selected: widget.semanticSelected,
+      label: label,
+      child: body,
     );
   }
 }
@@ -7696,6 +7742,8 @@ class _V5Segmented<T> extends StatelessWidget {
                   foreground: option.$1 == value
                       ? FfTokens.sessionTx
                       : FfTokens.sessionT3,
+                  semanticLabel: option.$2,
+                  semanticSelected: option.$1 == value,
                   onPressed: () => onChanged(option.$1),
                   child: Center(
                     child: Text(

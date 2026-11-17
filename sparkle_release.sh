@@ -76,6 +76,10 @@ FLUTTER_MACOS_RELEASE_ARGS=(
   --build-number="$SPARKLE_VERSION"
   --dart-define=CAPTION_V2=true
 )
+# Optional: Sentry DSN for beta crash reports (macOS + Windows). See docs/BETA_NOTES.md.
+if [ -n "${SENTRY_DSN:-}" ]; then
+  FLUTTER_MACOS_RELEASE_ARGS+=(--dart-define="SENTRY_DSN=$SENTRY_DSN")
+fi
 
 ensure_macos_keychain_patch() {
   local pods_helper="$SCRIPT_DIR/macos/Pods/GTMAppAuth/GTMAppAuth/Sources/KeychainStore/KeychainHelper.swift"

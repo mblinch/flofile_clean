@@ -76,6 +76,9 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   Timer? _jerseyBufferTimer;
   String _jerseyBuffer = '';
   bool? _jerseyBufferIsHome;
+  /// Plain typing buffer for `h34` / `v88` (no modifiers). Cleared on timeout.
+  Timer? _playerCodeTimer;
+  String _playerCodeBuffer = '';
   bool _burstSaveDialogOpen = false;
 
   @override
@@ -445,6 +448,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   @override
   void dispose() {
     _jerseyBufferTimer?.cancel();
+    _playerCodeTimer?.cancel();
     HardwareKeyboard.instance.removeHandler(_handleHardwareKey);
     FocusManager.instance.removeListener(_syncNativeJerseyShortcuts);
     _jerseyShortcutChannel.setMethodCallHandler(null);
@@ -501,6 +505,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     if (_handleFirebarFocusShortcut(event)) return true;
     if (_searchFocus.hasFocus && _handleFirebarMenuKey(event)) return true;
     if (_handleJerseySideChoiceKey(event)) return true;
+    if (_handlePlayerCodeKey(event)) return true;
 
     if (_controller.searchOpen) return false;
     if (event is! KeyUpEvent || _jerseyBuffer.isEmpty) return false;
@@ -769,6 +774,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   }
 
   void _queueJerseyDigit(int digit, {required bool isHome}) {
+    _clearPlayerCodeBuffer();
     if (_jerseyBufferIsHome != null && _jerseyBufferIsHome != isHome) {
       _flushJerseyBuffer();
     }
@@ -788,12 +794,166 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     _jerseyBuffer = '';
     _jerseyBufferIsHome = null;
     if (!mounted || jersey.isEmpty || isHome == null) return;
-    final roster = isHome ? _controller.homeRoster : _controller.awayRoster;
-    final matches =
-        roster.where((player) => player.jerseyNumber?.trim() == jersey);
-    if (matches.isEmpty) return;
-    _controller.selectPlayer(matches.first, isHome: isHome);
-    _setColumnFocus(isHome ? 0 : 2);
+    final prefix = isHome ? 'h' : 'v';
+    if (_controller.selectPlayerByCode('$prefix$jersey')) {
+      _setColumnFocus(isHome ? 0 : 2);
+    }
+  }
+
+  /// Type `h`/`v` then digits (e.g. h34) anywhere on the caption screen.
+  /// Commits on Space, Enter, or a short idle timeout.
+  bool _handlePlayerCodeKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (!_controller.sessionReady || _controller.sessionLoading) return false;
+    if (_controller.searchOpen) return false;
+    if (captionV2FocusIsEditable()) return false;
+    if (_photoEdit.editing || _photoEdit.cropping) return false;
+
+    final keys = HardwareKeyboard.instance;
+    if (keys.isMetaPressed ||
+        keys.isControlPressed ||
+        keys.isAltPressed ||
+        keys.isShiftPressed) {
+      return false;
+    }
+
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.escape) {
+      if (_playerCodeBuffer.isEmpty) return false;
+      _clearPlayerCodeBuffer();
+      return true;
+    }
+    if (key == LogicalKeyboardKey.backspace) {
+      if (_playerCodeBuffer.isEmpty) return false;
+      _playerCodeBuffer =
+          _playerCodeBuffer.substring(0, _playerCodeBuffer.length - 1);
+      if (_playerCodeBuffer.isEmpty) {
+        _clearPlayerCodeBuffer();
+      } else {
+        _restartPlayerCodeTimer();
+      }
+      return true;
+    }
+    if (key == LogicalKeyboardKey.space ||
+        key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      if (_playerCodeBuffer.isEmpty) return false;
+      _flushPlayerCodeBuffer();
+      return true;
+    }
+
+    final letter = _playerCodeLetter(key, event.character);
+    if (letter != null) {
+      _jerseyBufferTimer?.cancel();
+      _jerseyBuffer = '';
+      _jerseyBufferIsHome = null;
+      if (_playerCodeBuffer.isEmpty) {
+        _playerCodeBuffer = letter;
+        _restartPlayerCodeTimer();
+        return true;
+      }
+      // Classic double prefix: hh34 / vv88.
+      if (RegExp(r'^[hv]$').hasMatch(_playerCodeBuffer) &&
+          _playerCodeBuffer == letter) {
+        _playerCodeBuffer = '$letter$letter';
+        _restartPlayerCodeTimer();
+        return true;
+      }
+      // Switch side: restart with the new letter.
+      if (!_playerCodeBuffer.toLowerCase().startsWith(letter)) {
+        _playerCodeBuffer = letter;
+        _restartPlayerCodeTimer();
+        return true;
+      }
+      return false;
+    }
+
+    final digit = _playerCodeDigit(key);
+    if (digit != null) {
+      if (_playerCodeBuffer.isEmpty) return false;
+      if (!RegExp(r'^[hv]{1,2}\d{0,2}$', caseSensitive: false)
+          .hasMatch(_playerCodeBuffer)) {
+        return false;
+      }
+      _playerCodeBuffer += '$digit';
+      _restartPlayerCodeTimer();
+      return true;
+    }
+
+    if (_playerCodeBuffer.isNotEmpty) {
+      _clearPlayerCodeBuffer();
+    }
+    return false;
+  }
+
+  String? _playerCodeLetter(LogicalKeyboardKey key, String? character) {
+    final ch = character?.toLowerCase();
+    if (key == LogicalKeyboardKey.keyH || ch == 'h') return 'h';
+    if (key == LogicalKeyboardKey.keyV || ch == 'v') return 'v';
+    return null;
+  }
+
+  static const _playerCodeDigitKeys = <LogicalKeyboardKey>[
+    LogicalKeyboardKey.digit0,
+    LogicalKeyboardKey.digit1,
+    LogicalKeyboardKey.digit2,
+    LogicalKeyboardKey.digit3,
+    LogicalKeyboardKey.digit4,
+    LogicalKeyboardKey.digit5,
+    LogicalKeyboardKey.digit6,
+    LogicalKeyboardKey.digit7,
+    LogicalKeyboardKey.digit8,
+    LogicalKeyboardKey.digit9,
+  ];
+  static const _playerCodeNumpadKeys = <LogicalKeyboardKey>[
+    LogicalKeyboardKey.numpad0,
+    LogicalKeyboardKey.numpad1,
+    LogicalKeyboardKey.numpad2,
+    LogicalKeyboardKey.numpad3,
+    LogicalKeyboardKey.numpad4,
+    LogicalKeyboardKey.numpad5,
+    LogicalKeyboardKey.numpad6,
+    LogicalKeyboardKey.numpad7,
+    LogicalKeyboardKey.numpad8,
+    LogicalKeyboardKey.numpad9,
+  ];
+
+  int? _playerCodeDigit(LogicalKeyboardKey key) {
+    for (var i = 0; i <= 9; i++) {
+      if (key == _playerCodeDigitKeys[i] || key == _playerCodeNumpadKeys[i]) {
+        return i;
+      }
+    }
+    return null;
+  }
+
+  void _restartPlayerCodeTimer() {
+    _playerCodeTimer?.cancel();
+    _playerCodeTimer = Timer(
+      const Duration(milliseconds: 650),
+      _flushPlayerCodeBuffer,
+    );
+  }
+
+  void _clearPlayerCodeBuffer() {
+    _playerCodeTimer?.cancel();
+    _playerCodeTimer = null;
+    _playerCodeBuffer = '';
+  }
+
+  void _flushPlayerCodeBuffer() {
+    _playerCodeTimer?.cancel();
+    final code = _playerCodeBuffer;
+    _playerCodeBuffer = '';
+    _playerCodeTimer = null;
+    if (!mounted || code.isEmpty) return;
+    if (!RegExp(r'^[hv]{1,2}\d{1,3}$', caseSensitive: false).hasMatch(code)) {
+      return;
+    }
+    final isHome = code.toLowerCase().startsWith('h');
+    if (_controller.selectPlayerByCode(code)) {
+      _setColumnFocus(isHome ? 0 : 2);
+    }
   }
 
   void _applyShiftNumber(int number) {

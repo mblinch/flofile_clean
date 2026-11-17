@@ -215,6 +215,8 @@ class PreferencesService {
   static const String _keyFileRenamingEnabled = 'file_renaming_enabled';
   static const String _keyFtpCompleteSoundPath = 'ftp_complete_sound_path';
   static const String _keyHideFirebar = 'hide_firebar';
+  /// Beta default on: send crash / error reports (Sentry). Never includes captions or paths.
+  static const String _keySendCrashReports = 'send_crash_reports';
   static const String _keyAutoAdvanceTabs = 'auto_advance_tabs';
   /// JSON list of recent `{away,home}` matchups per sport (startup screen).
   static const String _keyRecentMatchupsPrefix = 'startup_recent_matchups_';
@@ -571,6 +573,19 @@ class PreferencesService {
   Future<void> saveHideFirebar(bool hidden) async {
     final prefs = await _getPrefs();
     await prefs.setBool(_keyHideFirebar, hidden);
+    applicationModesRevision.value = applicationModesRevision.value + 1;
+    _afterLocalPreferencesChanged();
+  }
+
+  /// When true (default in beta), crash / error reports may be sent.
+  Future<bool> getSendCrashReports() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keySendCrashReports) ?? true;
+  }
+
+  Future<void> saveSendCrashReports(bool enabled) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keySendCrashReports, enabled);
     applicationModesRevision.value = applicationModesRevision.value + 1;
     _afterLocalPreferencesChanged();
   }
@@ -2467,6 +2482,7 @@ class PreferencesService {
       'photographerName': await getPhotographerName(),
       'ftpCompleteSoundPath': await getFtpCompleteSoundPath(),
       'hideFirebar': await getHideFirebar(),
+      'sendCrashReports': await getSendCrashReports(),
       'jerseyOcrEnabled': await getJerseyOcrEnabled(),
       'resolutionWarningThreshold': await getResolutionWarningThreshold(),
       'photoshopPath': await getPhotoshopPath(),
@@ -2736,6 +2752,9 @@ class PreferencesService {
     }
     if (preferences.containsKey('hideFirebar')) {
       await saveHideFirebar(preferences['hideFirebar'] as bool);
+    }
+    if (preferences.containsKey('sendCrashReports')) {
+      await saveSendCrashReports(preferences['sendCrashReports'] as bool);
     }
     if (preferences.containsKey('jerseyOcrEnabled')) {
       await saveJerseyOcrEnabled(preferences['jerseyOcrEnabled'] as bool);

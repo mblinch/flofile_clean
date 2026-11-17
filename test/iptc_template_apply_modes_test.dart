@@ -175,6 +175,33 @@ void main() {
     );
   });
 
+  test('copyrightPrimaryFromExiftool ignores IFD0 Copyright', () {
+    expect(
+      IptcTemplateImportService.copyrightPrimaryFromExiftool({
+        'IFD0:Copyright': 'Camera Copyright',
+        'Copyright': 'Camera Copyright',
+      }),
+      '',
+    );
+    expect(
+      IptcTemplateImportService.copyrightPrimaryFromExiftool({
+        'IFD0:Copyright': 'Camera Copyright',
+        'IPTC:CopyrightNotice': 'TPL Copyright',
+      }),
+      'TPL Copyright',
+    );
+  });
+
+  test('normalizeForPreset prefers Stadium over Location alias', () {
+    final preset = IptcTemplateApplyService.normalizeForPreset({
+      'Stadium': 'TPL Venue',
+      'Location': 'venue test',
+      'Copyright': 'TPL Copyright',
+    });
+    expect(preset['Stadium'], 'TPL Venue');
+    expect(preset.containsKey('Location'), isFalse);
+  });
+
   test(
     'Apply replaces every template field; Fill leaves filled fields untouched',
     () async {
@@ -368,62 +395,50 @@ void main() {
   );
 
   test(
-    'Fill uses on-screen model (file values + edits), not a stale Apply template',
+    'Fill empty file gets every edited on-screen field (Venue + Copyright)',
     () async {
       if (!await _exiftoolAvailable()) return;
 
-      final dir = await Directory.systemTemp.createTemp('iptc_fill_screen_');
+      final dir = await Directory.systemTemp.createTemp('iptc_fill_all_');
       addTearDown(() => dir.delete(recursive: true));
 
-      // What the Fill Gaps screen shows: first-photo values + user edits.
+      // On-screen Fill model after editing every field. Includes the real UI
+      // collision: Stadium=<edited Venue> beside leftover Location=<file>.
       const onScreen = {
-        'Stadium': 'venue test',
-        'MEID': 'MEID test',
-        'Source': 'source test',
-        'Personality': 'personality test',
+        'Personality': 'TPL Personality',
+        'Description Writers': 'TPL',
+        'Headline': 'TPL Headline',
+        'MEID': 'TPLMEID001',
+        'Keywords': 'TPLhockey, TPLKeyword',
+        'Creator': 'TPL Mark Blinch',
+        'Job Title': 'TPL Job Title',
+        'Copyright': 'TPL Copyright',
+        'Credit': 'TPL Getty Images',
+        'Source': 'TPL Source',
+        'City': 'TPL Toronto',
+        'Stadium': 'TPL Venue',
+        'Location': 'venue test', // stale file mirror — must not win
+        'Province/State': 'TPL ON',
+        'Country': 'TPL Canada',
+        'Country Code': 'TPL',
+        'Object Name': 'TPL_OBJECT',
+        'Special Instructions': 'TPL special instructions',
+        'Category': 'S',
         'Supp Cat 1': 'TEA',
         'Supp Cat 2': 'TEB',
         'Supp Cat 3': 'TEC',
-        'Country Code': 'TES',
-        'Job Title': 'job title teset',
-        'Description Writers': 'writer test',
-        'Object Name': 'OBJECT TEST',
-        'Special Instructions': 'special instruction test',
-        'Copyright': 'copyright test',
-        // User edits on the Fill screen:
-        'City': 'TPL Toronto',
-        'Credit': 'TPL Getty Images',
-        'Keywords': 'TPLhockey',
-        'Headline': 'TPL Headline',
-        'Creator': 'TPL Mark Blinch',
+        'Urgency': '5',
       };
-      // Stale Apply template must NOT leak into the empty file.
-      const staleApplyTemplate = {
-        'Stadium': 'Coca-Cola Coliseum',
-        'MEID': '776465233',
-        'Source': 'Getty Images North America',
-        'Personality': 'Paige Bueckers',
-        'Supp Cat 1': 'SPO',
-        'Supp Cat 2': 'BKP',
-        'Supp Cat 3': 'WBA',
-        'Country Code': 'CAN',
-        'Job Title': 'Contributor',
-        'Province/State': 'ON',
-        'Country': 'Canada',
-        'Creator': 'TPL Mark Blinch',
-        'City': 'TPL Toronto',
-        'Credit': 'TPL Getty Images',
-        'Keywords': 'TPLhockey',
-        'Headline': 'TPL Headline',
-      };
+      final expected = IptcTemplateApplyService.normalizeForPreset(onScreen);
+      expect(expected['Stadium'], 'TPL Venue');
+      expect(expected['Copyright'], 'TPL Copyright');
 
       final empty = await _jpegFile(dir, 'empty.jpg');
-      final artistOnly = await _jpegFile(dir, 'artist_only.jpg');
-      await _seedMeta(artistOnly.path, {
-        'EXIF:Artist': 'Camera Body Artist',
+      // Leftover camera Copyright must not block IPTC/XMP fill.
+      await _seedMeta(empty.path, {
+        'IFD0:Copyright': 'Camera Copyright Leftover',
       });
 
-      // Writer receives the on-screen model — never the stale Apply template.
       final result = await IptcTemplateApplyService.applyToImage(
         empty.path,
         onScreen,
@@ -434,7 +449,17 @@ void main() {
       expect(result.success, isTrue);
 
       final panel = await _panel(empty.path);
-      for (final e in onScreen.entries) {
+      for (final e in expected.entries) {
+        if (e.key == 'Urgency') {
+          expect(
+            IptcTemplateApplyService.normalizeUrgencyValue(
+              panel['Urgency'] ?? '',
+            ),
+            e.value,
+            reason: 'Urgency',
+          );
+          continue;
+        }
         expect(
           panel[e.key] ??
               IptcTemplateApplyService.lookupValue(panel, e.key) ??
@@ -443,23 +468,19 @@ void main() {
           reason: 'empty file must get on-screen field ${e.key}',
         );
       }
-      expect(panel['Stadium'], isNot(staleApplyTemplate['Stadium']));
-      expect(panel['MEID'], isNot(staleApplyTemplate['MEID']));
-      expect(panel['Personality'], isNot(staleApplyTemplate['Personality']));
-      expect(panel['Job Title'], isNot(staleApplyTemplate['Job Title']));
+      expect(panel['Stadium'], 'TPL Venue');
+      expect(panel['Stadium'], isNot('venue test'));
+
+      final copyrightRaw = await _copyrightRaw(empty.path);
+      expect(copyrightRaw['IPTC:CopyrightNotice'], 'TPL Copyright');
+      expect(copyrightRaw['XMP-dc:Rights'], 'TPL Copyright');
       expect(await _creatorLiCount(empty.path), 1);
 
-      // Copyright must land in the PM-visible stores (not IFD0-only).
-      final copyrightRaw = await _copyrightRaw(empty.path);
-      expect(copyrightRaw['IPTC:CopyrightNotice'], 'copyright test');
-      expect(copyrightRaw['XMP-dc:Rights'], 'copyright test');
-      expect(
-        copyrightRaw.containsKey('IFD0:Copyright'),
-        isFalse,
-        reason: 'must not write bare/IFD0 Copyright',
-      );
-
       // EXIF Artist alone must not block filling By-line / XMP-dc:Creator.
+      final artistOnly = await _jpegFile(dir, 'artist_only.jpg');
+      await _seedMeta(artistOnly.path, {
+        'EXIF:Artist': 'Camera Body Artist',
+      });
       final creatorFill = await IptcTemplateApplyService.applyToImage(
         artistOnly.path,
         {'Creator': 'TPL Mark Blinch'},

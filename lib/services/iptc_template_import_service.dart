@@ -514,6 +514,20 @@ class IptcTemplateImportService {
     ]);
   }
 
+  /// Copyright stores Photo Mechanic shows (IPTC notice + XMP rights).
+  ///
+  /// Intentionally excludes IFD0/EXIF Copyright — a leftover camera Copyright
+  /// must not make Fill Gaps skip writing IPTC:CopyrightNotice / XMP-dc:Rights.
+  static String copyrightPrimaryFromExiftool(Map<String, dynamic> meta) {
+    return _first(meta, const [
+      'IPTC:CopyrightNotice',
+      'CopyrightNotice',
+      'XMP-dc:Rights',
+      'XMP:Rights',
+      'Rights',
+    ]);
+  }
+
   static String _first(Map<String, dynamic> meta, List<String> keys) {
     for (final key in keys) {
       final raw = meta[key];

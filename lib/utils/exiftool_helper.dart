@@ -1,6 +1,10 @@
-import 'dart:io';
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+
 import 'package:path/path.dart' as path;
+
+import '../services/crash_reporting_service.dart';
 
 class ExiftoolResult {
   final int exitCode;
@@ -134,15 +138,28 @@ class ExiftoolHelper {
     }
   }
 
+  static void _reportFailure(ExiftoolResult result) {
+    if (result.isSuccess) return;
+    // Never forward args (may include paths / IPTC values) — scrub stderr only.
+    unawaited(
+      CrashReportingService.reportMetadataWriteFailure(
+        exitCode: result.exitCode,
+        stderrText: result.stderrText,
+      ),
+    );
+  }
+
   static Future<ExiftoolResult> run(List<String> args) async {
     final exiftoolPath = await _resolveExiftoolPath();
     if (exiftoolPath == null) {
-      return ExiftoolResult(
+      final missing = ExiftoolResult(
         exitCode: 127,
         stdoutText: '',
         stderrText:
             'exiftool not found. Please install exiftool (brew install exiftool).',
       );
+      _reportFailure(missing);
+      return missing;
     }
 
     print('DEBUG: exiftool ${args.length} args -> ${args.isEmpty ? '' : args.last}');
@@ -209,11 +226,13 @@ class ExiftoolHelper {
             'Please ensure exiftool is installed system-wide:\n'
             'brew install exiftool';
         _showErrorIfNeeded(errorMessage);
-        return ExiftoolResult(
+        final failed = ExiftoolResult(
           exitCode: proc.exitCode,
           stdoutText: '',
           stderrText: errorMessage,
         );
+        _reportFailure(failed);
+        return failed;
       }
 
       return ExiftoolResult(
@@ -261,12 +280,16 @@ class ExiftoolHelper {
           'This usually means the bundled exiftool cannot run in the sandboxed environment.\n'
           'Please install exiftool system-wide: brew install exiftool';
       _showErrorIfNeeded(errorMessage);
-      return ExiftoolResult(
+      final failed = ExiftoolResult(
           exitCode: 126, stdoutText: '', stderrText: errorMessage);
+      _reportFailure(failed);
+      return failed;
     } catch (e) {
       print('DEBUG: Unexpected error: $e');
-      return ExiftoolResult(
+      final failed = ExiftoolResult(
           exitCode: 1, stdoutText: '', stderrText: 'Unexpected error: $e');
+      _reportFailure(failed);
+      return failed;
     }
   }
 }

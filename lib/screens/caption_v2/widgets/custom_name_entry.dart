@@ -77,62 +77,70 @@ class CustomNameField extends StatelessWidget {
           children: [
             SizedBox(
               width: 42,
-              child: TextField(
-                controller: jerseyController,
-                focusNode: jerseyFocusNode,
-                readOnly: pinned,
-                keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9A-Za-z]')),
-                  LengthLimitingTextInputFormatter(3),
-                ],
-                textAlign: TextAlign.center,
-                textInputAction: TextInputAction.next,
-                onChanged: (_) => onChanged?.call(),
-                onSubmitted: (_) => nameFocusNode.requestFocus(),
-                style: tokens.jerseyStyle.copyWith(
-                  fontSize: 12,
-                  color: tokens.text,
-                  height: 1.1,
-                ),
-                decoration: InputDecoration(
-                  isDense: true,
-                  hintText: '#',
-                  hintStyle: tokens.jerseyStyle.copyWith(
+              child: Semantics(
+                textField: true,
+                label: 'Jersey number',
+                child: TextField(
+                  controller: jerseyController,
+                  focusNode: jerseyFocusNode,
+                  readOnly: pinned,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9A-Za-z]')),
+                    LengthLimitingTextInputFormatter(3),
+                  ],
+                  textAlign: TextAlign.center,
+                  textInputAction: TextInputAction.next,
+                  onChanged: (_) => onChanged?.call(),
+                  onSubmitted: (_) => nameFocusNode.requestFocus(),
+                  style: tokens.jerseyStyle.copyWith(
                     fontSize: 12,
-                    color: tokens.textSecondary,
+                    color: tokens.text,
                     height: 1.1,
                   ),
-                  contentPadding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
-                  border: InputBorder.none,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: '#',
+                    hintStyle: tokens.jerseyStyle.copyWith(
+                      fontSize: 12,
+                      color: tokens.textSecondary,
+                      height: 1.1,
+                    ),
+                    contentPadding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
+                    border: InputBorder.none,
+                  ),
                 ),
               ),
             ),
             Container(width: 1, height: 16, color: tokens.divider),
             Expanded(
-              child: TextField(
-                controller: nameController,
-                focusNode: nameFocusNode,
-                readOnly: pinned,
-                maxLines: 1,
-                textInputAction: TextInputAction.done,
-                onChanged: (_) => onChanged?.call(),
-                onSubmitted: (_) => onSubmit(),
-                spellCheckConfiguration: floSpellCheckConfiguration(),
-                contextMenuBuilder: floSpellCheckContextMenuBuilder,
-                style: tokens.labelStyle.copyWith(
-                  fontSize: 11.5,
-                  color: tokens.text,
-                ),
-                decoration: InputDecoration(
-                  isDense: true,
-                  hintText: 'Custom name',
-                  hintStyle: tokens.labelStyle.copyWith(
+              child: Semantics(
+                textField: true,
+                label: 'Custom name',
+                child: TextField(
+                  controller: nameController,
+                  focusNode: nameFocusNode,
+                  readOnly: pinned,
+                  maxLines: 1,
+                  textInputAction: TextInputAction.done,
+                  onChanged: (_) => onChanged?.call(),
+                  onSubmitted: (_) => onSubmit(),
+                  spellCheckConfiguration: floSpellCheckConfiguration(),
+                  contextMenuBuilder: floSpellCheckContextMenuBuilder,
+                  style: tokens.labelStyle.copyWith(
                     fontSize: 11.5,
-                    color: tokens.textSecondary,
+                    color: tokens.text,
                   ),
-                  contentPadding: const EdgeInsets.fromLTRB(8, 6, 4, 6),
-                  border: InputBorder.none,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: 'Custom name',
+                    hintStyle: tokens.labelStyle.copyWith(
+                      fontSize: 11.5,
+                      color: tokens.textSecondary,
+                    ),
+                    contentPadding: const EdgeInsets.fromLTRB(8, 6, 4, 6),
+                    border: InputBorder.none,
+                  ),
                 ),
               ),
             ),

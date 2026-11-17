@@ -341,9 +341,13 @@ class _RosterColumnState extends State<RosterColumn> {
                                 .length;
                         final isPrimarySelected = selectedRowIndex == 0 &&
                             c.selectedPlayers.isNotEmpty;
+                        final jersey = pl.jerseyNumber ?? '—';
+                        final listName = c.playerListName(pl);
+                        final side = widget.isHome ? 'Home' : 'Away';
                         return PlayerRow(
-                          jersey: pl.jerseyNumber ?? '—',
-                          name: c.playerListName(pl),
+                          jersey: jersey,
+                          name: listName,
+                          semanticLabel: '$side $jersey $listName',
                           selected: selected,
                           pinned: c.isPlayerPinned(
                             pl,
@@ -544,9 +548,13 @@ class _FirebarRosterReference extends StatelessWidget {
               candidate.player!.jerseyNumber == player.jerseyNumber,
         )
         .firstOrNull;
+    final jersey = player.jerseyNumber ?? '—';
+    final listName = controller.playerListName(player);
+    final side = isHome ? 'Home' : 'Away';
     return PlayerRow(
-      jersey: player.jerseyNumber ?? '—',
-      name: controller.playerListName(player),
+      jersey: jersey,
+      name: listName,
+      semanticLabel: '$side $jersey $listName',
       selected: false,
       pinned: controller.isPlayerPinned(player, isHome: isHome),
       dimmed: dimUnmatched && result == null,
@@ -806,11 +814,12 @@ class _PlayerWheelState extends State<_PlayerWheel> {
                                 isHome: widget.isHome,
                               );
                               final centered = index == _centerIndex;
+                              final jersey = player.jerseyNumber ?? '';
+                              final side = widget.isHome ? 'Home' : 'Away';
                               return Semantics(
                                 button: true,
                                 selected: selected,
-                                label:
-                                    '${player.jerseyNumber ?? ''} ${player.fullName}',
+                                label: '$side $jersey ${player.fullName}'.trim(),
                                 child: GestureDetector(
                                   behavior: HitTestBehavior.opaque,
                                   onTap: () async {

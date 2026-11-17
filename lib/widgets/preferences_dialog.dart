@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/admin_service.dart';
 import '../services/auth_service.dart';
 import '../services/camera_serial_service.dart';
+import '../services/crash_reporting_service.dart';
 import '../services/ftp_complete_sound.dart';
 import '../services/preferences_service.dart';
 import '../theme/ff_tokens.dart';
@@ -413,6 +414,8 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     final burstOn = _currentPreferences?['burstDetectionEnabled'] == true;
     final jerseyOcr = _currentPreferences?['jerseyOcrEnabled'] == true;
     final firebarOn = _currentPreferences?['hideFirebar'] != true;
+    final sendCrashReports =
+        _currentPreferences?['sendCrashReports'] != false;
     final showJerseyOcr = defaultTargetPlatform == TargetPlatform.macOS;
     final resolutionThreshold =
         _currentPreferences?['resolutionWarningThreshold'] as int? ?? 3000;
@@ -542,6 +545,22 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                 firebarOn,
                 _preferencesService.saveHideFirebar,
               ),
+            ),
+            _PrefsModeBuffButton(
+              icon: PhosphorIconsRegular.bug,
+              label: 'Send crash reports',
+              tooltip:
+                  'Send crash and error reports during beta. Never includes captions, IPTC values, file paths, photos, or email.',
+              enabled: sendCrashReports,
+              onToggle: () async {
+                final next = !sendCrashReports;
+                await _setApplicationPref(
+                  'sendCrashReports',
+                  next,
+                  _preferencesService.saveSendCrashReports,
+                );
+                await CrashReportingService.setEnabled(next);
+              },
             ),
             ],
           ),
