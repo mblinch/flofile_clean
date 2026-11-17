@@ -1,6 +1,6 @@
 {
-  "version": "2.0.45",
-  "notes": "Fix IPTC list-field duplication on save (Keywords, Subject, Personality, Supplemental Categories, Country Code).",
-  "mac_url": "https://github.com/mblinch/flofile_clean/releases/download/v2.0.45/FloFileBeta.zip",
+  "version": "2.0.46",
+  "notes": "Stable caption strip height; block incomplete saves (Shift to override); Save & Next/Prev on empty frames without writing.",
+  "mac_url": "https://github.com/mblinch/flofile_clean/releases/download/v2.0.46/FloFileBeta.zip",
   "min_supported": "1.0.0"
 }

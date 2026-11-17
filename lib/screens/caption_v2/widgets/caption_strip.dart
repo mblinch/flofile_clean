@@ -282,6 +282,10 @@ class CaptionStrip extends StatelessWidget {
     );
   }
 
+  /// Lines reserved for the live caption so wrapping never shoves Save /
+  /// roster / verb UI under the cursor. Longer text scrolls inside.
+  static const int fixedCaptionLines = 4;
+
   Widget _captionBody(
     FfTokens t,
     double captionSize, {
@@ -291,53 +295,57 @@ class CaptionStrip extends StatelessWidget {
       fontSize: captionSize,
       height: 1.32,
     );
-    final text = ConstrainedBox(
-      constraints: BoxConstraints(
-        minHeight: captionSize * 1.32,
-      ),
-      child: onCaptionChanged != null
-          ? _CaptionEditor(
-              value: fullCaption ?? '',
-              hintText: captionHint,
-              tokens: t,
-              fontSize: captionSize,
-              highlightPhrases: highlightPhrases,
-              provenanceSpans: provenanceSpans,
-              unmatchedTip: unmatchedTip,
-              onChanged: onCaptionChanged!,
-            )
-          : fullCaption != null && fullCaption!.trim().isNotEmpty
-              ? Text.rich(
-                  _captionAnnotatedSpan(
-                    fullCaption!,
-                    firebarPhrases: highlightPhrases,
-                    provenance: provenanceSpans,
-                    base: captionStyle,
-                    firebarColor: FfTokens.firebar,
-                    provenanceColor: t.accent,
-                    tokens: t,
-                    interactiveTips: true,
-                    unmatchedTip: unmatchedTip,
-                  ),
-                )
-              : Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 4,
-                  runSpacing: 4,
-                  children: [
-                    Text(leading, style: captionStyle),
-                    for (final chip in chips.where((chip) => !chip.isEmpty))
-                      _CaptionChip(
-                        data: chip,
-                        tokens: t,
-                        onTap: onChipTap == null
-                            ? null
-                            : () => onChipTap!(chip.id),
-                      ),
-                    if (trailing.isNotEmpty)
-                      Text(trailing, style: captionStyle),
-                  ],
+    final lineHeight = captionSize * 1.32;
+    final textChild = onCaptionChanged != null
+        ? _CaptionEditor(
+            value: fullCaption ?? '',
+            hintText: captionHint,
+            tokens: t,
+            fontSize: captionSize,
+            highlightPhrases: highlightPhrases,
+            provenanceSpans: provenanceSpans,
+            unmatchedTip: unmatchedTip,
+            onChanged: onCaptionChanged!,
+          )
+        : fullCaption != null && fullCaption!.trim().isNotEmpty
+            ? Text.rich(
+                _captionAnnotatedSpan(
+                  fullCaption!,
+                  firebarPhrases: highlightPhrases,
+                  provenance: provenanceSpans,
+                  base: captionStyle,
+                  firebarColor: FfTokens.firebar,
+                  provenanceColor: t.accent,
+                  tokens: t,
+                  interactiveTips: true,
+                  unmatchedTip: unmatchedTip,
                 ),
+              )
+            : Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 4,
+                runSpacing: 4,
+                children: [
+                  Text(leading, style: captionStyle),
+                  for (final chip in chips.where((chip) => !chip.isEmpty))
+                    _CaptionChip(
+                      data: chip,
+                      tokens: t,
+                      onTap: onChipTap == null
+                          ? null
+                          : () => onChipTap!(chip.id),
+                    ),
+                  if (trailing.isNotEmpty)
+                    Text(trailing, style: captionStyle),
+                ],
+              );
+    // Fixed-height box (empty hint and full Getty sentence share the same
+    // space) so nothing below the caption jumps when lines wrap.
+    final text = SizedBox(
+      height: lineHeight * fixedCaptionLines,
+      child: SingleChildScrollView(
+        child: textChild,
+      ),
     );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -345,7 +353,7 @@ class CaptionStrip extends StatelessWidget {
         if (fill)
           Expanded(
             child: SingleChildScrollView(
-              child: text,
+              child: textChild,
             ),
           )
         else

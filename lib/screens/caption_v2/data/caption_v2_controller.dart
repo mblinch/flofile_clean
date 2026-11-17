@@ -5611,6 +5611,9 @@ class CaptionV2Controller extends ChangeNotifier {
 
   void selectVerb(String verb) {
     captionSelectionStarted = true;
+    if (statusMessage == incompleteCaptionWarning) {
+      statusMessage = null;
+    }
     if (selectedVerb != verb) {
       celebrationType = null;
       verbModifierSelections
@@ -5778,6 +5781,9 @@ class CaptionV2Controller extends ChangeNotifier {
     customVerbPhrase = value;
     final custom = value.trim();
     if (custom.isNotEmpty) {
+      if (statusMessage == incompleteCaptionWarning) {
+        statusMessage = null;
+      }
       lastCustomVerbPhrase = custom;
       captionSelectionStarted = true;
       selectedVerb = null;
@@ -10217,7 +10223,10 @@ class CaptionV2Controller extends ChangeNotifier {
     await _prefs?.saveLastSavedMetadata(payload.toJson());
   }
 
-  Future<bool> saveCurrent({bool advance = false}) async {
+  Future<bool> saveCurrent({
+    bool advance = false,
+    bool allowIncomplete = false,
+  }) async {
     final selected = orderedSelectedImagePaths;
     final path = currentPath;
     final targets = selected.length >= 2
@@ -10229,7 +10238,8 @@ class CaptionV2Controller extends ChangeNotifier {
       return false;
     }
     final keepFirebar = searchOpen;
-    final result = await savePaths(targets);
+    final result =
+        await savePaths(targets, allowIncomplete: allowIncomplete);
     if (selected.length >= 2) {
       setSelectedImagePaths(result.failedPaths);
     }
@@ -10246,7 +10256,19 @@ class CaptionV2Controller extends ChangeNotifier {
     return result.anySucceeded;
   }
 
-  Future<CaptionSaveResult> savePaths(List<String> paths) async {
+  /// True when a player/team is selected but no verb — incomplete caption.
+  bool get hasIncompleteCaptionSelection =>
+      hasCaptionSubject &&
+      !hasVerbSelection &&
+      manualCaptionOverride == null;
+
+  static const String incompleteCaptionWarning =
+      'Pick an action before saving';
+
+  Future<CaptionSaveResult> savePaths(
+    List<String> paths, {
+    bool allowIncomplete = false,
+  }) async {
     final targets = <String>[];
     for (final path in paths) {
       if (imagePaths.contains(path) && !targets.contains(path)) {
@@ -10265,8 +10287,14 @@ class CaptionV2Controller extends ChangeNotifier {
     final captionUnchanged = !hasCaptionSubject &&
         (!hasVerbSelection || pinDefersCaptionUntilPlayer) &&
         manualCaptionOverride == null;
-    if (captionUnchanged && !metadataDirty && originalCaption.trim().isEmpty) {
-      statusMessage = 'Select a player first';
+    // Untouched frame (empty or existing caption, no selection, no dirty
+    // metadata): do not write a caption — Save & Next / Prev still succeed so
+    // navigation can continue. Incomplete player-without-verb is blocked below.
+
+    // Player without a verb would write a caption missing the action. Refuse
+    // unless the user overrides (Shift / "Save anyway").
+    if (hasIncompleteCaptionSelection && !allowIncomplete) {
+      statusMessage = incompleteCaptionWarning;
       notifyListeners();
       return CaptionSaveResult(
         requestedPaths: targets,
@@ -10275,8 +10303,6 @@ class CaptionV2Controller extends ChangeNotifier {
     }
 
     final manualCaption = manualCaptionOverride?.trim().isNotEmpty == true;
-    // Player-only captions (no verb yet) are allowed — the style wraps the
-    // incomplete body the same way as a full sentence.
     final generatedCaption = hasCaptionSubject;
     if (generatedCaption && selectedVerb != null) rememberCombo();
     final openPath = currentPath;

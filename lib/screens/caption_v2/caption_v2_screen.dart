@@ -147,7 +147,12 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     final status = _controller.statusMessage;
     if (status != _lastObservedStatus) {
       _lastObservedStatus = status;
-      if (status != null && (_isErrorStatus(status) || _isFtpStatus(status))) {
+      // Incomplete-caption warning stays inline near the caption — no snackbar.
+      final inlineOnly =
+          status == CaptionV2Controller.incompleteCaptionWarning;
+      if (status != null &&
+          !inlineOnly &&
+          (_isErrorStatus(status) || _isFtpStatus(status))) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           final messenger = ScaffoldMessenger.maybeOf(context);
@@ -1019,12 +1024,21 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     required bool next,
     bool transmit = false,
     bool advance = true,
+    bool allowIncomplete = false,
   }) async {
     // Avoid stacking another burst picker while one is already open
     // (e.g. ⌘S while the dialog is visible).
     if (_burstSaveDialogOpen || _saveInFlight) return;
     _saveInFlight = true;
     try {
+    // Shift held (or explicit allowIncomplete) saves player-only captions.
+    final forceIncomplete = allowIncomplete ||
+        HardwareKeyboard.instance.logicalKeysPressed.contains(
+          LogicalKeyboardKey.shiftLeft,
+        ) ||
+        HardwareKeyboard.instance.logicalKeysPressed.contains(
+          LogicalKeyboardKey.shiftRight,
+        );
     final keepFirebar = _controller.searchOpen;
 
     void restoreFirebarFocus() {
@@ -1045,7 +1059,10 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
           ? _controller.burstGroupOverlapping(selected)
           : null;
       final alreadySaved = selected.every(_controller.savedImages.contains);
-      final result = await _controller.savePaths(selected);
+      final result = await _controller.savePaths(
+        selected,
+        allowIncomplete: forceIncomplete,
+      );
       if (!mounted) return;
       if (transmit) unawaited(_transmitSaved(result));
       _controller.setSelectedImagePaths(result.failedPaths);
@@ -1079,7 +1096,10 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     final anchorAlreadySaved =
         chain.isNotEmpty && _controller.savedImages.contains(chain.first);
     if (chain.length > 1 && !anchorAlreadySaved) {
-      final result = await _controller.savePaths([chain.first]);
+      final result = await _controller.savePaths(
+        [chain.first],
+        allowIncomplete: forceIncomplete,
+      );
       if (!mounted) return;
       if (transmit) unawaited(_transmitSaved(result));
       if (result.anySucceeded) {
@@ -1099,7 +1119,10 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       await _controller.savePaths(const []);
       return;
     }
-    final result = await _controller.savePaths([path]);
+    final result = await _controller.savePaths(
+      [path],
+      allowIncomplete: forceIncomplete,
+    );
     if (transmit) unawaited(_transmitSaved(result));
     if (result.anySucceeded && mounted && advance) {
       next
@@ -1820,6 +1843,14 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                   const SizedBox(height: 6),
                 ],
                 _resizableCaption(c),
+                if (c.statusMessage ==
+                    CaptionV2Controller.incompleteCaptionWarning)
+                  _IncompleteCaptionWarning(
+                    tokens: t,
+                    onSaveAnyway: () => unawaited(
+                      _saveInDirection(next: true, allowIncomplete: true),
+                    ),
+                  ),
                 _buildSearchBlock(c),
                 const SizedBox(height: 6),
                 Expanded(
@@ -1884,6 +1915,16 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
             hideFirebarFooter: true,
           ),
         ),
+        if (c.statusMessage == CaptionV2Controller.incompleteCaptionWarning)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+            child: _IncompleteCaptionWarning(
+              tokens: t,
+              onSaveAnyway: () => unawaited(
+                _saveInDirection(next: true, allowIncomplete: true),
+              ),
+            ),
+          ),
         const SizedBox(height: 8),
         Expanded(
           child: Material(
@@ -2246,6 +2287,74 @@ class _PhotoEditShellState extends State<_PhotoEditShell> {
             widget.maxWidth,
           ),
           child: mobile,
+        ),
+      ),
+    );
+  }
+}
+
+/// Inline (non-modal) prompt when Save is blocked for a player without a verb.
+class _IncompleteCaptionWarning extends StatelessWidget {
+  const _IncompleteCaptionWarning({
+    required this.tokens,
+    required this.onSaveAnyway,
+  });
+
+  final FfTokens tokens;
+  final VoidCallback onSaveAnyway;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 2),
+      child: Material(
+        color: FfTokens.dangerBg,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: FfTokens.dangerBorder),
+          ),
+          child: Row(
+            children: [
+              const PhosphorIcon(
+                PhosphorIconsRegular.warning,
+                size: 14,
+                color: FfTokens.danger,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  CaptionV2Controller.incompleteCaptionWarning,
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: FfTokens.danger,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: onSaveAnyway,
+                style: TextButton.styleFrom(
+                  foregroundColor: tokens.text,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text(
+                  'Save anyway',
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

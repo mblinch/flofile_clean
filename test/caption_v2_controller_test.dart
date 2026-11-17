@@ -1724,7 +1724,7 @@ void main() {
     expect(highlights.first.toLowerCase(), contains('matthews'));
   });
 
-  test('save with a player and no verb writes incomplete caption', () async {
+  test('save with a player and no verb is refused', () async {
     final writer = _FakeCaptionWriter({'/one.jpg'});
     final controller = CaptionV2Controller(writer: writer)
       ..imagePaths = ['/one.jpg']
@@ -1733,6 +1733,28 @@ void main() {
     controller.selectPlayer(player('Bo Bichette', '11'), isHome: true);
 
     final result = await controller.savePaths(['/one.jpg']);
+
+    expect(result.anySucceeded, isFalse);
+    expect(writer.calls, 0);
+    expect(controller.captionedImages, isEmpty);
+    expect(controller.savedImages, isEmpty);
+    expect(
+      controller.statusMessage,
+      CaptionV2Controller.incompleteCaptionWarning,
+    );
+    expect(controller.hasIncompleteCaptionSelection, isTrue);
+  });
+
+  test('allowIncomplete saves player-only caption', () async {
+    final writer = _FakeCaptionWriter({'/one.jpg'});
+    final controller = CaptionV2Controller(writer: writer)
+      ..imagePaths = ['/one.jpg']
+      ..homeTeam = 'Toronto Blue Jays'
+      ..awayTeam = 'New York Yankees';
+    controller.selectPlayer(player('Bo Bichette', '11'), isHome: true);
+
+    final result =
+        await controller.savePaths(['/one.jpg'], allowIncomplete: true);
 
     expect(result.anySucceeded, isTrue);
     expect(writer.calls, 1);
@@ -1771,6 +1793,21 @@ void main() {
     expect(writer.calls, 0);
     expect(controller.savedImages, {'/one.jpg', '/two.jpg'});
     expect(controller.captionedImages, isEmpty);
+  });
+
+  test('untouched empty caption allows save navigation without writing',
+      () async {
+    final writer = _FakeCaptionWriter({});
+    final controller = CaptionV2Controller(writer: writer)
+      ..imagePaths = ['/one.jpg']
+      ..currentIptcMeta = {};
+
+    final result = await controller.savePaths(['/one.jpg']);
+
+    expect(result.anySucceeded, isTrue);
+    expect(writer.calls, 0);
+    expect(controller.captionedImages, isEmpty);
+    expect(controller.statusMessage, isNot('Select a player first'));
   });
 
   test('metadata-only save preserves the embedded caption', () async {
