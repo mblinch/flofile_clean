@@ -151,11 +151,25 @@ List<String> normalizeSupplementalCategories(List<String> inputs) {
   return result;
 }
 
+/// Case-sensitive dedupe of list items, keeping first occurrence.
+List<String> dedupeMetadataListValues(Iterable<String> raw) {
+  final seen = <String>{};
+  final out = <String>[];
+  for (final part in raw) {
+    final trimmed = part.trim();
+    if (trimmed.isEmpty) continue;
+    if (seen.add(trimmed)) out.add(trimmed);
+  }
+  return out;
+}
+
 /// Builds ExifTool arguments for setting supplemental categories with proper overwrite semantics
 ///
 /// This function implements Photo Mechanic compatible behavior:
-/// - Clears the XMP-photoshop:SupplementalCategories field completely
-/// - Adds each normalized category as a separate array item
+/// - Clears IPTC / XMP supplemental-category aliases completely
+/// - Adds each normalized category as a separate array item in IPTC and
+///   XMP-photoshop (never writes the bare `-SupplementalCategories=` alias
+///   alongside IPTC — those are the same tag and would double every value)
 /// - Ensures proper overwrite (no merging with existing values)
 ///
 /// Returns a list of ExifTool arguments to be added to the command
@@ -168,24 +182,45 @@ List<String> buildSupplementalCategoriesArgs(List<String> rawInputs) {
   print('DEBUG: Supplemental Categories - Normalized: $normalizedSuppCats');
   print('DEBUG: Supplemental Categories - Save path: ExifTool');
 
-  // Always clear all related fields first to guarantee overwrite semantics
-  // Clear generic/legacy fields that might be populated by other apps
+  // Always clear all related fields first to guarantee overwrite semantics.
   args.add('-SupplementalCategories=');
   args.add('-IPTC:SupplementalCategories=');
   args.add('-XMP:SupplementalCategories=');
-  // Clear the authoritative XMP-photoshop bag
   args.add('-XMP-photoshop:SupplementalCategories=');
 
-  // If we have values, assign the entire list in one go using -sep.
-  // Photo Mechanic reads IPTC SupplementalCategories; XMP-photoshop is also set.
-  if (normalizedSuppCats.isNotEmpty) {
-    final joined = normalizedSuppCats.join(',');
-    args.add('-sep');
-    args.add(',');
-    args.add('-IPTC:SupplementalCategories=$joined');
-    args.add('-SupplementalCategories=$joined');
-    args.add('-XMP-photoshop:SupplementalCategories=$joined');
+  // One `=` per value into each distinct bag (not `+=`). ExifTool ignores an
+  // IPTC clear when `+=` follows in the same invocation; repeated `=` replaces
+  // the list with individual entries. Do not also write the bare
+  // SupplementalCategories alias — it maps to IPTC and doubles the list.
+  for (final cat in normalizedSuppCats) {
+    args.add('-IPTC:SupplementalCategories=$cat');
+    args.add('-XMP-photoshop:SupplementalCategories=$cat');
   }
 
+  return args;
+}
+
+/// Builds ExifTool arguments for Country Code (IPTC 2:100) with replace + dedupe.
+///
+/// Clears IPTC / XMP country-code aliases, then writes a single ISO code to
+/// IPTC Country-PrimaryLocationCode and XMP-iptcCore:CountryCode.
+List<String> buildCountryCodeArgs(String? raw) {
+  final parts = dedupeMetadataListValues(
+    (raw ?? '').split(RegExp(r'[,;/\s]+')),
+  );
+  // Country code is a single ISO value; keep the first unique token.
+  final code = parts.isEmpty ? '' : parts.first;
+
+  final args = <String>[
+    '-CountryCode=',
+    '-Country-PrimaryLocationCode=',
+    '-IPTC:Country-PrimaryLocationCode=',
+    '-XMP:CountryCode=',
+    '-XMP-iptcCore:CountryCode=',
+  ];
+  if (code.isNotEmpty) {
+    args.add('-Country-PrimaryLocationCode=$code');
+    args.add('-XMP-iptcCore:CountryCode=$code');
+  }
   return args;
 }

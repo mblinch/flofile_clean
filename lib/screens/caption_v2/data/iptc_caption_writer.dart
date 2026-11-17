@@ -1,8 +1,9 @@
 import '../../../utils/exiftool_helper.dart';
 
-/// Additive IPTC caption writer for caption V2.
+/// IPTC caption writer for caption V2.
 ///
-/// Mirrors the bulk-write path used by the classic screen without modifying it.
+/// List fields are always replaced (clear then set), never appended onto
+/// whatever is already on the file.
 class IptcCaptionWriter {
   const IptcCaptionWriter();
 
@@ -58,18 +59,41 @@ class IptcCaptionWriter {
   }
 
   static bool _isClearableWhenEmpty(String key) {
-    return key == 'Personality' || key == 'XMP-getty:Personality';
+    return key == 'XMP-getty:Personality';
   }
 
+  /// Case-sensitive dedupe, keeping first occurrence.
+  static List<String> dedupeListValues(Iterable<String> raw) {
+    final seen = <String>{};
+    final out = <String>[];
+    for (final part in raw) {
+      final trimmed = part.trim();
+      if (trimmed.isEmpty) continue;
+      if (seen.add(trimmed)) out.add(trimmed);
+    }
+    return out;
+  }
+
+  /// Replace IPTC Keywords and XMP-dc:Subject with one entry per keyword.
+  ///
+  /// Clears related aliases first, then assigns each value with `=` (not `+=`).
+  /// ExifTool ignores an IPTC clear when `+=` follows in the **same** invocation,
+  /// which would re-append onto old values — repeated `=` replaces the list and
+  /// still creates individual entries. Never writes a joined `-Subject=A, B`.
   static void _appendKeywords(List<String> args, String? keywordsValue) {
-    if (keywordsValue == null || keywordsValue.trim().isEmpty) return;
-    final parts = keywordsValue
-        .split(RegExp(r'[,;]'))
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty);
+    if (keywordsValue == null) return;
+    final parts = dedupeListValues(
+      keywordsValue.split(RegExp(r'[,;]')),
+    );
+
+    args.add('-IPTC:Keywords=');
+    args.add('-Keywords=');
+    args.add('-Subject=');
+    args.add('-XMP-dc:Subject=');
+    args.add('-XMP:Subject=');
     for (final part in parts) {
-      args.add('-IPTC:Keywords+=$part');
-      args.add('-XMP:Subject+=$part');
+      args.add('-IPTC:Keywords=$part');
+      args.add('-XMP-dc:Subject=$part');
     }
   }
 }

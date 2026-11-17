@@ -236,7 +236,6 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       'Description': caption,
       'XMP:Description': caption,
       'XMP-getty:Personality': personality,
-      'Personality': personality,
       'IPTC:Headline': headline,
       'Headline': headline,
       'XMP:Headline': headline,

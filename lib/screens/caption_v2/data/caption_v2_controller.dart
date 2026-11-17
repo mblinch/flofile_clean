@@ -2542,10 +2542,11 @@ class CaptionV2Controller extends ChangeNotifier {
     };
     // When Write to IPTC Personality is off, leave the file tag alone
     // (do not re-stamp Photo Mechanic placeholders). When on, always include
-    // the keys so an empty value can clear the tag on save.
+    // the key so an empty value can clear the tag on save.
+    // Write ONE Getty tag only — bare Personality / XMP:Personality are
+    // aliases for the same bag and would create duplicate rdf:li entries.
     if (showPersonalityField) {
       values['XMP-getty:Personality'] = personality;
-      values['Personality'] = personality;
     }
     return values;
   }

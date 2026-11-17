@@ -2845,13 +2845,16 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
               'Captions read place and date from each photo’s own IPTC. ',
         ),
         const TextSpan(
-          text: 'Nothing is written',
+          text: 'On save FloFile writes',
           style: TextStyle(
             color: FfTokens.sessionTx,
             fontWeight: FontWeight.w600,
           ),
         ),
-        const TextSpan(text: ' except the caption. '),
+        const TextSpan(
+          text:
+              ' the caption, headline, keywords, and personality — not the template IPTC fields. ',
+        ),
         if (_iptcScanTotal > 0)
           TextSpan(
             text:

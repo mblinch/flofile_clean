@@ -75,11 +75,12 @@ void main() {
             '-IPTC:SupplementalCategories=',
             '-XMP:SupplementalCategories=',
             '-XMP-photoshop:SupplementalCategories=',
-            '-sep',
-            ',',
-            '-IPTC:SupplementalCategories=SPO1,BBN1,BBA1',
-            '-SupplementalCategories=SPO1,BBN1,BBA1',
-            '-XMP-photoshop:SupplementalCategories=SPO1,BBN1,BBA1',
+            '-IPTC:SupplementalCategories=SPO1',
+            '-XMP-photoshop:SupplementalCategories=SPO1',
+            '-IPTC:SupplementalCategories=BBN1',
+            '-XMP-photoshop:SupplementalCategories=BBN1',
+            '-IPTC:SupplementalCategories=BBA1',
+            '-XMP-photoshop:SupplementalCategories=BBA1',
           ]));
     });
 
@@ -104,12 +105,39 @@ void main() {
             '-IPTC:SupplementalCategories=',
             '-XMP:SupplementalCategories=',
             '-XMP-photoshop:SupplementalCategories=',
-            '-sep',
-            ',',
             '-IPTC:SupplementalCategories=SPO1',
-            '-SupplementalCategories=SPO1',
             '-XMP-photoshop:SupplementalCategories=SPO1',
           ]));
+    });
+  });
+
+  group('buildCountryCodeArgs', () {
+    test('clears then sets a single deduped code', () {
+      expect(
+        buildCountryCodeArgs('CAN,CAN;USA'),
+        equals([
+          '-CountryCode=',
+          '-Country-PrimaryLocationCode=',
+          '-IPTC:Country-PrimaryLocationCode=',
+          '-XMP:CountryCode=',
+          '-XMP-iptcCore:CountryCode=',
+          '-Country-PrimaryLocationCode=CAN',
+          '-XMP-iptcCore:CountryCode=CAN',
+        ]),
+      );
+    });
+
+    test('clears when empty', () {
+      expect(
+        buildCountryCodeArgs('  '),
+        equals([
+          '-CountryCode=',
+          '-Country-PrimaryLocationCode=',
+          '-IPTC:Country-PrimaryLocationCode=',
+          '-XMP:CountryCode=',
+          '-XMP-iptcCore:CountryCode=',
+        ]),
+      );
     });
   });
 

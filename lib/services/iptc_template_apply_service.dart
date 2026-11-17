@@ -484,10 +484,10 @@ class IptcTemplateApplyService {
         tag('XMP-photoshop:Country');
         break;
       case 'Country Code':
+        // Written via [buildCountryCodeArgs] (clear then single IPTC + XMP).
+        // Probe tags here only so [clearArgsForPresetKey] can wipe aliases.
         tag('CountryCode');
-        tag('CountryPrimaryLocationCode');
         tag('Country-PrimaryLocationCode');
-        tag('IPTC:CountryPrimaryLocationCode');
         tag('IPTC:Country-PrimaryLocationCode');
         tag('XMP:CountryCode');
         tag('XMP-iptcCore:CountryCode');
@@ -500,9 +500,9 @@ class IptcTemplateApplyService {
         tag('XMP-photoshop:Instructions');
         break;
       case 'Personality':
+        // One Getty tag only — Personality / XMP:Personality alias the same
+        // bag and would create duplicate rdf:li entries.
         tag('XMP-getty:Personality');
-        tag('Personality');
-        tag('XMP:Personality');
         break;
       case 'Caption':
         tag('IPTC:Description');
@@ -871,7 +871,12 @@ class IptcTemplateApplyService {
     );
   }
 
-  /// Writes keywords using clear-then-add (Photo Mechanic compatible).
+  /// Writes keywords using replace semantics (Photo Mechanic compatible).
+  ///
+  /// Each keyword becomes its own IPTC Keywords and XMP-dc:Subject entry.
+  /// Uses repeated `=` (not `+=`) after clears — ExifTool ignores an IPTC
+  /// clear when `+=` follows in the same invocation. Never writes a joined
+  /// `-Subject=A, B` string.
   static Future<void> applyKeywords(
       String imagePath, String keywordsValue) async {
     final cleanValue = keywordsValue.trim();
@@ -881,58 +886,28 @@ class IptcTemplateApplyService {
       keywordsValue = cleanValue;
     }
 
-    if (keywordsValue.isEmpty) {
-      final clearArgs = [
-        '-IPTC:Keywords=',
-        '-Subject=',
-        '-XMP-dc:Subject=',
-        '-XMP:Subject=',
-        '-Keywords=',
-        '-XMP:Keywords=',
-        '-XMP-photoshop:Keywords=',
-        '-overwrite_original',
-        imagePath,
-      ];
-      final proc = await ExiftoolHelper.run(clearArgs);
-      if (!proc.isSuccess) {
-        throw Exception('Failed to clear keywords: ${proc.stderrText}');
-      }
-      return;
-    }
+    final kw = dedupeMetadataListValues(
+      keywordsValue.split(RegExp(r'[,;]')),
+    );
 
-    final kw = keywordsValue
-        .split(',')
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty)
-        .toSet()
-        .toList();
-    if (kw.isEmpty) return;
-
-    final clearArgs = [
+    final args = <String>[
+      '-IPTC:Keywords=',
       '-Subject=',
       '-XMP-dc:Subject=',
       '-XMP:Subject=',
       '-Keywords=',
-      '-IPTC:Keywords=',
       '-XMP:Keywords=',
       '-XMP-photoshop:Keywords=',
+      for (final keyword in kw) ...[
+        '-IPTC:Keywords=$keyword',
+        '-XMP-dc:Subject=$keyword',
+      ],
       '-overwrite_original',
       imagePath,
     ];
-    final clearProc = await ExiftoolHelper.run(clearArgs);
-    if (!clearProc.isSuccess) {
-      throw Exception('Failed to clear keywords: ${clearProc.stderrText}');
-    }
-
-    final addArgs = <String>[
-      '-Subject=${kw.join(', ')}',
-      for (final keyword in kw) '-IPTC:Keywords+=$keyword',
-      '-overwrite_original',
-      imagePath,
-    ];
-    final addProc = await ExiftoolHelper.run(addArgs);
-    if (!addProc.isSuccess) {
-      throw Exception('Failed to write keywords: ${addProc.stderrText}');
+    final proc = await ExiftoolHelper.run(args);
+    if (!proc.isSuccess) {
+      throw Exception('Failed to write keywords: ${proc.stderrText}');
     }
   }
 
@@ -1231,6 +1206,9 @@ class IptcTemplateApplyService {
       }
 
       final allValues = <String, String>{};
+      String? countryCodeToWrite;
+      final writingCountryCode = fieldsToWrite.containsKey('Country Code') ||
+          planFieldsToClear.contains('Country Code');
       fieldsToWrite.forEach((key, value) {
         if (value.trim().isEmpty) return;
         if (key == 'Supp Cat 1') {
@@ -1239,15 +1217,21 @@ class IptcTemplateApplyService {
           allValues['SupplementalCategories2'] = value;
         } else if (key == 'Supp Cat 3') {
           allValues['SupplementalCategories3'] = value;
+        } else if (key == 'Country Code') {
+          countryCodeToWrite = value;
         } else {
           addExiftoolTagsForPresetKey(allValues, key, value);
         }
       });
 
-      // Build clear args for non-supp-cat, non-keyword fields.
+      // Build clear args for non-supp-cat, non-keyword, non-country fields.
       final clearArgs = <String>[];
       for (final key in planFieldsToClear) {
-        if (key.startsWith('Supp Cat') || key == 'Keywords') continue;
+        if (key.startsWith('Supp Cat') ||
+            key == 'Keywords' ||
+            key == 'Country Code') {
+          continue;
+        }
         clearArgs.addAll(clearArgsForPresetKey(key));
       }
 
@@ -1256,11 +1240,15 @@ class IptcTemplateApplyService {
       final needsSuppCatBlock =
           fieldsToWrite.keys.any((k) => k.startsWith('Supp Cat')) ||
               hasSuppCatClearSlot;
+      final needsCountryBlock = writingCountryCode;
 
-      if (allValues.isNotEmpty || clearArgs.isNotEmpty || needsSuppCatBlock) {
+      if (allValues.isNotEmpty ||
+          clearArgs.isNotEmpty ||
+          needsSuppCatBlock ||
+          needsCountryBlock) {
         final args = <String>[];
 
-        // Write non-supp-cat fields.
+        // Write non-supp-cat / non-country fields.
         allValues.forEach((tag, value) {
           if (value.trim().isNotEmpty) {
             args.add(exiftoolWriteArg(tag, value));
@@ -1269,6 +1257,12 @@ class IptcTemplateApplyService {
 
         // Append clear args for blank template fields.
         args.addAll(clearArgs);
+
+        if (needsCountryBlock) {
+          args.addAll(buildCountryCodeArgs(
+            countryCodeToWrite ?? fieldsToWrite['Country Code'] ?? '',
+          ));
+        }
 
         if (needsSuppCatBlock) {
           // When clearing supp cat slots, do NOT fall back to existing values —

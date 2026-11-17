@@ -863,7 +863,8 @@ void main() {
 
     expect(values['IPTC:Headline'], 'Headline');
     expect(values['XMP:Headline'], 'Headline');
-    expect(values['Personality'], 'Manual Person;Player');
+    expect(values.containsKey('Personality'), isFalse);
+    expect(values['XMP-getty:Personality'], 'Manual Person;Player');
     expect(values['IPTC:Keywords'], 'manual, action');
     expect(values['XMP-dc:Subject'], 'manual, action');
   });
@@ -884,7 +885,7 @@ void main() {
     expect(controller.personality, isEmpty);
 
     final values = controller.captionValues();
-    expect(values['Personality'], '');
+    expect(values.containsKey('Personality'), isFalse);
     expect(values['XMP-getty:Personality'], '');
   });
 
