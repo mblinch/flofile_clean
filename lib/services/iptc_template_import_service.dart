@@ -501,6 +501,19 @@ class IptcTemplateImportService {
     return '';
   }
 
+  /// Photographer tags Photo Mechanic shows for Creator / By-line.
+  ///
+  /// Intentionally excludes EXIF/TIFF Artist — a camera Artist value must not
+  /// make Fill Gaps skip writing IPTC:By-line / XMP-dc:Creator.
+  static String creatorPrimaryFromExiftool(Map<String, dynamic> meta) {
+    return _first(meta, const [
+      'IPTC:By-line',
+      'By-line',
+      'XMP-dc:Creator',
+      'XMP:Creator',
+    ]);
+  }
+
   static String _first(Map<String, dynamic> meta, List<String> keys) {
     for (final key in keys) {
       final raw = meta[key];

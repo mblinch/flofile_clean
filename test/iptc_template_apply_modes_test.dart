@@ -106,7 +106,6 @@ void main() {
     expect(tags.keys.toSet(), {
       'IPTC:By-line',
       'XMP-dc:Creator',
-      'EXIF:Artist',
     });
     final clear = IptcTemplateApplyService.clearArgsForPresetKey('Creator');
     expect(clear, contains('-XMP-dc:Creator='));
@@ -119,9 +118,6 @@ void main() {
       'IPTC:By-lineTitle': 'job title teset',
       'By-lineTitle': 'job title teset',
     };
-    final plan = IptcTemplateApplyService.applyToImage;
-    // Exercise through public apply after seeding a real file below; here we
-    // assert lookup bridging used by the write plan.
     final existing =
         IptcTemplateImportService.panelValuesFromExiftool(existingMeta);
     expect(existing['Job Title'], 'job title teset');
@@ -129,7 +125,23 @@ void main() {
       IptcTemplateApplyService.lookupValue(existing, "Creator's Job Title"),
       'job title teset',
     );
-    expect(plan, isNotNull);
+  });
+
+  test('creatorPrimaryFromExiftool ignores EXIF Artist', () {
+    expect(
+      IptcTemplateImportService.creatorPrimaryFromExiftool({
+        'EXIF:Artist': 'Camera Body',
+        'Artist': 'Camera Body',
+      }),
+      '',
+    );
+    expect(
+      IptcTemplateImportService.creatorPrimaryFromExiftool({
+        'EXIF:Artist': 'Camera Body',
+        'IPTC:By-line': 'Mark Blinch',
+      }),
+      'Mark Blinch',
+    );
   });
 
   test(
@@ -321,6 +333,103 @@ void main() {
         MapEquality().equals(onScreenTemplate, _template),
         isTrue,
       );
+    },
+  );
+
+  test(
+    'Fill uses on-screen model (file values + edits), not a stale Apply template',
+    () async {
+      if (!await _exiftoolAvailable()) return;
+
+      final dir = await Directory.systemTemp.createTemp('iptc_fill_screen_');
+      addTearDown(() => dir.delete(recursive: true));
+
+      // What the Fill Gaps screen shows: first-photo values + user edits.
+      const onScreen = {
+        'Stadium': 'venue test',
+        'MEID': 'MEID test',
+        'Source': 'source test',
+        'Personality': 'personality test',
+        'Supp Cat 1': 'TEA',
+        'Supp Cat 2': 'TEB',
+        'Supp Cat 3': 'TEC',
+        'Country Code': 'TES',
+        'Job Title': 'job title teset',
+        'Description Writers': 'writer test',
+        'Object Name': 'OBJECT TEST',
+        'Special Instructions': 'special instruction test',
+        'Copyright': 'copyright test',
+        // User edits on the Fill screen:
+        'City': 'TPL Toronto',
+        'Credit': 'TPL Getty Images',
+        'Keywords': 'TPLhockey',
+        'Headline': 'TPL Headline',
+        'Creator': 'TPL Mark Blinch',
+      };
+      // Stale Apply template must NOT leak into the empty file.
+      const staleApplyTemplate = {
+        'Stadium': 'Coca-Cola Coliseum',
+        'MEID': '776465233',
+        'Source': 'Getty Images North America',
+        'Personality': 'Paige Bueckers',
+        'Supp Cat 1': 'SPO',
+        'Supp Cat 2': 'BKP',
+        'Supp Cat 3': 'WBA',
+        'Country Code': 'CAN',
+        'Job Title': 'Contributor',
+        'Province/State': 'ON',
+        'Country': 'Canada',
+        'Creator': 'TPL Mark Blinch',
+        'City': 'TPL Toronto',
+        'Credit': 'TPL Getty Images',
+        'Keywords': 'TPLhockey',
+        'Headline': 'TPL Headline',
+      };
+
+      final empty = await _jpegFile(dir, 'empty.jpg');
+      final artistOnly = await _jpegFile(dir, 'artist_only.jpg');
+      await _seedMeta(artistOnly.path, {
+        'EXIF:Artist': 'Camera Body Artist',
+      });
+
+      // Writer receives the on-screen model — never the stale Apply template.
+      final result = await IptcTemplateApplyService.applyToImage(
+        empty.path,
+        onScreen,
+        replaceExisting: false,
+        preserveOnLoad: true,
+        fillEmptyOnly: true,
+      );
+      expect(result.success, isTrue);
+
+      final panel = await _panel(empty.path);
+      for (final e in onScreen.entries) {
+        expect(
+          panel[e.key] ??
+              IptcTemplateApplyService.lookupValue(panel, e.key) ??
+              '',
+          e.value,
+          reason: 'empty file must get on-screen field ${e.key}',
+        );
+      }
+      expect(panel['Stadium'], isNot(staleApplyTemplate['Stadium']));
+      expect(panel['MEID'], isNot(staleApplyTemplate['MEID']));
+      expect(panel['Personality'], isNot(staleApplyTemplate['Personality']));
+      expect(panel['Job Title'], isNot(staleApplyTemplate['Job Title']));
+      expect(await _creatorLiCount(empty.path), 1);
+
+      // EXIF Artist alone must not block filling By-line / XMP-dc:Creator.
+      final creatorFill = await IptcTemplateApplyService.applyToImage(
+        artistOnly.path,
+        {'Creator': 'TPL Mark Blinch'},
+        replaceExisting: false,
+        preserveOnLoad: true,
+        fillEmptyOnly: true,
+      );
+      expect(creatorFill.success, isTrue);
+      final afterArtist = await _panel(artistOnly.path);
+      expect(afterArtist['Creator'], 'TPL Mark Blinch');
+      expect(await _creatorLiCount(artistOnly.path), 1);
     },
   );
 }

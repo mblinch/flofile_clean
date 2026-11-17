@@ -1,6 +1,6 @@
 {
-  "version": "2.0.47",
-  "notes": "Fix IPTC Apply/Fill modes: replace (not merge) lists, write template fields correctly, single Creator, Fill leaves filled fields untouched; team type-to-search.",
-  "mac_url": "https://github.com/mblinch/flofile_clean/releases/download/v2.0.47/FloFileBeta.zip",
+  "version": "2.0.48",
+  "notes": "Fill Partial Gaps writes the on-screen values (not a stale Apply template); Creator fills By-line/XMP when empty even if EXIF Artist is set; team search Return selects single match.",
+  "mac_url": "https://github.com/mblinch/flofile_clean/releases/download/v2.0.48/FloFileBeta.zip",
   "min_supported": "1.0.0"
 }

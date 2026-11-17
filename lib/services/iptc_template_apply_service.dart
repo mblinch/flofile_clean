@@ -391,9 +391,10 @@ class IptcTemplateApplyService {
       case 'Creator':
         // Write each store once. Bare Creator / XMP:Creator alias XMP-dc:Creator
         // and append duplicate rdf:li entries when combined in one invocation.
+        // Do not write EXIF:Artist — camera Artist must not be overwritten on
+        // fill, and must not be required for Photographer to show in PM.
         tag('IPTC:By-line');
         tag('XMP-dc:Creator');
-        tag('EXIF:Artist');
         break;
       case 'MEID':
         tag('TransmissionReference');
@@ -831,7 +832,11 @@ class IptcTemplateApplyService {
       // Panel import keys (e.g. Job Title) differ from preset keys
       // (Creator's Job Title) — look up every alias so fill-empty does not
       // treat a filled By-lineTitle as blank and overwrite it.
-      final existingVal = lookupValue(existing, key) ?? '';
+      // Creator fill checks By-line / XMP-dc:Creator only — EXIF Artist alone
+      // must not block writing Photographer.
+      final existingVal = (fillEmptyOnly && toPresetKey(key) == 'Creator')
+          ? IptcTemplateImportService.creatorPrimaryFromExiftool(existingMeta)
+          : (lookupValue(existing, key) ?? '');
       if (_fieldNeedsWrite(
         key,
         v,

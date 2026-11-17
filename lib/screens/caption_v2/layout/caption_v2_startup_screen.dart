@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
@@ -3287,17 +3288,27 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     final prefs = _prefs;
     if (prefs == null) return;
     final wire = _iptcInlineWire;
-    // Persist the same template map that ingest writes — not the merged
-    // on-screen fill preview (which includes kept file values).
+    // One source of truth with the on-screen model for the active mode.
+    // Apply: template only. Fill: full display (files + typed gap fills) so
+    // ingest never falls back to a stale Apply-template for untouched fields.
     final toWrite = _iptcTemplateForWrite;
     final preset = IptcTemplateApplyService.normalizeForPreset(
       toWrite,
       includeInAppGenerated: true,
     );
-    await prefs.saveIptcWirePreset(wire, preset: preset);
-    // Apply-on-import/save reads selected_metadata_preset — keep it in sync
-    // with the wire preset the inline editor just wrote.
-    await prefs.syncActiveMetadataPresetFromWire(wire);
+    if (_iptcSource == _IptcSourceMode.fill) {
+      // Ingest reads selected_metadata_preset. Do not overwrite the saved
+      // Apply wire preset with file-derived Fill values.
+      final sp = await SharedPreferences.getInstance();
+      if (preset.isEmpty) {
+        await sp.remove('selected_metadata_preset');
+      } else {
+        await sp.setString('selected_metadata_preset', json.encode(preset));
+      }
+    } else if (_iptcSource == _IptcSourceMode.apply) {
+      await prefs.saveIptcWirePreset(wire, preset: preset);
+      await prefs.syncActiveMetadataPresetFromWire(wire);
+    }
     if (!mounted) return;
     setState(() {
       // Caption example uses values that will actually land on files.
@@ -3440,11 +3451,18 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     return keys;
   }
 
-  /// Template map that will be passed to [IptcTemplateApplyService.applyToImage].
-  /// Apply and Fill both write this object; Fill uses fill-empty so filled file
-  /// fields stay untouched.
-  Map<String, String> get _iptcTemplateForWrite =>
-      Map<String, String>.from(_iptcValuesFromTemplate);
+  /// Template map persisted for ingest / [IptcTemplateApplyService.applyToImage].
+  /// Apply: the template pad. Fill: the full on-screen model (one source of
+  /// truth with what the user sees); fill-empty leaves per-file filled slots.
+  Map<String, String> get _iptcTemplateForWrite {
+    switch (_iptcSource) {
+      case _IptcSourceMode.fill:
+        return Map<String, String>.from(_inlineIptcDisplayValues);
+      case _IptcSourceMode.apply:
+      case _IptcSourceMode.files:
+        return Map<String, String>.from(_iptcValuesFromTemplate);
+    }
+  }
 
   /// Values shown in the inline IPTC builder.
   ///
@@ -6782,6 +6800,22 @@ class _TeamDropdownState extends State<_TeamDropdown> {
         .toList();
   }
 
+  /// Return selects when the search narrows to exactly one team.
+  void _selectSingleSearchMatch() {
+    final matches = <String>[
+      ..._filterTeams(_menuFavorites),
+      ..._filterTeams(_menuRest),
+    ];
+    final unique = <String>[];
+    final seen = <String>{};
+    for (final name in matches) {
+      if (seen.add(name)) unique.add(name);
+    }
+    if (unique.length != 1) return;
+    widget.onChanged(unique.first);
+    _remove(notify: true);
+  }
+
   @override
   void didUpdateWidget(covariant _TeamDropdown oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -6913,6 +6947,7 @@ class _TeamDropdownState extends State<_TeamDropdown> {
                 _searchQuery = value;
                 _entry?.markNeedsBuild();
               },
+              onSubmitted: (_) => _selectSingleSearchMatch(),
             ),
           ),
           ConstrainedBox(
