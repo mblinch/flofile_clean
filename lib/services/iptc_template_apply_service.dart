@@ -150,9 +150,10 @@ class IptcTemplateApplyService {
   ];
 
   /// Fields generated in-app; not written when applying a template on ingest.
+  /// Personality is a normal template field (replace / fill-empty) — only Caption
+  /// is produced later by the caption writer.
   static const Set<String> inAppGeneratedPresetKeys = {
     'Caption',
-    'Personality',
   };
 
   /// Always left alone on session load (never cleared or rewritten).
@@ -160,13 +161,11 @@ class IptcTemplateApplyService {
     'Caption',
   };
 
-  /// Cleared/replaced never on session load when merging. Caption stays
-  /// untouched; Personality / Keywords are preserved on the file and template
-  /// values are merged in (add only) unless overwrite is chosen.
+  /// Preset keys that stay on the file during a session-load replace wipe.
+  /// Caption only — Keywords / Personality follow Apply (replace) or Fill
+  /// (leave-if-present) rules like every other field.
   static const Set<String> preserveOnLoadPresetKeys = {
     'Caption',
-    'Personality',
-    'Keywords',
   };
 
   /// Shown in the startup IPTC panel when caption/personality exist in files.
@@ -390,16 +389,11 @@ class IptcTemplateApplyService {
 
     switch (presetKey) {
       case 'Creator':
-        // Photo Mechanic's "Creator / Photographer" can be backed by IPTC,
-        // XMP dc:creator, or EXIF/TIFF artist depending on file history.
-        tag('Creator');
-        tag('By-line');
+        // Write each store once. Bare Creator / XMP:Creator alias XMP-dc:Creator
+        // and append duplicate rdf:li entries when combined in one invocation.
         tag('IPTC:By-line');
         tag('XMP-dc:Creator');
-        tag('XMP:Creator');
-        tag('Artist');
         tag('EXIF:Artist');
-        tag('XMP-tiff:Artist');
         break;
       case 'MEID':
         tag('TransmissionReference');
@@ -407,10 +401,10 @@ class IptcTemplateApplyService {
         tag('IPTC:OriginalTransmissionReference');
         break;
       case 'Description Writers':
-        tag('CaptionWriter');
-        tag('XMP-photoshop:CaptionWriter');
-        tag('Writer-Editor');
+        // CaptionWriter also maps to IPTC Writer-Editor — writing both the bare
+        // and IPTC forms duplicates the IPTC value.
         tag('IPTC:Writer-Editor');
+        tag('XMP-photoshop:CaptionWriter');
         break;
       case 'Creator\'s Job Title':
         tag('AuthorsPosition');
@@ -536,14 +530,39 @@ class IptcTemplateApplyService {
     }
   }
 
+  /// Historical aliases cleared even when write targets a smaller set (avoids
+  /// leaving duplicate bag entries from older builds).
+  static const Map<String, List<String>> _clearAliasExtras = {
+    'Creator': [
+      'Creator',
+      'By-line',
+      'IPTC:By-line',
+      'XMP-dc:Creator',
+      'XMP:Creator',
+      'Artist',
+      'EXIF:Artist',
+      'XMP-tiff:Artist',
+    ],
+    'Description Writers': [
+      'CaptionWriter',
+      'XMP-photoshop:CaptionWriter',
+      'Writer-Editor',
+      'IPTC:Writer-Editor',
+    ],
+  };
+
   /// Returns ExifTool clear arguments (`-Tag=`) for all tags mapped to [presetKey].
   ///
   /// Uses [addExiftoolTagsForPresetKey] with a probe value to discover the tag
   /// names, then generates clear args. Returns an empty list for fields handled
   /// separately (supp cats, keywords, object name).
   static List<String> clearArgsForPresetKey(String presetKey) {
+    final key = toPresetKey(presetKey);
     final probe = <String, String>{};
-    addExiftoolTagsForPresetKey(probe, toPresetKey(presetKey), '_PROBE_');
+    addExiftoolTagsForPresetKey(probe, key, '_PROBE_');
+    for (final extra in _clearAliasExtras[key] ?? const <String>[]) {
+      probe[extra] = '_PROBE_';
+    }
     if (probe.isEmpty) return const [];
     return probe.keys.map((tag) => exiftoolWriteArg(tag, '')).toList();
   }
@@ -809,7 +828,10 @@ class IptcTemplateApplyService {
       if (skipInAppGenerated && inAppGeneratedPresetKeys.contains(key)) {
         return;
       }
-      final existingVal = existing[key] ?? '';
+      // Panel import keys (e.g. Job Title) differ from preset keys
+      // (Creator's Job Title) — look up every alias so fill-empty does not
+      // treat a filled By-lineTitle as blank and overwrite it.
+      final existingVal = lookupValue(existing, key) ?? '';
       if (_fieldNeedsWrite(
         key,
         v,
@@ -821,7 +843,7 @@ class IptcTemplateApplyService {
     });
 
     final keywordsRaw = skipKeywords ? '' : (preset['Keywords']?.trim() ?? '');
-    final existingKw = existing['Keywords'] ?? '';
+    final existingKw = lookupValue(existing, 'Keywords') ?? '';
     final keywords = keywordsRaw.isNotEmpty &&
             !(fillEmptyOnly && existingKw.trim().isNotEmpty) &&
             !_keywordsMatch(keywordsRaw, existingKw)
@@ -838,7 +860,7 @@ class IptcTemplateApplyService {
             _fieldNeedsWrite(
               'Object Name',
               resolvedObjectName,
-              existing['Object Name'] ?? '',
+              lookupValue(existing, 'Object Name') ?? '',
               fillEmptyOnly: fillEmptyOnly,
             )
         ? resolvedObjectName
@@ -914,17 +936,16 @@ class IptcTemplateApplyService {
   /// IPTC plus the XMP/EXIF aliases this app writes, so a replace does not
   /// leave an old caption or credit sitting in XMP.
   ///
-  /// When [preserveKeys] includes Caption / Personality / Keywords, those tags
-  /// are left on the file (no `-IPTC:all=` wipe).
+  /// When [preserveKeys] includes Caption, IPTC:all is skipped so the caption
+  /// survives; other fields are cleared individually (including Keywords /
+  /// Personality).
   static List<String> _replaceClearArgs({
     Set<String> preserveKeys = const {},
   }) {
     final preserve = {
       for (final key in preserveKeys) toPresetKey(key),
     };
-    final preserveCaptionFields = preserve.contains('Caption') ||
-        preserve.contains('Personality') ||
-        preserve.contains('Keywords');
+    final preserveCaptionFields = preserve.contains('Caption');
     const keys = [
       'Creator',
       'MEID',
@@ -1017,8 +1038,8 @@ class IptcTemplateApplyService {
   ///
   /// When [replaceExisting] is true, IPTC already on the file is cleared first,
   /// then the full template is written. On session load ([preserveOnLoad]),
-  /// Caption is never written. Personality / Keywords are always merged onto
-  /// existing values (never overwritten); duplicates are skipped.
+  /// Caption is never cleared or rewritten. Keywords / Personality follow the
+  /// same replace or fill-empty rules as every other field (never merged).
   ///
   /// When [fillEmptyOnly] is true, non-empty file fields are left alone (no
   /// replace wipe). Template values are written only into blank slots.
@@ -1056,45 +1077,20 @@ class IptcTemplateApplyService {
       ),
     );
 
-    // Capture Personality / Keywords before stripping preserve keys so load can
-    // merge them (add-only, deduped) instead of treating them like other fields.
-    String? loadListKeywords;
-    String? loadListPersonality;
     if (preserveOnLoad) {
-      final kw = lookupValue(preset, 'Keywords')?.trim() ??
-          lookupValue(template, 'Keywords')?.trim();
-      if (kw != null &&
-          kw.isNotEmpty &&
-          !isInAppGeneratedPlaceholder(kw)) {
-        loadListKeywords = kw;
-      }
-      final personality = lookupValue(preset, 'Personality')?.trim() ??
-          lookupValue(template, 'Personality')?.trim();
-      if (personality != null &&
-          personality.isNotEmpty &&
-          !isInAppGeneratedPlaceholder(personality)) {
-        loadListPersonality = personality;
-      }
       preset.removeWhere(
         (key, _) => preserveOnLoadPresetKeys.contains(toPresetKey(key)),
       );
     }
     final hasClearWork = fieldsToClear != null && fieldsToClear.isNotEmpty;
-    final hasLoadListWork = (loadListKeywords != null &&
-            loadListKeywords.isNotEmpty) ||
-        (loadListPersonality != null && loadListPersonality.isNotEmpty);
 
-    if (preset.isEmpty && !hasClearWork && !hasLoadListWork) {
+    if (preset.isEmpty && !hasClearWork) {
       return const IptcApplyToImageResult(success: true, skipped: true);
     }
 
     if (replaceExisting) {
       final preserveKeys = <String>{
         if (preserveOnLoad) ...preserveOnLoadCaptionKeys,
-        if (preserveOnLoad) ...const {
-          'Personality',
-          'Keywords',
-        },
       };
       final cleared = await _clearIptcForReplace(
         imagePath,
@@ -1103,8 +1099,8 @@ class IptcTemplateApplyService {
       if (!cleared) {
         return const IptcApplyToImageResult(success: false);
       }
-      // Re-read after a preserving clear so Caption / Personality / Keywords
-      // stay visible to the write plan; full wipe starts from empty.
+      // Re-read after a preserving clear so Caption stays visible to the write
+      // plan; full wipe starts from empty.
       existingMetadata = preserveOnLoad
           ? await IptcTemplateImportService.readMetadata(imagePath)
           : <String, dynamic>{};
@@ -1125,7 +1121,7 @@ class IptcTemplateApplyService {
         skipInAppGenerated: skipInAppGenerated,
         imageIndex: imageIndex,
         fieldsToClear: fieldsToClear,
-        skipKeywords: preserveOnLoad,
+        skipKeywords: false,
         fillEmptyOnly: fillEmptyOnly,
       );
       fieldsToWrite = Map<String, String>.from(plan.presetFields);
@@ -1141,7 +1137,7 @@ class IptcTemplateApplyService {
             (skipInAppGenerated && inAppGeneratedPresetKeys.contains(key)) ||
             (preserveOnLoad &&
                 preserveOnLoadPresetKeys.contains(toPresetKey(key))));
-      final kw = preserveOnLoad ? null : preset['Keywords']?.trim();
+      final kw = preset['Keywords']?.trim();
       keywordsToWrite = (kw == null || kw.isEmpty) ? null : kw;
       final shouldClearObjectName =
           fieldsToClear?.contains('Object Name') == true ||
@@ -1154,32 +1150,6 @@ class IptcTemplateApplyService {
             .where((key) =>
                 key != 'Time and Date' && key != 'Date' && key != 'Time')
             .toSet();
-      }
-    }
-
-    if (preserveOnLoad && hasLoadListWork) {
-      final existing = meta != null
-          ? IptcTemplateImportService.panelValuesFromExiftool(meta)
-          : <String, String>{};
-      if (loadListKeywords != null && loadListKeywords.isNotEmpty) {
-        final merged = mergeKeywords(
-          existing['Keywords'] ?? '',
-          loadListKeywords,
-        );
-        if (merged.isNotEmpty &&
-            !_keywordsMatch(merged, existing['Keywords'] ?? '')) {
-          keywordsToWrite = merged;
-        }
-      }
-      if (loadListPersonality != null && loadListPersonality.isNotEmpty) {
-        final merged = mergePersonality(
-          existing['Personality'] ?? '',
-          loadListPersonality,
-        );
-        if (merged.isNotEmpty &&
-            !_personalityMatch(merged, existing['Personality'] ?? '')) {
-          fieldsToWrite['Personality'] = merged;
-        }
       }
     }
 

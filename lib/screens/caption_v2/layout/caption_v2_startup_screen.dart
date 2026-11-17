@@ -1089,6 +1089,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
           _iptcAppliedElsewhere = false;
           _iptcFillGapsOnly = false;
           _iptcStatus = 'On load';
+          _recomputeMissingIptcWarnings();
         });
       case _IptcSourceMode.fill:
         await _prefs?.saveIptcApplyMode(IptcApplyMode.onImport);
@@ -1100,6 +1101,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
           _iptcAppliedElsewhere = false;
           _iptcFillGapsOnly = true;
           _iptcStatus = 'Fill gaps';
+          _recomputeMissingIptcWarnings();
         });
       case _IptcSourceMode.files:
         await _prefs?.saveIptcApplyMode(IptcApplyMode.none);
@@ -1111,6 +1113,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
           _iptcAppliedElsewhere = true;
           _iptcFillGapsOnly = false;
           _iptcStatus = 'Elsewhere';
+          _recomputeMissingIptcWarnings();
         });
     }
     if (refresh) await _refreshIptcCaptionWarning();
@@ -1532,18 +1535,27 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       }
       final templatePanel =
           IptcTemplateApplyService.denormalizeForPanel(preset);
-      final previewPanel = Map<String, String>.from(fromFiles);
-      templatePanel.forEach((k, v) {
-        final trimmed = v.trim();
-        if (trimmed.isEmpty) return;
-        if (IptcTemplateApplyService.isInAppGeneratedPlaceholder(trimmed)) {
-          return;
-        }
-        previewPanel.putIfAbsent(k, () => trimmed);
+      if (!mounted || gen != _iptcScanGen) return;
+      final foundKeys = <String>{};
+      for (final key in fromFiles.keys) {
+        if (key == 'Caption' || key == 'Personality') continue;
+        foundKeys.add(key);
+      }
+      if (!mounted || gen != _iptcScanGen) return;
+      setState(() {
+        _iptcValuesFromFiles = Map<String, String>.from(fromFiles);
+        _iptcValuesFromTemplate = Map<String, String>.from(templatePanel);
+        _iptcTemplateTypedKeys = {};
+        _iptcKeysFoundInFiles = foundKeys;
+        // Caption example + warnings use the same map shown / written.
+        _iptcPanelForPreview =
+            Map<String, String>.from(_inlineIptcDisplayValues);
+        _iptcInlineRevision++;
+        _scanningIptc = false;
       });
-      final effective =
-          _writeIptc ? previewPanel : Map<String, String>.from(fromFiles);
-
+      final effective = _writeIptc
+          ? _iptcPanelForPreview
+          : Map<String, String>.from(fromFiles);
       final missing = CaptionFormulaRenderer.missingCaptionIptcLabels(
         template: captionTemplate,
         game: IptcTemplateApplyService.gameInfoFromPanelValues(effective),
@@ -1558,24 +1570,11 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
               )
               .toList();
       if (!mounted || gen != _iptcScanGen) return;
-      final foundKeys = <String>{};
-      for (final key in fromFiles.keys) {
-        if (key == 'Caption' || key == 'Personality') continue;
-        foundKeys.add(key);
-      }
-      if (!mounted || gen != _iptcScanGen) return;
       setState(() {
-        _iptcPanelForPreview = previewPanel;
         _missingCaptionIptc = missing;
         _missingFilingIptc = filingMissing;
         _iptcScanWithCityDate = withCityDate;
         _iptcScanTotal = files.length;
-        _iptcValuesFromFiles = Map<String, String>.from(fromFiles);
-        _iptcValuesFromTemplate = Map<String, String>.from(templatePanel);
-        _iptcTemplateTypedKeys = {};
-        _iptcKeysFoundInFiles = foundKeys;
-        _iptcInlineRevision++;
-        _scanningIptc = false;
       });
     } catch (_) {
       if (!mounted || gen != _iptcScanGen) return;
@@ -1770,6 +1769,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   /// Recalc missing caption/filing lists from the live inline panel values.
   /// Call inside [setState] after template edits so the note/footer update.
   void _recomputeMissingIptcWarnings() {
+    _iptcPanelForPreview = Map<String, String>.from(_inlineIptcDisplayValues);
     final captionTemplate = _captionTemplate;
     if (captionTemplate == null || !_folderChosen) {
       _missingCaptionIptc = const [];
@@ -1777,7 +1777,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       return;
     }
     final wire = _iptcInlineWire;
-    final effective = _inlineIptcDisplayValues;
+    final effective = _iptcPanelForPreview;
     final missing = CaptionFormulaRenderer.missingCaptionIptcLabels(
       template: captionTemplate,
       game: IptcTemplateApplyService.gameInfoFromPanelValues(effective),
@@ -3287,8 +3287,11 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     final prefs = _prefs;
     if (prefs == null) return;
     final wire = _iptcInlineWire;
+    // Persist the same template map that ingest writes — not the merged
+    // on-screen fill preview (which includes kept file values).
+    final toWrite = _iptcTemplateForWrite;
     final preset = IptcTemplateApplyService.normalizeForPreset(
-      _iptcValuesFromTemplate,
+      toWrite,
       includeInAppGenerated: true,
     );
     await prefs.saveIptcWirePreset(wire, preset: preset);
@@ -3297,16 +3300,8 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     await prefs.syncActiveMetadataPresetFromWire(wire);
     if (!mounted) return;
     setState(() {
-      final preview = Map<String, String>.from(_iptcValuesFromFiles);
-      for (final e in _iptcValuesFromTemplate.entries) {
-        final trimmed = e.value.trim();
-        if (trimmed.isEmpty) continue;
-        if (IptcTemplateApplyService.isInAppGeneratedPlaceholder(trimmed)) {
-          continue;
-        }
-        preview[e.key] = trimmed;
-      }
-      _iptcPanelForPreview = preview;
+      // Caption example uses values that will actually land on files.
+      _iptcPanelForPreview = Map<String, String>.from(_inlineIptcDisplayValues);
     });
   }
 
@@ -3445,7 +3440,16 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     return keys;
   }
 
-  /// Values shown in the inline IPTC builder — always seeded from folder files.
+  /// Template map that will be passed to [IptcTemplateApplyService.applyToImage].
+  /// Apply and Fill both write this object; Fill uses fill-empty so filled file
+  /// fields stay untouched.
+  Map<String, String> get _iptcTemplateForWrite =>
+      Map<String, String>.from(_iptcValuesFromTemplate);
+
+  /// Values shown in the inline IPTC builder.
+  ///
+  /// Apply: template only — blank template slots stay blank (they are cleared
+  /// on write). Fill: file values kept, template fills blanks. Files: files.
   Map<String, String> get _inlineIptcDisplayValues {
     final files = _iptcValuesFromFiles;
     final template = _iptcValuesFromTemplate;
@@ -3469,18 +3473,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         }
         return out;
       case _IptcSourceMode.apply:
-        // Start from files so the pad shows what's already there, then
-        // overlay template values that will be written.
-        final out = Map<String, String>.from(files);
-        for (final e in template.entries) {
-          final trimmed = e.value.trim();
-          if (trimmed.isEmpty) continue;
-          if (IptcTemplateApplyService.isInAppGeneratedPlaceholder(trimmed)) {
-            continue;
-          }
-          out[e.key] = e.value;
-        }
-        return out;
+        // Show exactly what will be written after the replace wipe — never
+        // leak file-only values that would be cleared and not rewritten.
+        return Map<String, String>.from(template);
     }
   }
 
@@ -6761,6 +6756,9 @@ class _TeamDropdownState extends State<_TeamDropdown> {
   final _link = LayerLink();
   OverlayEntry? _entry;
   bool _open = false;
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
+  String _searchQuery = '';
 
   /// Row order at open time. Starring must not reshuffle the open menu —
   /// the jump to Favorites looks like a glitch.
@@ -6772,6 +6770,16 @@ class _TeamDropdownState extends State<_TeamDropdown> {
         widget.teams.where(widget.favoriteNames.contains).toList();
     _menuRest =
         widget.teams.where((t) => !widget.favoriteNames.contains(t)).toList();
+  }
+
+  List<String> _filterTeams(List<String> teams) {
+    final q = _searchQuery.trim().toLowerCase();
+    if (q.isEmpty) return teams;
+    return teams
+        .where((name) =>
+            name.toLowerCase().contains(q) ||
+            mlbTeamAbbreviation(name).toLowerCase().contains(q))
+        .toList();
   }
 
   @override
@@ -6811,6 +6819,8 @@ class _TeamDropdownState extends State<_TeamDropdown> {
   @override
   void dispose() {
     _remove(notify: false);
+    _searchController.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -6825,6 +6835,8 @@ class _TeamDropdownState extends State<_TeamDropdown> {
 
   void _show() {
     _captureMenuOrder();
+    _searchController.clear();
+    _searchQuery = '';
     final box = context.findRenderObject() as RenderBox?;
     final width = box?.size.width ?? 240;
     _entry = OverlayEntry(
@@ -6855,6 +6867,9 @@ class _TeamDropdownState extends State<_TeamDropdown> {
     Overlay.of(context).insert(_entry!);
     _open = true;
     widget.onMenuOpenChanged(true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _open) _searchFocus.requestFocus();
+    });
   }
 
   void _remove({required bool notify}) {
@@ -6864,38 +6879,74 @@ class _TeamDropdownState extends State<_TeamDropdown> {
     _open = false;
     _menuFavorites = const [];
     _menuRest = const [];
+    _searchController.clear();
+    _searchQuery = '';
     if (notify && wasOpen) widget.onMenuOpenChanged(false);
   }
 
   Widget _menu() {
-    final favorites = _menuFavorites;
-    final rest = _menuRest;
+    final favorites = _filterTeams(_menuFavorites);
+    final rest = _filterTeams(_menuRest);
     return FfMenuSurface(
-      child: ListView(
-          padding: const EdgeInsets.all(6),
-          shrinkWrap: true,
-          primary: false,
-          children: [
-            if (favorites.isNotEmpty) ...[
-              const _MenuHeader('Favorites'),
-              for (final name in favorites) _menuRow(name),
-            ],
-            const _MenuHeader('All teams'),
-            for (final name in rest) _menuRow(name),
-            if (widget.teams.isEmpty)
-              const Padding(
-                padding: EdgeInsets.fromLTRB(10, 8, 10, 8),
-                child: Text(
-                  'No teams yet',
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 13,
-                    color: FfTokens.sessionT3,
-                  ),
-                ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+            child: TextField(
+              controller: _searchController,
+              focusNode: _searchFocus,
+              autofocus: true,
+              style: const TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 13,
+                color: FfTokens.sessionTx,
               ),
-          ],
-        ),
+              cursorColor: FfTokens.nocturneAc,
+              decoration: const InputDecoration(
+                isDense: true,
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+              ),
+              onChanged: (value) {
+                _searchQuery = value;
+                _entry?.markNeedsBuild();
+              },
+            ),
+          ),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 280),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
+              shrinkWrap: true,
+              primary: false,
+              children: [
+                if (favorites.isNotEmpty) ...[
+                  const _MenuHeader('Favorites'),
+                  for (final name in favorites) _menuRow(name),
+                ],
+                if (rest.isNotEmpty) ...[
+                  const _MenuHeader('All teams'),
+                  for (final name in rest) _menuRow(name),
+                ],
+                if (favorites.isEmpty && rest.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(10, 8, 10, 8),
+                    child: Text(
+                      'No teams yet',
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 13,
+                        color: FfTokens.sessionT3,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

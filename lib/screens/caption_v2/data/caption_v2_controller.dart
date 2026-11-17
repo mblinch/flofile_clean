@@ -9399,9 +9399,9 @@ class CaptionV2Controller extends ChangeNotifier {
     return p.dirname(imagePaths.first);
   }
 
-  /// Writes the saved IPTC template onto every session image (merge/overwrite
-  /// rules from prefs). Used after the in-session IPTC pad is filled — always
-  /// writes, even if Apply on load was turned off in the pad.
+  /// Writes the saved IPTC template onto every session image (replace or
+  /// fill-gaps from prefs). Used after the in-session IPTC pad is filled —
+  /// always writes, even if Apply on load was turned off in the pad.
   Future<void> applyIptcTemplateToSessionImages() async {
     if (imagePaths.isEmpty || _prefs == null) {
       await syncSessionCaptionIptcFromPreset();
@@ -9419,15 +9419,17 @@ class CaptionV2Controller extends ChangeNotifier {
       statusMessage =
           'Writing IPTC template to ${imagePaths.length} images…';
       notifyListeners();
+      final fillGaps = await _prefs!.getIptcFillGapsOnly();
       var i = 0;
       for (final path in imagePaths) {
         final result = await IptcTemplateApplyService.applyToImage(
           path,
           preset,
           imageIndex: i,
-          replaceExisting: true,
+          replaceExisting: !fillGaps,
           preserveOnLoad: true,
-          fieldsToClear: cleared.isNotEmpty ? cleared : null,
+          fillEmptyOnly: fillGaps,
+          fieldsToClear: (!fillGaps && cleared.isNotEmpty) ? cleared : null,
         );
         if (result.success && !result.skipped) {
           captionedImages.remove(path);
