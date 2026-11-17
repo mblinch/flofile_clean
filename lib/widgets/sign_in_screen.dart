@@ -1,5 +1,4 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -46,18 +45,15 @@ class _SignInScreenState extends State<SignInScreen> {
   }
 
   static String _friendlyAuthError(String message) {
-    if (!message.toLowerCase().contains('keychain')) return message;
-    if (kDebugMode) {
-      return 'Google Sign-In could not access the macOS Keychain.\n\n'
-          '• Open macos/Runner.xcworkspace in Xcode\n'
-          '• Runner target → Signing & Capabilities → select your Team\n'
-          '• Rebuild with flutter run -d macos (Debug)\n\n'
-          'If it still fails, open Keychain Access, delete any old "auth" '
-          'entry for FloFile, then try again.';
+    final lower = message.toLowerCase();
+    if (lower.contains('keychain') ||
+        lower.contains('secitem') ||
+        lower.contains('errsec')) {
+      // FloFile clears stale Keychain items and retries automatically.
+      // Never tell users to open Keychain Access.
+      return 'Couldn’t finish Google sign-in. Please try again.';
     }
-    return 'Google Sign-In couldn’t unlock the macOS Keychain.\n'
-        'Quit FloFile, open Keychain Access, remove any old FloFile '
-        '“auth” entries, then try again.';
+    return message;
   }
 
   @override

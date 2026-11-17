@@ -2,6 +2,10 @@
 
 Copy relevant bullets into Sparkle / GitHub release notes for each beta build.
 
+## 2.0.51
+
+- **Google Sign-In:** If macOS Keychain leftovers break sign-in, FloFile clears them and retries automatically — no Keychain Access steps for users.
+
 ## 2.0.50
 
 - **Accessibility:** VoiceOver / UI-test Semantics labels on setup, caption controls, and dialogs (including Save & Next and player rows like “Home 34 Auston Matthews”).

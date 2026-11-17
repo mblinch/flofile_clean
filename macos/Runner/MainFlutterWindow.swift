@@ -65,6 +65,8 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       with: flutterViewController.registrar(forPlugin: "MacSpellCheckPlugin"))
     JerseyOcrPlugin.register(
       with: flutterViewController.registrar(forPlugin: "JerseyOcrPlugin"))
+    MacAuthKeychainPlugin.register(
+      with: flutterViewController.registrar(forPlugin: "MacAuthKeychainPlugin"))
 
     _installJerseyShortcutChannel(flutterViewController)
     _installJerseyEventMonitor()

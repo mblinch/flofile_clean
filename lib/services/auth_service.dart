@@ -6,6 +6,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import '../config/google_sign_in_config.dart';
 import 'app_defaults_firestore_service.dart';
 import 'current_user_service.dart';
+import 'mac_auth_keychain.dart';
 import 'preferences_service.dart';
 import 'user_preferences_firestore_service.dart';
 
@@ -128,6 +129,27 @@ class AuthService {
   }
 
   Future<UserCredential> signInWithGoogle() async {
+    try {
+      return await _signInWithGoogleOnce();
+    } catch (e) {
+      if (!_looksLikeKeychainError(e)) rethrow;
+      // Stale Keychain leftovers from older builds — clear and retry once so
+      // users never have to open Keychain Access.
+      debugPrint('[Auth] Keychain error on sign-in; clearing stale items: $e');
+      await MacAuthKeychain.clearStaleAuthItems();
+      try {
+        if (isGoogleSignInConfigured) {
+          await GoogleSignIn.instance.signOut();
+        }
+      } catch (_) {}
+      try {
+        await _auth?.signOut();
+      } catch (_) {}
+      return await _signInWithGoogleOnce();
+    }
+  }
+
+  Future<UserCredential> _signInWithGoogleOnce() async {
     final auth = _auth;
     if (auth == null) {
       throw StateError('Firebase is not initialized');
@@ -153,6 +175,13 @@ class AuthService {
     _signInSkipped = false;
     await _onUserChanged(result.user);
     return result;
+  }
+
+  static bool _looksLikeKeychainError(Object error) {
+    final text = error.toString().toLowerCase();
+    return text.contains('keychain') ||
+        text.contains('secitem') ||
+        text.contains('errsec');
   }
 
   Future<void> signOut() async {

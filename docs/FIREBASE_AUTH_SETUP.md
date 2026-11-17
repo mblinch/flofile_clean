@@ -125,5 +125,5 @@ firebase deploy --only firestore:rules
 | Issue | Fix |
 |--------|-----|
 | Google button disabled | Enable Google in Firebase; set `CLIENT_ID` in config + `Info.plist` |
-| Keychain error (Google) | Select a Team in Xcode Signing & Capabilities; rebuild Debug. Entitlements need both `$(CFBundleIdentifier)` and `com.google.GIDSignIn` keychain groups. Delete stale `auth` in Keychain Access if needed. |
+| Keychain error (Google) | FloFile clears stale auth Keychain items and retries automatically. For release builds run `./tool/patch_gtm_keychain.sh` before `flutter build macos`. Debug: select a Team in Xcode Signing & Capabilities and rebuild. |
 | `invalid_client` (Google) | `GIDClientID` / URL scheme must match Firebase plist |
