@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -50,6 +51,23 @@ Future<Map<String, String>> _panel(String path) async {
   final meta = await IptcTemplateImportService.readMetadata(path);
   expect(meta, isNotNull);
   return IptcTemplateImportService.panelValuesFromExiftool(meta!);
+}
+
+Future<Map<String, dynamic>> _copyrightRaw(String path) async {
+  final proc = await ExiftoolHelper.run([
+    '-j',
+    '-a',
+    '-G1',
+    '-IPTC:CopyrightNotice',
+    '-XMP-dc:Rights',
+    '-IFD0:Copyright',
+    path,
+  ]);
+  expect(proc.isSuccess, isTrue, reason: proc.stderrText);
+  final decoded = jsonDecode(proc.stdoutText);
+  expect(decoded, isA<List>());
+  expect((decoded as List).isNotEmpty, isTrue);
+  return Map<String, dynamic>.from(decoded.first as Map);
 }
 
 Future<int> _creatorLiCount(String path) async {
@@ -111,6 +129,19 @@ void main() {
     expect(clear, contains('-XMP-dc:Creator='));
     expect(clear, contains('-XMP:Creator='));
     expect(clear, contains('-Creator='));
+  });
+
+  test('Copyright write tags are IPTC notice + XMP-dc:Rights only', () {
+    final tags = <String, String>{};
+    IptcTemplateApplyService.addExiftoolTagsForPresetKey(
+      tags,
+      'Copyright',
+      'copyright test',
+    );
+    expect(tags.keys.toSet(), {
+      'IPTC:CopyrightNotice',
+      'XMP-dc:Rights',
+    });
   });
 
   test('fill-empty write plan keeps Job Title when panel key differs', () {
@@ -417,6 +448,16 @@ void main() {
       expect(panel['Personality'], isNot(staleApplyTemplate['Personality']));
       expect(panel['Job Title'], isNot(staleApplyTemplate['Job Title']));
       expect(await _creatorLiCount(empty.path), 1);
+
+      // Copyright must land in the PM-visible stores (not IFD0-only).
+      final copyrightRaw = await _copyrightRaw(empty.path);
+      expect(copyrightRaw['IPTC:CopyrightNotice'], 'copyright test');
+      expect(copyrightRaw['XMP-dc:Rights'], 'copyright test');
+      expect(
+        copyrightRaw.containsKey('IFD0:Copyright'),
+        isFalse,
+        reason: 'must not write bare/IFD0 Copyright',
+      );
 
       // EXIF Artist alone must not block filling By-line / XMP-dc:Creator.
       final creatorFill = await IptcTemplateApplyService.applyToImage(

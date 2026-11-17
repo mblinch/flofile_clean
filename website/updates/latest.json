@@ -1,6 +1,6 @@
 {
-  "version": "2.0.48",
-  "notes": "Fill Partial Gaps writes the on-screen values (not a stale Apply template); Creator fills By-line/XMP when empty even if EXIF Artist is set; team search Return selects single match.",
-  "mac_url": "https://github.com/mblinch/flofile_clean/releases/download/v2.0.48/FloFileBeta.zip",
+  "version": "2.0.49",
+  "notes": "Fill Partial Gaps writes Copyright to IPTC:CopyrightNotice and XMP-dc:Rights (once each).",
+  "mac_url": "https://github.com/mblinch/flofile_clean/releases/download/v2.0.49/FloFileBeta.zip",
   "min_supported": "1.0.0"
 }

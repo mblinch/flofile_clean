@@ -413,13 +413,10 @@ class IptcTemplateApplyService {
         tag('IPTC:By-lineTitle');
         break;
       case 'Copyright':
-        // Prefer CopyrightNotice — bare "Copyright" can clash with exiftool's
-        // -copyright switch; Rights is lang-alt XMP that PM also reads.
-        tag('Copyright');
-        tag('CopyrightNotice');
+        // Write each store once. Bare -Copyright clashes with ExifTool's
+        // -copyright switch and only fills IFD0; XMP:Rights aliases
+        // XMP-dc:Rights and can leave PM's IPTC/XMP fields empty.
         tag('IPTC:CopyrightNotice');
-        tag('Rights');
-        tag('XMP:Rights');
         tag('XMP-dc:Rights');
         break;
       case 'Credit':
@@ -549,6 +546,15 @@ class IptcTemplateApplyService {
       'XMP-photoshop:CaptionWriter',
       'Writer-Editor',
       'IPTC:Writer-Editor',
+    ],
+    'Copyright': [
+      // Use IFD0:Copyright — bare -Copyright= is ExifTool's copyright switch.
+      'IFD0:Copyright',
+      'CopyrightNotice',
+      'IPTC:CopyrightNotice',
+      'Rights',
+      'XMP:Rights',
+      'XMP-dc:Rights',
     ],
   };
 
