@@ -842,6 +842,79 @@ void main() {
     expect(controller.statusMessage, 'No player wearing #99');
   });
 
+  test('removeLastSelectedPlayer pops codes and clicks in order', () {
+    final home = player('Home Ace', '34');
+    final away = player('Away Ace', '28');
+    final controller = CaptionV2Controller()
+      ..homeRoster = [home]
+      ..awayRoster = [away];
+
+    controller.selectPlayerByCode('h34');
+    controller.selectPlayer(away, isHome: false);
+    expect(controller.removeLastSelectedPlayer(), isTrue);
+    expect(controller.selectedPlayers.single.player, same(home));
+    expect(controller.removeLastSelectedPlayer(), isTrue);
+    expect(controller.selectedPlayers, isEmpty);
+    expect(controller.removeLastSelectedPlayer(), isFalse);
+  });
+
+  test('goToIndex clears prior frame Creator before IPTC reload', () {
+    final controller = CaptionV2Controller()
+      ..imagePaths = ['/one.jpg', '/two.jpg']
+      ..photographerName = 'creator test'
+      ..agencyName = 'Getty Images'
+      ..currentIptcMeta = {'Creator': 'creator test'};
+
+    controller.goToIndex(1);
+    expect(controller.photographerName, isEmpty);
+    expect(controller.agencyName, isEmpty);
+    expect(controller.currentIptcMeta, isEmpty);
+    expect(
+      controller.currentGameInfoForCaption().photographerName,
+      isEmpty,
+    );
+  });
+
+  test('photographerNameFromMetadata ignores EXIF Artist alone', () {
+    expect(
+      CaptionV2Controller.photographerNameFromMetadata({
+        'Artist': 'creator test',
+        'EXIF:Artist': 'creator test',
+      }),
+      isEmpty,
+    );
+    expect(
+      CaptionV2Controller.photographerNameFromMetadata({
+        'Artist': 'creator test',
+        'By-line': 'Mark Blinch',
+      }),
+      'Mark Blinch',
+    );
+    expect(
+      CaptionV2Controller.photographerNameFromMetadata({
+        'Creator': 'Wire Creator',
+      }),
+      'Wire Creator',
+    );
+  });
+
+  test('Artist-only frame byline uses Photographer placeholder, not Artist', () {
+    final home = player('Home Ace', '34');
+    final controller = CaptionV2Controller()
+      ..homeRoster = [home]
+      ..homeTeam = 'Home'
+      ..awayTeam = 'Away'
+      ..imagePaths = ['/empty.jpg']
+      ..photographerName = ''
+      ..agencyName = ''
+      ..currentIptcMeta = {'Artist': 'creator test'};
+
+    controller.selectPlayerByCode('h34');
+    final caption = controller.buildCaptionSentence();
+    expect(caption, isNot(contains('creator test')));
+    expect(caption, contains('Photographer'));
+  });
+
   test('caption box h34 / v88 expands to select roster players', () {
     final home = player('Home Ace', '34');
     final away = player('Away Ace', '88');
@@ -1791,7 +1864,8 @@ void main() {
     final controller = CaptionV2Controller(writer: writer)
       ..imagePaths = ['/one.jpg']
       ..homeTeam = 'Toronto Blue Jays'
-      ..awayTeam = 'New York Yankees';
+      ..awayTeam = 'New York Yankees'
+      ..photographerName = 'Mark Blinch';
     controller.selectPlayer(player('Bo Bichette', '11'), isHome: true);
 
     final result =
@@ -1804,6 +1878,46 @@ void main() {
     expect(controller.statusMessage, 'Saved');
     final caption = writer.lastValues?['IPTC:Caption-Abstract'] ?? '';
     expect(caption.toLowerCase(), contains('bichette'));
+  });
+
+  test('save with caption but no Creator is refused', () async {
+    final writer = _FakeCaptionWriter({'/one.jpg'});
+    final controller = CaptionV2Controller(writer: writer)
+      ..imagePaths = ['/one.jpg']
+      ..homeTeam = 'Toronto Blue Jays'
+      ..awayTeam = 'New York Yankees'
+      ..photographerName = ''
+      ..currentIptcMeta = {'Artist': 'creator test'};
+    controller.selectPlayer(player('Bo Bichette', '11'), isHome: true);
+    controller.selectVerb('scores');
+
+    final result = await controller.savePaths(['/one.jpg']);
+
+    expect(result.anySucceeded, isFalse);
+    expect(writer.calls, 0);
+    expect(
+      controller.statusMessage,
+      CaptionV2Controller.missingPhotographerWarning,
+    );
+    expect(controller.hasMissingPhotographerForCaption, isTrue);
+  });
+
+  test('allowIncomplete saves when Creator is missing', () async {
+    final writer = _FakeCaptionWriter({'/one.jpg'});
+    final controller = CaptionV2Controller(writer: writer)
+      ..imagePaths = ['/one.jpg']
+      ..homeTeam = 'Toronto Blue Jays'
+      ..awayTeam = 'New York Yankees'
+      ..photographerName = '';
+    controller.selectPlayer(player('Bo Bichette', '11'), isHome: true);
+    controller.selectVerb('scores');
+
+    final result =
+        await controller.savePaths(['/one.jpg'], allowIncomplete: true);
+
+    expect(result.anySucceeded, isTrue);
+    expect(writer.calls, 1);
+    expect(controller.statusMessage, 'Saved');
   });
 
   test('bulk manual save marks only successful paths captioned', () async {
@@ -2510,11 +2624,53 @@ void main() {
       contains('Home Run'),
     );
 
+    // Unique modifier match auto-commits Home Run and asks for run type.
     controller.setSearchQuery('solo');
+    expect(controller.selectedVerb, 'Home Run');
     expect(
-      controller.firebarVerbResults.map((result) => result.verbKey),
-      contains('Home Run'),
+      controller.firebarOptions.map((option) => option.label),
+      ['1R', '2R', '3R', 'GS'],
     );
+  });
+
+  test('Firebar finds user verbs by keyword and phrase', () {
+    final controller = CaptionV2Controller()..setSearchOpen(true);
+    addTearDown(controller.dispose);
+    controller.showVerbBundle({
+      'customVerbs': [
+        {
+          'label': 'Tunnel Walk',
+          'category': 'Non Game-Action',
+          'verbPhrase': 'walks the hallway tunnel',
+          'keywords': ['hallway', 'tw'],
+          'isCustom': true,
+        },
+      ],
+    });
+
+    expect(controller.verbDefinition('Tunnel Walk')?.isCustom, isTrue);
+
+    // Menu scoring (without auto-commit) matches keywords and phrases.
+    controller.searchQuery = 'hallway';
+    expect(
+      controller.firebarMenuResults.map((result) => result.verbKey),
+      contains('Tunnel Walk'),
+    );
+    controller.searchQuery = 'tw';
+    expect(
+      controller.firebarMenuResults.map((result) => result.verbKey),
+      contains('Tunnel Walk'),
+    );
+    controller.searchQuery = 'walks the hallway';
+    expect(
+      controller.firebarMenuResults.map((result) => result.verbKey),
+      contains('Tunnel Walk'),
+    );
+
+    // Unique keyword auto-commits the user verb as a catalog selection.
+    controller.setSearchQuery('hallway');
+    expect(controller.selectedVerb, 'Tunnel Walk');
+    expect(controller.customVerbPhrase, isEmpty);
   });
 
   test('running verbs accept a base and rewrite the caption action', () {

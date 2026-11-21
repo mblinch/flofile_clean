@@ -21,22 +21,37 @@ class ExiftoolHelper {
   static String? _cachedPath;
   static bool _hasShownError = false;
 
-  // Try bundled exiftool first, then common absolute paths
-  static List<String> get _candidatePaths {
+  static String get _bundledExiftoolPath {
     final executablePath = Platform.resolvedExecutable;
     final appBundlePath =
         path.dirname(path.dirname(path.dirname(executablePath)));
-    final bundledExiftool =
-        path.join(appBundlePath, 'Contents', 'Resources', 'exiftool');
+    return path.join(appBundlePath, 'Contents', 'Resources', 'exiftool');
+  }
 
-    return [
-      // Bundled exiftool in app resources
-      bundledExiftool,
-      // System paths as fallback
+  static String get _bundledLibDir =>
+      path.join(path.dirname(_bundledExiftoolPath), 'exiftool_lib');
+
+  /// True when the app bundle has both the script and its Perl libs.
+  /// Debug builds often ship the script alone — skip it so we don't pay for
+  /// a failed launch on every photo metadata read.
+  static Future<bool> _bundledExiftoolIsUsable() async {
+    if (!Platform.isMacOS) return false;
+    if (!await File(_bundledExiftoolPath).exists()) return false;
+    return Directory(_bundledLibDir).exists();
+  }
+
+  // Prefer a complete bundled install, then common absolute paths.
+  static Future<List<String>> _candidatePaths() async {
+    final paths = <String>[];
+    if (await _bundledExiftoolIsUsable()) {
+      paths.add(_bundledExiftoolPath);
+    }
+    paths.addAll(const [
       '/opt/homebrew/bin/exiftool',
       '/usr/local/bin/exiftool',
       '/usr/bin/exiftool',
-    ];
+    ]);
+    return paths;
   }
 
   static Future<String?> _resolveExiftoolPath() async {
@@ -45,18 +60,18 @@ class ExiftoolHelper {
     print('DEBUG: Resolving exiftool path...');
     print('DEBUG: Executable path: ${Platform.resolvedExecutable}');
 
-    for (final path in _candidatePaths) {
+    for (final candidate in await _candidatePaths()) {
       try {
-        print('DEBUG: Checking path: $path');
-        final exists = await File(path).exists();
+        print('DEBUG: Checking path: $candidate');
+        final exists = await File(candidate).exists();
         print('DEBUG: Path exists: $exists');
         if (exists) {
-          _cachedPath = path;
+          _cachedPath = candidate;
           print('DEBUG: Using exiftool at: $_cachedPath');
           return _cachedPath;
         }
       } catch (e) {
-        print('DEBUG: Error checking path $path: $e');
+        print('DEBUG: Error checking path $candidate: $e');
       }
     }
     // As a last resort, try relying on PATH
@@ -65,10 +80,10 @@ class ExiftoolHelper {
       final proc = await Process.run('which', ['exiftool']);
       print('DEBUG: which exit code: ${proc.exitCode}');
       if (proc.exitCode == 0) {
-        final path = (proc.stdout as String).trim();
-        print('DEBUG: which found: $path');
-        if (path.isNotEmpty) {
-          _cachedPath = path;
+        final found = (proc.stdout as String).trim();
+        print('DEBUG: which found: $found');
+        if (found.isNotEmpty) {
+          _cachedPath = found;
           print('DEBUG: Using system exiftool at: $_cachedPath');
           return _cachedPath;
         }
@@ -78,6 +93,12 @@ class ExiftoolHelper {
     }
     print('DEBUG: No exiftool found!');
     return null;
+  }
+
+  static void _rememberWorkingPath(String workingPath) {
+    if (_cachedPath == workingPath) return;
+    _cachedPath = workingPath;
+    print('DEBUG: Cached working exiftool at: $_cachedPath');
   }
 
   // Show user-friendly error message (only once per session)
@@ -190,16 +211,18 @@ class ExiftoolHelper {
         print('DEBUG: exiftool stderr: $stderrText');
 
         // If bundled exiftool fails, try system exiftool as fallback
-        if (exiftoolPath.contains('Resources') && _candidatePaths.length > 1) {
+        if (exiftoolPath.contains('Resources')) {
           print('DEBUG: Bundled exiftool failed, trying system fallback...');
-          for (int i = 1; i < _candidatePaths.length; i++) {
-            final fallbackPath = _candidatePaths[i];
+          final candidates = await _candidatePaths();
+          for (final fallbackPath in candidates) {
+            if (fallbackPath == exiftoolPath) continue;
             try {
               if (await File(fallbackPath).exists()) {
                 print('DEBUG: Trying fallback: $fallbackPath');
                 final fallbackProc = await Process.run(fallbackPath, args);
                 if (fallbackProc.exitCode == 0) {
                   print('DEBUG: Fallback succeeded!');
+                  _rememberWorkingPath(fallbackPath);
                   return ExiftoolResult(
                     exitCode: fallbackProc.exitCode,
                     stdoutText: (fallbackProc.stdout is String)
@@ -248,17 +271,19 @@ class ExiftoolHelper {
       print('DEBUG: ProcessException: ${e.message}');
 
       // Try system fallback even on ProcessException
-      if (exiftoolPath.contains('Resources') && _candidatePaths.length > 1) {
+      if (exiftoolPath.contains('Resources')) {
         print(
             'DEBUG: ProcessException on bundled exiftool, trying system fallback...');
-        for (int i = 1; i < _candidatePaths.length; i++) {
-          final fallbackPath = _candidatePaths[i];
+        final candidates = await _candidatePaths();
+        for (final fallbackPath in candidates) {
+          if (fallbackPath == exiftoolPath) continue;
           try {
             if (await File(fallbackPath).exists()) {
               print('DEBUG: Trying fallback: $fallbackPath');
               final fallbackProc = await Process.run(fallbackPath, args);
               if (fallbackProc.exitCode == 0) {
                 print('DEBUG: Fallback succeeded after ProcessException!');
+                _rememberWorkingPath(fallbackPath);
                 return ExiftoolResult(
                   exitCode: fallbackProc.exitCode,
                   stdoutText: (fallbackProc.stdout is String)

@@ -871,12 +871,13 @@ class CaptionFormulaRenderer {
   }) {
     var name = game.photographerName.trim();
     if (name.isEmpty) {
+      // IPTC/XMP Creator only — never EXIF Artist (camera leftovers).
       name = _iptcLookup(game.iptcMetadata, const [
         'IPTC:By-line',
         'By-line',
-        'Creator',
         'XMP-dc:Creator',
         'XMP:Creator',
+        'Creator',
       ]);
     }
     if (name.isEmpty) name = 'Photographer';

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../theme/ff_tokens.dart';
@@ -23,6 +24,13 @@ const double _kActionChipHeight = 34;
 
 /// FTP stays content-sized up to this width as the window grows.
 const double _kFtpButtonMaxWidth = 280;
+
+String get _modKey =>
+    defaultTargetPlatform == TargetPlatform.macOS ? '⌘' : 'Ctrl';
+
+String get _saveNextShortcut => '$_modKey S';
+String get _pasteLastShortcut => '$_modKey ⇧ V';
+const String _ftpShortcut = '⇧ F';
 
 /// Compact caption actions shown beneath the all-at-once search field.
 class CaptionV2ActionRow extends StatelessWidget {
@@ -136,12 +144,16 @@ class CaptionV2ActionRow extends StatelessWidget {
           onPaste: onPaste,
           onPasteLast: onPastePrevious,
           pasteEnabled: pasteEnabled,
+          pasteLastShortcut: singleRow ? null : _pasteLastShortcut,
         );
         final next = hideOrangeActions
             ? null
             : _NavButton(
                 label: singleRow ? 'Next' : 'Save & Next',
-                tooltip: 'Save & Next',
+                tooltip: singleRow
+                    ? 'Save & Next'
+                    : 'Save & Next  ·  $_saveNextShortcut',
+                shortcut: singleRow ? null : _saveNextShortcut,
                 icon: PhosphorIconsRegular.caretRight,
                 enabled: saveNextEnabled,
                 padding: EdgeInsets.symmetric(horizontal: pad),
@@ -161,6 +173,7 @@ class CaptionV2ActionRow extends StatelessWidget {
                 enabled: transmitEnabled,
                 onTransmit: onTransmit,
                 onHistory: ftpActive ? null : onFtpHistory,
+                shortcut: singleRow ? null : _ftpShortcut,
               )
             : null;
 
@@ -240,6 +253,7 @@ class CaptionV2ActionRow extends StatelessWidget {
                                   enabled: transmitEnabled,
                                   onTransmit: onTransmit,
                                   onHistory: ftpActive ? null : onFtpHistory,
+                                  shortcut: singleRow ? null : _ftpShortcut,
                                 ),
                               ),
                               if (showThumb) ...[
@@ -543,8 +557,8 @@ class _NavButton extends StatelessWidget {
               ],
               Text(label, style: _barLabel(fg)),
               if (shortcut != null) ...[
-                const SizedBox(width: 8),
-                Text(shortcut!, style: _shortcutStyle(fg)),
+                const SizedBox(width: 6),
+                _ShortcutBadge(shortcut!),
               ],
               if (iconAtEnd) ...[
                 const SizedBox(width: 8),
@@ -566,6 +580,7 @@ class _ClipGroup extends StatelessWidget {
     required this.onPasteLast,
     required this.pasteEnabled,
     this.iconOnly = false,
+    this.pasteLastShortcut,
   });
 
   final bool compact;
@@ -574,6 +589,7 @@ class _ClipGroup extends StatelessWidget {
   final VoidCallback? onPaste;
   final VoidCallback? onPasteLast;
   final bool pasteEnabled;
+  final String? pasteLastShortcut;
 
   @override
   Widget build(BuildContext context) {
@@ -584,9 +600,11 @@ class _ClipGroup extends StatelessWidget {
       required String label,
       required VoidCallback? onPressed,
       required bool enabled,
+      String? shortcut,
     }) {
+      final tip = shortcut == null ? label : '$label  ·  $shortcut';
       return _BarTap(
-        tooltip: label,
+        tooltip: tip,
         enabled: enabled && onPressed != null,
         onTap: onPressed,
         builder: (hovered, pressed) {
@@ -608,6 +626,10 @@ class _ClipGroup extends StatelessWidget {
                         label,
                         style: _barLabel(fg, weight: FontWeight.w500),
                       ),
+                      if (shortcut != null) ...[
+                        SizedBox(width: gap),
+                        _ShortcutBadge(shortcut),
+                      ],
                     ],
                   ),
           );
@@ -643,6 +665,7 @@ class _ClipGroup extends StatelessWidget {
             label: 'Paste last',
             onPressed: onPasteLast,
             enabled: true,
+            shortcut: pasteLastShortcut,
           ),
         ],
       ),
@@ -657,6 +680,7 @@ class _FtpGroup extends StatelessWidget {
     required this.enabled,
     required this.onTransmit,
     this.onHistory,
+    this.shortcut,
   });
 
   final bool narrow;
@@ -664,6 +688,7 @@ class _FtpGroup extends StatelessWidget {
   final bool enabled;
   final VoidCallback? onTransmit;
   final VoidCallback? onHistory;
+  final String? shortcut;
 
   @override
   Widget build(BuildContext context) {
@@ -672,6 +697,7 @@ class _FtpGroup extends StatelessWidget {
       enabled: enabled,
       expand: narrow,
       onPressed: onTransmit,
+      shortcut: shortcut,
     );
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: _kFtpButtonMaxWidth),
@@ -828,12 +854,14 @@ class _FtpSendButton extends StatelessWidget {
     required this.enabled,
     required this.expand,
     required this.onPressed,
+    this.shortcut,
   });
 
   final String label;
   final bool enabled;
   final bool expand;
   final VoidCallback? onPressed;
+  final String? shortcut;
 
   String get _destination {
     final trimmed = label.trim();
@@ -848,9 +876,10 @@ class _FtpSendButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final canSend = enabled && onPressed != null;
     final status = _destination;
+    final tip = shortcut == null ? 'FTP · $label' : 'FTP · $shortcut';
 
     return _BarTap(
-      tooltip: 'FTP · $label',
+      tooltip: tip,
       semanticLabel: 'FTP',
       enabled: canSend,
       onTap: onPressed,
@@ -872,6 +901,10 @@ class _FtpSendButton extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text('FTP', style: _barLabel(fg)),
+              if (shortcut != null) ...[
+                const SizedBox(width: 6),
+                _ShortcutBadge(shortcut!),
+              ],
               if (status.isNotEmpty) ...[
                 const SizedBox(width: 8),
                 Flexible(
@@ -892,14 +925,37 @@ class _FtpSendButton extends StatelessWidget {
   }
 }
 
-TextStyle _shortcutStyle(Color color) {
-  return TextStyle(
-    fontFamily: FfTokens.fontFamily,
-    fontSize: 12,
-    fontWeight: FontWeight.w700,
-    color: color.withValues(alpha: 0.9),
-    height: 1,
-  );
+class _ShortcutBadge extends StatelessWidget {
+  const _ShortcutBadge(this.keys);
+
+  final String keys;
+
+  static const _fill = Color(0xFF1A2834);
+  static const _edge = Color(0xFF3A5568);
+  static const _ink = Color(0xFF8EB4CE);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+      decoration: BoxDecoration(
+        color: _fill,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: _edge),
+      ),
+      child: Text(
+        keys,
+        style: const TextStyle(
+          fontFamily: FfTokens.monoFamily,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: _ink,
+          height: 1,
+          letterSpacing: -0.6,
+        ),
+      ),
+    );
+  }
 }
 
 class _BarTap extends StatefulWidget {
@@ -1185,6 +1241,7 @@ class TransmitDock extends StatelessWidget {
           if (onPastePrevious != null) ...[
             _UtilityButton(
               label: 'Paste Last',
+              hint: isMobile ? null : _pasteLastShortcut,
               tokens: t,
               onPressed: onPastePrevious,
             ),
@@ -1192,7 +1249,7 @@ class TransmitDock extends StatelessWidget {
           ],
           _OutlinedActionButton(
             label: 'Save & Next',
-            hint: isMobile ? null : '⌘S ›',
+            hint: isMobile ? null : _saveNextShortcut,
             tokens: t,
             minHeight: btnMinH,
             enabled: saveNextEnabled,
@@ -1201,7 +1258,7 @@ class TransmitDock extends StatelessWidget {
           const SizedBox(width: 10),
           _OutlinedActionButton(
             label: 'Transmit',
-            hint: isMobile ? null : '⇧↵',
+            hint: isMobile ? null : _ftpShortcut,
             tokens: t,
             minHeight: btnMinH,
             enabled: transmitEnabled,

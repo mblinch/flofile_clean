@@ -3,9 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart'
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:timezone/data/latest.dart' as tz_data;
 
 import 'firebase_options.dart';
@@ -31,8 +31,16 @@ import 'widgets/app_styled_dialogs.dart';
 // Global navigator key so native menus / dialogs can reach the app context.
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
+/// Kept alive for the process lifetime. Dropping the handle turns semantics off
+/// again (GC finalizer), which is why Accessibility Inspector only saw chrome.
+SemanticsHandle? _keptSemanticsHandle;
+
 Future<void> main() async {
   FloWidgetsBinding.ensureInitialized();
+  // Framework semantics tree (widget tests / VoiceOver once the embedder is
+  // armed). Keep the handle for process life — disposing it turns the tree off.
+  _keptSemanticsHandle = SemanticsBinding.instance.ensureSemantics();
+  assert(_keptSemanticsHandle != null);
   tz_data.initializeTimeZones();
 
   await _initFirebaseIfConfigured();
@@ -77,6 +85,17 @@ Future<void> main() async {
     }
     return null;
   });
+
+  // macOS embedder keeps its own semanticsEnabled flag (VoiceOver /
+  // AXEnhancedUserInterface). ensureSemantics alone leaves native AX empty —
+  // arm the engine after it is running so Accessibility Inspector sees labels.
+  if (Platform.isMacOS) {
+    try {
+      await lifecycleChannel.invokeMethod<void>('enableSemantics');
+    } catch (_) {
+      // Older macOS runner builds without the handler — ignore.
+    }
+  }
 
   // Check if running from a mounted volume (DMG) and warn user
   final executablePath = Platform.resolvedExecutable;

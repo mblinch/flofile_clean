@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings (phone)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0f1114}
+a{color:#8fb6e0}a:hover{color:#b9d3ef}
+.grp{background:#181b1f;border:1px solid #23272d;border-radius:14px;overflow:hidden}
+.r{display:flex;align-items:center;gap:12px;min-height:50px;padding:0 14px;border-top:1px solid #23272d;font-size:15px;color:#e9edf2;text-decoration:none}
+.r input{width:20px;height:20px;accent-color:#4cc38a}
+.h{font-size:11px;font-weight:700;letter-spacing:0.08em;color:#8a929c;margin:0 0 6px 4px}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0f1114; color: #e9edf2; font-family: Inter, sans-serif; display: flex; flex-direction: column; overflow: hidden">
+
+  <div style="height: 52px; display: flex; align-items: center; padding: 0 8px; gap: 4px; border-bottom: 1px solid #1f2328; flex-shrink: 0">
+    <a href="Main.dc.html" aria-label="Back to captioning" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #e9edf2">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+    </a>
+    <div style="flex: 1; font-size: 16px; font-weight: 800">Settings</div>
+  </div>
+
+  <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 14px 14px 24px; display: flex; flex-direction: column; gap: 18px">
+
+    <div>
+      <div class="h">ACCOUNT</div>
+      <div class="grp">
+        <div class="r" style="border-top: 0">
+          <span style="flex: 1">
+            <span style="display: block; font-size: 15px">Signed in</span>
+            <span style="display: block; font-size: 12px; color: #8a929c">dev@flofilecaptions.com</span>
+          </span>
+          <button style="height: 34px; border: 1px solid #2c3138; border-radius: 8px; background: transparent; color: #e9edf2; font-family: Inter, sans-serif; font-size: 13px; font-weight: 600; padding: 0 12px; cursor: pointer">Sign out</button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="h">MODES</div>
+      <div class="grp">
+        <sc-for list="{{modes}}" as="m" hint-placeholder-count="7">
+          <label class="r" style="border-top-color: {{m.border}}">
+            <span style="flex: 1">{{m.name}}</span>
+            <input type="checkbox" checked="{{m.on}}">
+          </label>
+        </sc-for>
+      </div>
+    </div>
+
+    <div>
+      <div class="h">SET UP</div>
+      <div class="grp">
+        <sc-for list="{{links}}" as="l" hint-placeholder-count="4">
+          <a class="r" href="#" style="border-top-color: {{l.border}}">
+            <span style="flex: 1">{{l.name}}</span>
+            <span style="font-size: 13px; color: #8a929c">{{l.detail}}</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a929c" stroke-width="2.2" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+          </a>
+        </sc-for>
+      </div>
+    </div>
+
+    <div>
+      <div class="h">WARNINGS</div>
+      <div class="grp">
+        <label class="r" style="border-top: 0">
+          <span style="flex: 1">Low-resolution warning</span>
+          <input type="text" value="3000" style="width: 64px; height: 32px; background: #22262c; border: 0; border-radius: 8px; color: #e9edf2; font-family: Inter, sans-serif; font-size: 14px; text-align: center">
+        </label>
+      </div>
+      <div style="font-size: 12px; color: #8a929c; margin: 6px 4px 0">Flags photos smaller than this on the long side, in pixels. 0 turns it off.</div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const M = [['FTP mode', true], ['File renaming', false], ['Burst detection', true], ['Text recognition', false], ['Serial number byline', false], ['Firebar', false], ['Send crash reports', true]];
+    const L = [['FTP profiles', '4'], ['Actions (verbs)', 'Hockey'], ['Caption template', 'Getty'], ['Rosters', 'NHL']];
+    return {
+      modes: M.map(([name, on], i) => ({ name, on, border: i === 0 ? 'transparent' : '#23272d' })),
+      links: L.map(([name, detail], i) => ({ name, detail, border: i === 0 ? 'transparent' : '#23272d' }))
+    };
+  }
+}
+</script>
+</body>
+</html>

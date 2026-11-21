@@ -42,7 +42,12 @@ import 'layout/photo_column.dart';
 import 'layout/roster_column.dart';
 import 'layout/roster_import_dialog.dart';
 import 'layout/verbs_column.dart';
+import 'player_code_key_handler.dart';
 import '../../services/preferences_service.dart';
+import 'mobile/mobile_caption_workspace.dart';
+import 'mobile/mobile_edit_photo.dart';
+import 'mobile/mobile_phone_frame.dart';
+import 'mobile/mobile_settings.dart';
 import 'widgets/caption_strip.dart';
 import 'widgets/ftp_active_dialog.dart';
 import 'widgets/ftp_history_dialog.dart';
@@ -76,9 +81,16 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   Timer? _jerseyBufferTimer;
   String _jerseyBuffer = '';
   bool? _jerseyBufferIsHome;
-  /// Plain typing buffer for `h34` / `v88` (no modifiers). Cleared on timeout.
-  Timer? _playerCodeTimer;
-  String _playerCodeBuffer = '';
+  late final PlayerCodeKeyHandler _playerCodes = PlayerCodeKeyHandler(
+    controller: _controller,
+    onSelected: ({required bool isHome}) => _setColumnFocus(isHome ? 0 : 2),
+    onBufferChanged: (_) {
+      if (mounted) setState(() {});
+    },
+    onErrorChanged: (_) {
+      if (mounted) setState(() {});
+    },
+  );
   bool _burstSaveDialogOpen = false;
 
   @override
@@ -105,7 +117,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(initialPage: 1);
+    _pageController = PageController(initialPage: 0);
     _controller.addListener(_onController);
     _controller.onSaveTransmit = ({required bool transmit}) async {
       await _saveInDirection(next: true, transmit: transmit);
@@ -150,11 +162,16 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     final status = _controller.statusMessage;
     if (status != _lastObservedStatus) {
       _lastObservedStatus = status;
-      // Incomplete-caption warning stays inline near the caption — no snackbar.
-      final inlineOnly =
-          status == CaptionV2Controller.incompleteCaptionWarning;
-      if (status != null &&
-          !inlineOnly &&
+      // Save-gate warnings stay inline near the caption — no snackbar.
+      if (status == CaptionV2Controller.incompleteCaptionWarning) {
+        // Design: refuse save and swipe to Actions.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _controller.setColumnFocus(1);
+        });
+      } else if (_controller.hasInlineSaveWarning) {
+        // Missing photographer: reserved banner only (no Actions swipe).
+      } else if (status != null &&
           (_isErrorStatus(status) || _isFtpStatus(status))) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
@@ -226,17 +243,31 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
 
   Map<String, String> _snapshotSavedCaptionValues() {
     final previous = _controller.previousCaption;
-    final caption = previous?.caption ??
-        _controller.captionValues()['IPTC:Caption-Abstract'] ??
-        '';
-    final personality =
-        previous?.personality ?? _controller.personality;
-    final headline = previous?.headline.isNotEmpty == true
-        ? previous!.headline
-        : _controller.headline;
-    final keywords = previous?.keywords.isNotEmpty == true
-        ? previous!.keywords
-        : _controller.keywords;
+    // Prefer the live caption when the user is actively captioning so
+    // "Apply to next N" stamps what they see, not a stale previous save.
+    final live = _controller.hasCaptionSubject ||
+        _controller.manualCaptionOverride != null ||
+        (_controller.hasVerbSelection &&
+            !_controller.pinDefersCaptionUntilPlayer);
+    final liveValues = live ? _controller.captionValues() : null;
+    final caption = (liveValues?['IPTC:Caption-Abstract'] ??
+            previous?.caption ??
+            '')
+        .trim();
+    final personality = (liveValues?['XMP-getty:Personality'] ??
+            previous?.personality ??
+            _controller.personality)
+        .trim();
+    final headline = (liveValues?['IPTC:Headline'] ??
+            (previous?.headline.isNotEmpty == true
+                ? previous!.headline
+                : _controller.headline))
+        .trim();
+    final keywords = (liveValues?['IPTC:Keywords'] ??
+            (previous?.keywords.isNotEmpty == true
+                ? previous!.keywords
+                : _controller.keywords))
+        .trim();
     return {
       'IPTC:Caption-Abstract': caption,
       'Caption-Abstract': caption,
@@ -388,6 +419,9 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     );
     if (!mounted) return;
     await _confirmLoadedDuplicateJerseys(result);
+    if (!mounted) return;
+    // Ready for jersey codes without an extra click into the workspace.
+    _rootFocus.requestFocus();
   }
 
   Future<void> _openCaptionIptcEditor({bool force = false}) async {
@@ -448,7 +482,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   @override
   void dispose() {
     _jerseyBufferTimer?.cancel();
-    _playerCodeTimer?.cancel();
+    _playerCodes.dispose();
     HardwareKeyboard.instance.removeHandler(_handleHardwareKey);
     FocusManager.instance.removeListener(_syncNativeJerseyShortcuts);
     _jerseyShortcutChannel.setMethodCallHandler(null);
@@ -774,7 +808,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   }
 
   void _queueJerseyDigit(int digit, {required bool isHome}) {
-    _clearPlayerCodeBuffer();
+    _playerCodes.clear();
     if (_jerseyBufferIsHome != null && _jerseyBufferIsHome != isHome) {
       _flushJerseyBuffer();
     }
@@ -801,159 +835,23 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   }
 
   /// Type `h`/`v` then digits (e.g. h34) anywhere on the caption screen.
-  /// Commits on Space, Enter, or a short idle timeout.
+  /// Works with Firebar focused when its query is empty.
   bool _handlePlayerCodeKey(KeyEvent event) {
-    if (event is! KeyDownEvent) return false;
-    if (!_controller.sessionReady || _controller.sessionLoading) return false;
-    if (_controller.searchOpen) return false;
-    if (captionV2FocusIsEditable()) return false;
-    if (_photoEdit.editing || _photoEdit.cropping) return false;
-
-    final keys = HardwareKeyboard.instance;
-    if (keys.isMetaPressed ||
-        keys.isControlPressed ||
-        keys.isAltPressed ||
-        keys.isShiftPressed) {
-      return false;
-    }
-
-    final key = event.logicalKey;
-    if (key == LogicalKeyboardKey.escape) {
-      if (_playerCodeBuffer.isEmpty) return false;
-      _clearPlayerCodeBuffer();
-      return true;
-    }
-    if (key == LogicalKeyboardKey.backspace) {
-      if (_playerCodeBuffer.isEmpty) return false;
-      _playerCodeBuffer =
-          _playerCodeBuffer.substring(0, _playerCodeBuffer.length - 1);
-      if (_playerCodeBuffer.isEmpty) {
-        _clearPlayerCodeBuffer();
-      } else {
-        _restartPlayerCodeTimer();
-      }
-      return true;
-    }
-    if (key == LogicalKeyboardKey.space ||
-        key == LogicalKeyboardKey.enter ||
-        key == LogicalKeyboardKey.numpadEnter) {
-      if (_playerCodeBuffer.isEmpty) return false;
-      _flushPlayerCodeBuffer();
-      return true;
-    }
-
-    final letter = _playerCodeLetter(key, event.character);
-    if (letter != null) {
+    final handled = _playerCodes.handle(
+      event,
+      sessionReady: _controller.sessionReady,
+      sessionLoading: _controller.sessionLoading,
+      searchFocused: _searchFocus.hasFocus,
+      searchQuery: _controller.searchQuery,
+      editableFocused: captionV2FocusIsEditable(),
+      photoEditing: _photoEdit.editing || _photoEdit.cropping,
+    );
+    if (handled) {
       _jerseyBufferTimer?.cancel();
       _jerseyBuffer = '';
       _jerseyBufferIsHome = null;
-      if (_playerCodeBuffer.isEmpty) {
-        _playerCodeBuffer = letter;
-        _restartPlayerCodeTimer();
-        return true;
-      }
-      // Classic double prefix: hh34 / vv88.
-      if (RegExp(r'^[hv]$').hasMatch(_playerCodeBuffer) &&
-          _playerCodeBuffer == letter) {
-        _playerCodeBuffer = '$letter$letter';
-        _restartPlayerCodeTimer();
-        return true;
-      }
-      // Switch side: restart with the new letter.
-      if (!_playerCodeBuffer.toLowerCase().startsWith(letter)) {
-        _playerCodeBuffer = letter;
-        _restartPlayerCodeTimer();
-        return true;
-      }
-      return false;
     }
-
-    final digit = _playerCodeDigit(key);
-    if (digit != null) {
-      if (_playerCodeBuffer.isEmpty) return false;
-      if (!RegExp(r'^[hv]{1,2}\d{0,2}$', caseSensitive: false)
-          .hasMatch(_playerCodeBuffer)) {
-        return false;
-      }
-      _playerCodeBuffer += '$digit';
-      _restartPlayerCodeTimer();
-      return true;
-    }
-
-    if (_playerCodeBuffer.isNotEmpty) {
-      _clearPlayerCodeBuffer();
-    }
-    return false;
-  }
-
-  String? _playerCodeLetter(LogicalKeyboardKey key, String? character) {
-    final ch = character?.toLowerCase();
-    if (key == LogicalKeyboardKey.keyH || ch == 'h') return 'h';
-    if (key == LogicalKeyboardKey.keyV || ch == 'v') return 'v';
-    return null;
-  }
-
-  static const _playerCodeDigitKeys = <LogicalKeyboardKey>[
-    LogicalKeyboardKey.digit0,
-    LogicalKeyboardKey.digit1,
-    LogicalKeyboardKey.digit2,
-    LogicalKeyboardKey.digit3,
-    LogicalKeyboardKey.digit4,
-    LogicalKeyboardKey.digit5,
-    LogicalKeyboardKey.digit6,
-    LogicalKeyboardKey.digit7,
-    LogicalKeyboardKey.digit8,
-    LogicalKeyboardKey.digit9,
-  ];
-  static const _playerCodeNumpadKeys = <LogicalKeyboardKey>[
-    LogicalKeyboardKey.numpad0,
-    LogicalKeyboardKey.numpad1,
-    LogicalKeyboardKey.numpad2,
-    LogicalKeyboardKey.numpad3,
-    LogicalKeyboardKey.numpad4,
-    LogicalKeyboardKey.numpad5,
-    LogicalKeyboardKey.numpad6,
-    LogicalKeyboardKey.numpad7,
-    LogicalKeyboardKey.numpad8,
-    LogicalKeyboardKey.numpad9,
-  ];
-
-  int? _playerCodeDigit(LogicalKeyboardKey key) {
-    for (var i = 0; i <= 9; i++) {
-      if (key == _playerCodeDigitKeys[i] || key == _playerCodeNumpadKeys[i]) {
-        return i;
-      }
-    }
-    return null;
-  }
-
-  void _restartPlayerCodeTimer() {
-    _playerCodeTimer?.cancel();
-    _playerCodeTimer = Timer(
-      const Duration(milliseconds: 650),
-      _flushPlayerCodeBuffer,
-    );
-  }
-
-  void _clearPlayerCodeBuffer() {
-    _playerCodeTimer?.cancel();
-    _playerCodeTimer = null;
-    _playerCodeBuffer = '';
-  }
-
-  void _flushPlayerCodeBuffer() {
-    _playerCodeTimer?.cancel();
-    final code = _playerCodeBuffer;
-    _playerCodeBuffer = '';
-    _playerCodeTimer = null;
-    if (!mounted || code.isEmpty) return;
-    if (!RegExp(r'^[hv]{1,2}\d{1,3}$', caseSensitive: false).hasMatch(code)) {
-      return;
-    }
-    final isHome = code.toLowerCase().startsWith('h');
-    if (_controller.selectPlayerByCode(code)) {
-      _setColumnFocus(isHome ? 0 : 2);
-    }
+    return handled;
   }
 
   void _applyShiftNumber(int number) {
@@ -1109,6 +1007,9 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     final chain = _controller.forwardBurstChain;
     if (chain.length < 2) return;
 
+    // Snapshot before the dialog so frames stay marked saved/captioned even
+    // if selection is cleared while the picker is open.
+    final captionValues = _snapshotSavedCaptionValues();
     final decision = await _showBurstSaveDialog(
       chain,
       selectionOnly: true,
@@ -1124,7 +1025,10 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
 
     _saveInFlight = true;
     try {
-      final result = await _controller.savePaths(paths);
+      final result = await _controller.savePathsWithFixedValues(
+        paths,
+        captionValues,
+      );
       if (!mounted) return;
       _controller.setSelectedImagePaths(result.failedPaths);
       if (result.anySucceeded) {
@@ -1288,6 +1192,10 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       next
           ? _controller.nextFrame(keepSearchOpen: keepFirebar)
           : _controller.prevFrame(keepSearchOpen: keepFirebar);
+      // Phone design: land back on the home players page after a save.
+      if (useIsMobile(context) || captionV2ForceMobilePreview.value) {
+        _controller.setColumnFocus(0);
+      }
       restoreFirebarFocus();
     }
     } finally {
@@ -1784,10 +1692,15 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         backgroundColor: FfTokens.nocturneBg,
         body: ColoredBox(
           color: FfTokens.nocturneBg,
-          child: _withChrome(
-            CaptionV2StartupScreen(onComplete: _onStartupComplete),
-            title: 'New session',
-            sessionChrome: true,
+          child: ValueListenableBuilder<bool>(
+            valueListenable: captionV2ForceMobilePreview,
+            builder: (context, _, __) {
+              return _withChrome(
+                CaptionV2StartupScreen(onComplete: _onStartupComplete),
+                title: 'New session',
+                sessionChrome: true,
+              );
+            },
           ),
         ),
       );
@@ -1968,18 +1881,6 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                   onSavePrevious: _saveAndPrevious,
                   onSaveNext: _saveAndNext,
                 ),
-                if (_pendingBurst != null)
-                  Positioned(
-                    left: 8,
-                    right: 8,
-                    top: 8,
-                    child: _BurstAvailableBanner(
-                      frameCount: _pendingBurst!.chain.length,
-                      tokens: t,
-                      onReview: () => unawaited(_reviewPendingBurst()),
-                      onDismiss: () => setState(_clearPendingBurst),
-                    ),
-                  ),
               ],
             ),
           ),
@@ -1994,23 +1895,48 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (c.missingCaptionIptcLabels.isNotEmpty) ...[
-                  _MissingCaptionIptcBanner(
-                    labels: c.missingCaptionIptcLabels,
+                // One fixed banner slot — Missing fields or Burst — so Save /
+                // grids never jump when navigating photos.
+                _WorkspaceBannerSlot(
+                  tokens: t,
+                  missingLabels: c.missingCaptionIptcLabels,
+                  pendingBurstFrames: _pendingBurst?.chain.length,
+                  onEditMissing: () =>
+                      unawaited(_openCaptionIptcEditor(force: true)),
+                  onReviewBurst: () => unawaited(_reviewPendingBurst()),
+                  onDismissBurst: () => setState(_clearPendingBurst),
+                ),
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    _resizableCaption(c),
+                    if (_playerCodes.buffer.isNotEmpty ||
+                        _playerCodes.errorMessage != null)
+                      Positioned(
+                        right: 8,
+                        bottom: 18,
+                        child: _PlayerCodeBox(
+                          code: _playerCodes.buffer,
+                          error: _playerCodes.errorMessage,
+                        ),
+                      ),
+                  ],
+                ),
+                // Always reserve warning height so Save / grids don't jump.
+                Visibility(
+                  visible: c.hasInlineSaveWarning,
+                  maintainSize: true,
+                  maintainAnimation: true,
+                  maintainState: true,
+                  child: _IncompleteCaptionWarning(
                     tokens: t,
-                    onEdit: () => unawaited(_openCaptionIptcEditor(force: true)),
-                  ),
-                  const SizedBox(height: 6),
-                ],
-                _resizableCaption(c),
-                if (c.statusMessage ==
-                    CaptionV2Controller.incompleteCaptionWarning)
-                  _IncompleteCaptionWarning(
-                    tokens: t,
+                    message: c.statusMessage ??
+                        CaptionV2Controller.incompleteCaptionWarning,
                     onSaveAnyway: () => unawaited(
                       _saveInDirection(next: true, allowIncomplete: true),
                     ),
                   ),
+                ),
                 _buildSearchBlock(c),
                 const SizedBox(height: 6),
                 Expanded(
@@ -2029,124 +1955,50 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   }
 
   Widget _buildMobileWorkspace(CaptionV2Controller c, FfTokens t) {
-    // Thin mobile shell: same CaptionStrip / DrumPicker / action row as
-    // desktop — only the arrangement matches Mobile Captioning.html.
     final pageController = _pageController;
-    final column = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-          child: SizedBox(
-            height: _captionExpanded ? 120 : 148,
-            child: MobileFrameBanner(
-              controller: c,
-              editSession: _photoEdit,
-              onOpen: _openFrameReview,
-              showMeta: false,
-              height: _captionExpanded ? 120 : 148,
-              onSwipePrevious: () {
-                if (c.currentIndex > 0) {
-                  c.goToIndex(c.currentIndex - 1);
-                }
-              },
-              onSwipeNext: () {
-                if (c.currentIndex < c.imagePaths.length - 1) {
-                  c.goToIndex(c.currentIndex + 1);
-                }
-              },
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: _buildCaptionStrip(
-            c,
-            compact: true,
-            inningStepperOnly: true,
-            captionExpanded: _captionExpanded,
-            onCaptionExpandedChanged: (v) =>
-                setState(() => _captionExpanded = v),
-            onClear: () {
-              c.clearFrameCaption();
-              setState(() => _captionExpanded = false);
-            },
-            hideFirebarFooter: true,
-          ),
-        ),
-        if (c.statusMessage == CaptionV2Controller.incompleteCaptionWarning)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-            child: _IncompleteCaptionWarning(
-              tokens: t,
-              onSaveAnyway: () => unawaited(
-                _saveInDirection(next: true, allowIncomplete: true),
-              ),
-            ),
-          ),
-        const SizedBox(height: 8),
-        Expanded(
-          child: Material(
-            color: t.surface,
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(20),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: pageController == null
-                ? const SizedBox.shrink()
-                : _MobileBody(
-                    controller: c,
-                    pageController: pageController,
-                    onPageChanged: (i) {
-                      _lastSyncedColumnFocus = i;
-                      c.setColumnFocus(i);
-                    },
-                    onEditRosters: _editRosters,
-                  ),
-          ),
-        ),
-        Material(
-          color: t.surface,
-          child: SafeArea(
-            top: false,
-            child: _buildSearchBlock(
-              c,
-              mobileDock: true,
-              thumbsOpen: _mobileThumbsOpen,
-              onThumbs: () => setState(
-                () => _mobileThumbsOpen = !_mobileThumbsOpen,
-              ),
-            ),
-          ),
-        ),
-      ],
+    if (pageController == null) return const SizedBox.shrink();
+
+    final body = MobileCaptionWorkspace(
+      controller: c,
+      editSession: _photoEdit,
+      pageController: pageController,
+      onPageChanged: (i) {
+        _lastSyncedColumnFocus = i;
+        c.setColumnFocus(i);
+      },
+      onBack: c.resetToStartup,
+      onSettings: () => unawaited(MobileSettingsPage.open(context, controller: c)),
+      onEditPhoto: () {
+        if (!_photoEdit.editing) _photoEdit.toggleEditing();
+      },
+      onOpenPhoto: _openFrameReview,
+      onSavePrevious: _saveAndPrevious,
+      onPasteLast: () => unawaited(_pastePreviousSelection()),
+      onSaveNext: _saveAndNext,
+      onFtp: c.ftpModeEnabled
+          ? () => unawaited(_saveAndFtpCurrent())
+          : null,
+      ftpLabel: c.ftpButtonLabel,
+      showFtp: c.ftpModeEnabled,
+      onEditRosters: _editRosters,
     );
-    if (!_mobileThumbsOpen && _pendingBurst == null) return column;
+
+    if (_pendingBurst == null) return body;
     return Stack(
       fit: StackFit.expand,
       children: [
-        column,
-        if (_mobileThumbsOpen)
-          Positioned.fill(
-            child: _MobileThumbsOverlay(
-              controller: c,
-              tokens: t,
-              onClose: () => setState(() => _mobileThumbsOpen = false),
-            ),
+        body,
+        Positioned(
+          left: 12,
+          right: 12,
+          top: 8,
+          child: _BurstAvailableBanner(
+            frameCount: _pendingBurst!.chain.length,
+            tokens: t,
+            onReview: () => unawaited(_reviewPendingBurst()),
+            onDismiss: () => setState(_clearPendingBurst),
           ),
-        if (_pendingBurst != null)
-          Positioned(
-            left: 12,
-            right: 12,
-            top: 8,
-            child: _BurstAvailableBanner(
-              frameCount: _pendingBurst!.chain.length,
-              tokens: t,
-              onReview: () => unawaited(_reviewPendingBurst()),
-              onDismiss: () => setState(_clearPendingBurst),
-            ),
-          ),
+        ),
       ],
     );
   }
@@ -2435,32 +2287,109 @@ class _PhotoEditShellState extends State<_PhotoEditShell> {
     if (!widget.useMobile) {
       return widget.buildDesktop(widget.maxWidth);
     }
-    final mobile = widget.buildMobile();
+    final mobile = _editing
+        ? MobileEditPhoto(
+            controller: widget.controller,
+            session: widget.session,
+          )
+        : widget.buildMobile();
     if (!widget.forceMobile) return mobile;
-    return ColoredBox(
-      color: widget.tokens.bg,
-      child: Align(
-        alignment: Alignment.topCenter,
-        child: SizedBox(
-          width: math.min(
-            kCaptionV2MobilePreviewWidth,
-            widget.maxWidth,
+    return MobilePhoneFrame(
+      background: widget.tokens.bg,
+      child: mobile,
+    );
+  }
+}
+
+/// Floating buffer while typing `h34` / `v88`, or a brief unknown-code error.
+class _PlayerCodeBox extends StatelessWidget {
+  const _PlayerCodeBox({required this.code, this.error});
+
+  final String code;
+  final String? error;
+
+  @override
+  Widget build(BuildContext context) {
+    final isError = error != null && error!.isNotEmpty;
+    final label = isError ? error! : code;
+    return Material(
+      elevation: 4,
+      color: isError ? FfTokens.danger : FfTokens.firebar,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontFamily: FfTokens.fontFamily,
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+            letterSpacing: 0.5,
           ),
-          child: mobile,
         ),
       ),
     );
   }
 }
 
-/// Inline (non-modal) prompt when Save is blocked for a player without a verb.
+/// Fixed-height workspace banner: Missing fields wins over Burst available.
+class _WorkspaceBannerSlot extends StatelessWidget {
+  const _WorkspaceBannerSlot({
+    required this.tokens,
+    required this.missingLabels,
+    required this.pendingBurstFrames,
+    required this.onEditMissing,
+    required this.onReviewBurst,
+    required this.onDismissBurst,
+  });
+
+  final FfTokens tokens;
+  final List<String> missingLabels;
+  final int? pendingBurstFrames;
+  final VoidCallback onEditMissing;
+  final VoidCallback onReviewBurst;
+  final VoidCallback onDismissBurst;
+
+  static const double height = 36;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget? child;
+    if (missingLabels.isNotEmpty) {
+      child = _MissingCaptionIptcBanner(
+        labels: missingLabels,
+        tokens: tokens,
+        onEdit: onEditMissing,
+      );
+    } else if (pendingBurstFrames != null) {
+      child = _BurstAvailableBanner(
+        frameCount: pendingBurstFrames!,
+        tokens: tokens,
+        onReview: onReviewBurst,
+        onDismiss: onDismissBurst,
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: SizedBox(
+        height: height,
+        child: child,
+      ),
+    );
+  }
+}
+
+/// Inline (non-modal) prompt when Save is blocked (no action / no Creator).
 class _IncompleteCaptionWarning extends StatelessWidget {
   const _IncompleteCaptionWarning({
     required this.tokens,
+    required this.message,
     required this.onSaveAnyway,
   });
 
   final FfTokens tokens;
+  final String message;
   final VoidCallback onSaveAnyway;
 
   @override
@@ -2486,7 +2415,7 @@ class _IncompleteCaptionWarning extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  CaptionV2Controller.incompleteCaptionWarning,
+                  message,
                   style: const TextStyle(
                     fontFamily: FfTokens.fontFamily,
                     fontSize: 12,

@@ -6,6 +6,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private let enforcedMinContentSize = NSSize(width: 1280, height: 800)
   private static var jerseyChannel: FlutterMethodChannel?
   private static var lifecycleChannel: FlutterMethodChannel?
+  private weak var flutterViewController: FlutterViewController?
   private var jerseyMonitor: Any?
   private var windowControlChannel: FlutterMethodChannel?
   private var filePickerChannel: FlutterMethodChannel?
@@ -28,6 +29,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
 
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
+    self.flutterViewController = flutterViewController
     self.contentViewController = flutterViewController
     self.delegate = self
     
@@ -77,6 +79,25 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     super.awakeFromNib()
   }
 
+  /// Turns on the native Flutter accessibility bridge (internal engine flag).
+  ///
+  /// Must run after the embedder engine handle exists — calling from
+  /// awakeFromNib hits `FlutterEngineUpdateSemanticsEnabled` with an invalid
+  /// handle. Dart invokes this via `caption_writer/lifecycle` → enableSemantics.
+  private func _enableFlutterSemantics() {
+    guard let engine = flutterViewController?.engine else { return }
+    // FlutterEngine.semanticsEnabled is internal; KVC reaches the setter that
+    // builds AccessibilityBridge + UpdateSemanticsEnabled.
+    engine.setValue(true, forKey: "semanticsEnabled")
+    NotificationCenter.default.post(
+      name: Notification.Name(
+        "NSApplicationDidChangeAccessibilityEnhancedUserInterfaceNotification"
+      ),
+      object: nil,
+      userInfo: ["AXEnhancedUserInterface": true]
+    )
+  }
+
   func windowShouldClose(_ sender: NSWindow) -> Bool {
     if MainFlutterWindow.skipQuitConfirm {
       return true
@@ -95,6 +116,14 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       name: "caption_writer/lifecycle",
       binaryMessenger: flutterViewController.engine.binaryMessenger
     )
+    channel.setMethodCallHandler { [weak self] call, result in
+      if call.method == "enableSemantics" {
+        self?._enableFlutterSemantics()
+        result(nil)
+        return
+      }
+      result(FlutterMethodNotImplemented)
+    }
     MainFlutterWindow.lifecycleChannel = channel
   }
 

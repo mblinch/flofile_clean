@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>IPTC template (phone)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0f1114}
+a{color:#8fb6e0}a:hover{color:#b9d3ef}
+.row{display:flex;align-items:center;gap:10px;min-height:46px;padding:0 12px;border-top:1px solid #23272d}
+.k{width:96px;flex-shrink:0;font-size:13px;color:#a3abb5}
+.v{flex:1;min-width:0;background:transparent;border:0;color:#e9edf2;font-family:Inter,sans-serif;font-size:14px;font-weight:500;outline:none;padding:12px 0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0f1114; color: #e9edf2; font-family: Inter, sans-serif; display: flex; flex-direction: column; overflow: hidden">
+
+  <div style="height: 52px; display: flex; align-items: center; padding: 0 8px; gap: 4px; border-bottom: 1px solid #1f2328; flex-shrink: 0">
+    <a href="Setup.dc.html" aria-label="Back to New session" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #e9edf2">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+    </a>
+    <div style="flex: 1">
+      <div style="font-size: 16px; font-weight: 800">IPTC template</div>
+      <div style="font-size: 11px; color: #8a929c">Getty NHLI · Apply IPTC template</div>
+    </div>
+    <button style="height: 36px; border: 0; border-radius: 8px; background: #22262c; color: #e9edf2; font-family: Inter, sans-serif; font-size: 12px; font-weight: 600; padding: 0 12px; cursor: pointer">Import</button>
+  </div>
+
+  <div style="flex-shrink: 0; margin: 12px 14px 0; background: #2d2614; color: #f0cf7a; border-radius: 10px; padding: 10px 12px; font-size: 12px; font-weight: 600">1 field missing for Getty: Writers</div>
+
+  <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 12px 14px 20px; display: flex; flex-direction: column; gap: 14px">
+    <sc-for list="{{groups}}" as="g" hint-placeholder-count="4">
+      <div>
+        <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #8a929c; margin: 0 0 6px 4px">{{g.name}}</div>
+        <div style="background: #181b1f; border: 1px solid #23272d; border-radius: 14px; overflow: hidden">
+          <sc-for list="{{g.fields}}" as="f" hint-placeholder-count="5">
+            <label class="row" style="border-top-color: {{f.border}}">
+              <span class="k" style="color: {{f.kColor}}">{{f.k}}</span>
+              <input class="v" value="{{f.v}}" placeholder="{{f.ph}}">
+            </label>
+          </sc-for>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="flex-shrink: 0; padding: 10px 14px 18px; border-top: 1px solid #1f2328; background: #121418; display: flex; gap: 8px">
+    <a href="Setup.dc.html" style="flex: 1; display: flex; align-items: center; justify-content: center; height: 50px; border-radius: 14px; background: #22262c; color: #e9edf2; font-size: 15px; font-weight: 700; text-decoration: none">Cancel</a>
+    <a href="Setup.dc.html" style="flex: 2; display: flex; align-items: center; justify-content: center; height: 50px; border-radius: 14px; background: #f2f4f7; color: #0f1114; font-size: 15px; font-weight: 800; text-decoration: none">Save template</a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const G = [
+      ['STORY', [['Headline','Ottawa Senators v Toronto Maple Leafs'],['Personality','','Filled from players'],['Keywords','Hockey, NHL'],['Instructions','','Optional']]],
+      ['CREDIT', [['Creator','Mark Blinch'],['Job title','Contributor'],['Writers','','Required for Getty',true],['Credit','Getty Images'],['Source','Getty Images North America'],['Copyright','2026 Mark Blinch']]],
+      ['LOCATION', [['Venue','Scotiabank Arena'],['City','Toronto'],['State/Province','ON'],['Country','Canada'],['Country code','CAN']]],
+      ['FILING', [['MEID','','[MEID]'],['Object name','','Built automatically'],['Category','S'],['Supp. cats','SPO, HKN, HKO'],['Urgency','5 · Normal']]]
+    ];
+    return {
+      groups: G.map(([name, fields]) => ({
+        name,
+        fields: fields.map(([k, v, ph, missing], i) => ({ k, v, ph: ph || '', kColor: missing ? '#f0cf7a' : '#a3abb5', border: i === 0 ? 'transparent' : '#23272d' }))
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

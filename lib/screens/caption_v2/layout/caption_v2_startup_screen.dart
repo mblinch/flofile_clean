@@ -36,7 +36,10 @@ import '../../../widgets/ff_menu.dart';
 import '../../../widgets/ftp_settings_panel.dart';
 import '../../../widgets/file_rename_dialog.dart';
 import '../../../widgets/caption_layout_builder_dialog.dart';
+import '../caption_v2_flag.dart';
 import '../data/team_abbrev.dart';
+import '../mobile/mobile_design.dart';
+import '../mobile/mobile_phone_frame.dart';
 import 'caption_v2_iptc_dialog.dart';
 import 'iptc_template_editor.dart';
 import 'roster_import_dialog.dart';
@@ -2309,22 +2312,43 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    final narrow = MediaQuery.sizeOf(context).width <= 620;
+    final width = MediaQuery.sizeOf(context).width;
+    final narrow = width <= 620;
+    final phone = useCaptionV2MobileLayout(width);
+    final forcePreview =
+        captionV2ForceMobilePreview.value || kCaptionV2MobileDefine;
+
+    Widget setupBody({required bool phoneLayout}) {
+      return _setupStep == 1
+          ? _buildV6SetupPanel(t, narrow: true, phone: phoneLayout)
+          : _buildV6CaptionStep(t, narrow: true);
+    }
 
     return Focus(
       focusNode: _rootFocus,
       autofocus: true,
       onKeyEvent: _onKey,
       child: ColoredBox(
-        color: FfTokens.sessionBg,
+        color: phone ? MobileDesign.bg : FfTokens.sessionBg,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+                padding: phone && !forcePreview
+                    ? EdgeInsets.zero
+                    : phone
+                        ? EdgeInsets.zero
+                        : const EdgeInsets.fromLTRB(24, 20, 24, 12),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
+                    if (phone) {
+                      final content = setupBody(phoneLayout: true);
+                      if (forcePreview) {
+                        return MobilePhoneFrame(child: content);
+                      }
+                      return content;
+                    }
                     final w = math.min(_stageWidth, constraints.maxWidth);
                     final h = math.min(_stageHeight, constraints.maxHeight);
                     return Center(
@@ -2340,9 +2364,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                 ),
               ),
             ),
-            if (_error != null)
+            if (_error != null && !forcePreview)
               Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 10),
+                padding: EdgeInsets.fromLTRB(phone ? 14 : 24, 0, phone ? 14 : 24, 10),
                 child: Text(
                   _error!,
                   maxLines: 1,
@@ -2420,7 +2444,71 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   }
 
   /// Step 1 — centered setup panel (v6).
-  Widget _buildV6SetupPanel(FfTokens t, {required bool narrow}) {
+  Widget _buildV6SetupPanel(
+    FfTokens t, {
+    required bool narrow,
+    bool phone = false,
+  }) {
+    final game = _buildV6SetupRow(
+      label: 'Game',
+      narrow: narrow,
+      child: _buildV6GameField(narrow: narrow),
+    );
+    final images = _buildV6SetupRow(
+      label: 'Images',
+      narrow: narrow,
+      child: _setupGate(
+        unlocked: _imagesUnlocked,
+        child: _buildV5ImagesField(),
+      ),
+    );
+    final wire = _buildV6SetupRow(
+      label: 'Wire',
+      narrow: narrow,
+      child: _setupGate(
+        unlocked: _wireUnlocked,
+        child: _buildV6WireRow(narrow: narrow),
+      ),
+    );
+    final iptc = _buildV6SetupRow(
+      label: 'IPTC',
+      narrow: narrow,
+      showDivider: false,
+      expand: !phone,
+      child: _setupGate(
+        unlocked: _iptcUnlocked,
+        child: _buildV6IptcField(narrow: narrow, phone: phone),
+      ),
+    );
+    final go = _buildV6ActionRow(
+      showBack: false,
+      onGo: () => unawaited(_goTimeFromSetup()),
+    );
+
+    // Phone: scroll the whole setup — no Expanded/fixed IPTC height.
+    if (phone) {
+      return ColoredBox(
+        color: MobileDesign.bg,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+                children: [
+                  game,
+                  images,
+                  wire,
+                  iptc,
+                ],
+              ),
+            ),
+            go,
+          ],
+        ),
+      );
+    }
+
     return DecoratedBox(
       decoration: BoxDecoration(
         color: FfTokens.sessionPanel,
@@ -2431,43 +2519,11 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildV6SetupRow(
-              label: 'Game',
-              narrow: narrow,
-              child: _buildV6GameField(narrow: narrow),
-            ),
-            _buildV6SetupRow(
-              label: 'Images',
-              narrow: narrow,
-              child: _setupGate(
-                unlocked: _imagesUnlocked,
-                child: _buildV5ImagesField(),
-              ),
-            ),
-            _buildV6SetupRow(
-              label: 'Wire',
-              narrow: narrow,
-              child: _setupGate(
-                unlocked: _wireUnlocked,
-                child: _buildV6WireRow(narrow: narrow),
-              ),
-            ),
-            Expanded(
-              child: _buildV6SetupRow(
-                label: 'IPTC',
-                narrow: narrow,
-                showDivider: false,
-                expand: true,
-                child: _setupGate(
-                  unlocked: _iptcUnlocked,
-                  child: _buildV6IptcField(narrow: narrow),
-                ),
-              ),
-            ),
-            _buildV6ActionRow(
-              showBack: false,
-              onGo: () => unawaited(_goTimeFromSetup()),
-            ),
+            game,
+            images,
+            wire,
+            Expanded(child: iptc),
+            go,
           ],
         ),
       ),
@@ -2805,9 +2861,11 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     );
   }
 
-  Widget _buildV6IptcField({required bool narrow}) {
+  Widget _buildV6IptcField({required bool narrow, bool phone = false}) {
     final applyMode = _iptcSource == _IptcSourceMode.apply;
+    final menu = _buildV5InlineIptcMenu(phone: phone);
     return Column(
+      mainAxisSize: phone ? MainAxisSize.min : MainAxisSize.max,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _V5Segmented<_IptcSourceMode>(
@@ -2827,7 +2885,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         const SizedBox(height: 6),
         _buildV6IptcNote(),
         const SizedBox(height: 6),
-        Expanded(child: _buildV5InlineIptcMenu()),
+        if (phone) menu else Expanded(child: menu),
       ],
     );
   }
@@ -3507,7 +3565,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     }
   }
 
-  Widget _buildV5InlineIptcMenu() {
+  Widget _buildV5InlineIptcMenu({bool phone = false}) {
     final source = _iptcSource;
     final fromFiles = source == _IptcSourceMode.files;
     final onTemplate = !fromFiles;
@@ -3597,6 +3655,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                   clearEnabled: onTemplate,
                   loadingTemplate: _loadingExternalIptc,
                   embedded: true,
+                  phoneLayout: phone,
                   showTemplateControls: false,
                   templatePageHeader: applyMode,
                   title: title,
@@ -6946,7 +7005,10 @@ class _TeamDropdownState extends State<_TeamDropdown> {
   Widget _menu() {
     final favorites = _filterTeams(_menuFavorites);
     final rest = _filterTeams(_menuRest);
+    // Search (~40) + list must fit inside FfMenuSurface's maxHeight.
+    // Default surface 300 left the Column overflowing by ~22px.
     return FfMenuSurface(
+      maxHeight: 340,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -6975,8 +7037,7 @@ class _TeamDropdownState extends State<_TeamDropdown> {
               onSubmitted: (_) => _selectSingleSearchMatch(),
             ),
           ),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 280),
+          Flexible(
             child: ListView(
               padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
               shrinkWrap: true,

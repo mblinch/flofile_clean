@@ -12,6 +12,7 @@ import '../caption_style/verb_caption_wording.dart';
 import '../caption_style/wire_iptc_specs.dart';
 import '../flo_layout_constants.dart';
 import '../theme/auth_ui_constants.dart';
+import '../metadata/metadata_writer_self_test.dart';
 import '../services/admin_service.dart';
 import '../services/api_manager.dart';
 import '../services/app_defaults_firestore_service.dart';
@@ -33,7 +34,13 @@ import 'verb_edit_sub_options_section.dart';
 import 'caption_layout_builder_dialog.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
-enum _AdminSection { verbs, captionStructures, rosterCompare, rosterIssues }
+enum _AdminSection {
+  verbs,
+  captionStructures,
+  rosterCompare,
+  rosterIssues,
+  metadataWriter,
+}
 
 /// Admin console for editing app originals (verbs + caption structures).
 class AdminScreen extends StatefulWidget {
@@ -110,6 +117,10 @@ class _AdminScreenState extends State<AdminScreen> {
   String? _issuesError;
   String? _issuesStatus;
   String _issuesSportFilter = 'all';
+
+  bool _metadataTestRunning = false;
+  String? _metadataTestReport;
+  bool? _metadataTestPassed;
 
   static const _sports = AppDefaultsFirestoreService.catalogSports;
   static const _dialogWidth = 1400.0;
@@ -2006,6 +2017,16 @@ class _AdminScreenState extends State<AdminScreen> {
                                               _AdminSection.rosterIssues,
                                               'Roster Issues',
                                             ),
+                                            Divider(
+                                              height: 1,
+                                              thickness: 1,
+                                              color: t.divider,
+                                            ),
+                                            _sidebarTile(
+                                              t,
+                                              _AdminSection.metadataWriter,
+                                              'Metadata Writer',
+                                            ),
                                           ],
                                         ),
                                       ),
@@ -2028,20 +2049,33 @@ class _AdminScreenState extends State<AdminScreen> {
                                         : _section ==
                                                 _AdminSection.captionStructures
                                             ? _buildCaptionContent(t)
-                                            : SingleChildScrollView(
-                                                padding: const EdgeInsets.all(
-                                                  _contentPadding,
-                                                ),
-                                                child: _section ==
-                                                        _AdminSection
-                                                            .rosterIssues
-                                                    ? _buildRosterIssuesContent(
-                                                        t,
-                                                      )
-                                                    : _buildRosterCompareContent(
-                                                        t,
-                                                      ),
-                                              ),
+                                            : _section ==
+                                                    _AdminSection.metadataWriter
+                                                ? Padding(
+                                                    padding:
+                                                        const EdgeInsets.all(
+                                                      _contentPadding,
+                                                    ),
+                                                    child:
+                                                        _buildMetadataWriterContent(
+                                                      t,
+                                                    ),
+                                                  )
+                                                : SingleChildScrollView(
+                                                    padding:
+                                                        const EdgeInsets.all(
+                                                      _contentPadding,
+                                                    ),
+                                                    child: _section ==
+                                                            _AdminSection
+                                                                .rosterIssues
+                                                        ? _buildRosterIssuesContent(
+                                                            t,
+                                                          )
+                                                        : _buildRosterCompareContent(
+                                                            t,
+                                                          ),
+                                                  ),
                                   ),
                                 ),
                               ],
@@ -2260,6 +2294,107 @@ class _AdminScreenState extends State<AdminScreen> {
           }),
       ],
     );
+  }
+
+  Widget _buildMetadataWriterContent(FfTokens t) {
+    final statusColor = _metadataTestPassed == null
+        ? t.textSecondary
+        : (_metadataTestPassed!
+            ? const Color(0xFF1B7A3D)
+            : const Color(0xFFB42318));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Metadata writer compare',
+          style: t.labelStyle.copyWith(fontSize: 14, color: t.text),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Runs ExifTool vs the pure-Dart JPEG writer on temp files only. '
+          'Does not change how the app saves captions (still ExifTool). '
+          'Needs exiftool on PATH (brew install exiftool).',
+          style: t.metaStyle.copyWith(height: 1.35),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            FilledButton(
+              onPressed: (_busy || _metadataTestRunning)
+                  ? null
+                  : _runMetadataWriterSelfTest,
+              child: Text(
+                _metadataTestRunning ? 'Running…' : 'Run self-test',
+              ),
+            ),
+            if (_metadataTestPassed != null) ...[
+              const SizedBox(width: 12),
+              Text(
+                _metadataTestPassed! ? 'ALL PASSED' : 'FAILED',
+                style: TextStyle(
+                  fontFamily: FfTokens.labelFamily,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: statusColor,
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 14),
+        Expanded(
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: t.sunken,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: t.divider),
+            ),
+            child: _metadataTestReport == null
+                ? Text(
+                    'Results show here after you run the test.',
+                    style: t.metaStyle,
+                  )
+                : SingleChildScrollView(
+                    child: SelectableText(
+                      _metadataTestReport!,
+                      style: TextStyle(
+                        fontFamily: 'Menlo',
+                        fontSize: 11,
+                        height: 1.4,
+                        color: t.text,
+                      ),
+                    ),
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _runMetadataWriterSelfTest() async {
+    setState(() {
+      _metadataTestRunning = true;
+      _metadataTestReport = null;
+      _metadataTestPassed = null;
+    });
+    try {
+      final result = await MetadataWriterSelfTest.run();
+      if (!mounted) return;
+      setState(() {
+        _metadataTestRunning = false;
+        _metadataTestPassed = result.passed;
+        _metadataTestReport = result.report;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _metadataTestRunning = false;
+        _metadataTestPassed = false;
+        _metadataTestReport = 'ERROR\n$e';
+      });
+    }
   }
 
   Widget _buildRosterCompareContent(FfTokens t) {

@@ -9,6 +9,7 @@ import '../../../services/app_defaults_firestore_service.dart';
 import '../../../services/iptc_template_apply_service.dart';
 import '../../../theme/ff_tokens.dart';
 import '../../../widgets/teal_action_button.dart';
+import '../caption_v2_flag.dart';
 
 /// Blank field the caption structure still needs.
 const Color _captionWarn = FfTokens.sessionWarn;
@@ -352,6 +353,7 @@ class IptcTemplateEditor extends StatelessWidget {
     this.showTemplateControls = true,
     this.workspacePalette = false,
     this.embedded = false,
+    this.phoneLayout = false,
     this.leading,
     this.applyMode,
     this.onApplyModeChanged,
@@ -396,6 +398,10 @@ class IptcTemplateEditor extends StatelessWidget {
 
   /// Inline embed (New Session): hide close + Cancel/Done chrome.
   final bool embedded;
+
+  /// Phone / mobile-preview: stack Story→Filing vertically, one field per row,
+  /// no Expanded fixed heights (parent scrolls).
+  final bool phoneLayout;
 
   /// Optional left column, used for the photo in Edit IPTC.
   final Widget? leading;
@@ -454,17 +460,23 @@ class IptcTemplateEditor extends StatelessWidget {
           final w = constraints.maxWidth.isFinite
               ? constraints.maxWidth
               : 1200.0;
-          final compact = embedded || h < 820 || w < 1100;
-          final narrow = !embedded && w < 1100;
+          final phone = phoneLayout ||
+              w < kCaptionV2MobileBreakpoint ||
+              useCaptionV2MobileLayout(w);
+          final compact = embedded || phone || h < 820 || w < 1100;
+          // Phone: treat as narrow so each field is one row (label + value).
+          final narrow = phone || (!embedded && w < 1100);
           // Edit IPTC.html uses label-above fields; New Session keeps label-left.
           final editIptc = workspacePalette;
-          final fieldH = embedded
-              ? 22.0
-              : editIptc
-                  ? (compact ? 38.0 : 34.0)
-                  : (narrow ? 36.0 : 32.0);
-          final gap = embedded ? 3.0 : (compact ? 8.0 : 10.0);
-          final labelAbove = editIptc;
+          final fieldH = phone
+              ? 40.0
+              : embedded
+                  ? 22.0
+                  : editIptc
+                      ? (compact ? 38.0 : 34.0)
+                      : (narrow ? 36.0 : 32.0);
+          final gap = phone ? 10.0 : (embedded ? 3.0 : (compact ? 8.0 : 10.0));
+          final labelAbove = editIptc || phone;
 
           final Widget fieldsBody;
           if (editIptc) {
@@ -775,15 +787,16 @@ class IptcTemplateEditor extends StatelessWidget {
               title: 'Story',
               compact: compact,
               children: [
-                _text(specs, 'Headline', narrow, fieldH),
-                _text(specs, 'Personality', narrow, fieldH),
-                _text(specs, 'Keywords', narrow, fieldH),
+                _text(specs, 'Headline', narrow, fieldH, labelAbove: labelAbove),
+                _text(specs, 'Personality', narrow, fieldH, labelAbove: labelAbove),
+                _text(specs, 'Keywords', narrow, fieldH, labelAbove: labelAbove),
                 _text(
                   specs,
                   'Special Instructions',
                   narrow,
                   fieldH,
                   display: 'Instructions',
+                  labelAbove: labelAbove,
                 ),
               ],
             );
@@ -793,18 +806,26 @@ class IptcTemplateEditor extends StatelessWidget {
               title: 'Credit',
               compact: compact,
               children: [
-                _text(specs, 'Creator', narrow, fieldH),
-                _text(specs, 'Job Title', narrow, fieldH, display: 'Job title'),
+                _text(specs, 'Creator', narrow, fieldH, labelAbove: labelAbove),
+                _text(
+                  specs,
+                  'Job Title',
+                  narrow,
+                  fieldH,
+                  display: 'Job title',
+                  labelAbove: labelAbove,
+                ),
                 _text(
                   specs,
                   'Description Writers',
                   narrow,
                   fieldH,
                   display: 'Writers',
+                  labelAbove: labelAbove,
                 ),
-                _text(specs, 'Credit', narrow, fieldH),
-                _text(specs, 'Source', narrow, fieldH),
-                _text(specs, 'Copyright', narrow, fieldH),
+                _text(specs, 'Credit', narrow, fieldH, labelAbove: labelAbove),
+                _text(specs, 'Source', narrow, fieldH, labelAbove: labelAbove),
+                _text(specs, 'Copyright', narrow, fieldH, labelAbove: labelAbove),
               ],
             );
             final location = _group(
@@ -813,14 +834,22 @@ class IptcTemplateEditor extends StatelessWidget {
               title: 'Location',
               compact: compact,
               children: [
-                _text(specs, 'Location', narrow, fieldH, display: 'Venue'),
-                _text(specs, 'City', narrow, fieldH),
+                _text(
+                  specs,
+                  'Location',
+                  narrow,
+                  fieldH,
+                  display: 'Venue',
+                  labelAbove: labelAbove,
+                ),
+                _text(specs, 'City', narrow, fieldH, labelAbove: labelAbove),
                 _text(
                   specs,
                   'Province/State',
                   narrow,
                   fieldH,
                   display: 'State/Province',
+                  labelAbove: labelAbove,
                 ),
                 _country(specs, narrow, fieldH),
               ],
@@ -831,78 +860,108 @@ class IptcTemplateEditor extends StatelessWidget {
               title: 'Filing',
               compact: compact,
               children: [
-                _text(specs, 'MEID', narrow, fieldH),
+                _text(specs, 'MEID', narrow, fieldH, labelAbove: labelAbove),
                 _text(
                   specs,
                   'Object Name',
                   narrow,
                   fieldH,
                   display: 'Object name',
+                  labelAbove: labelAbove,
                 ),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _text(
-                      specs,
-                      'Category',
-                      narrow,
-                      fieldH,
-                      fieldWidth: embedded ? 44 : 52,
-                    ),
-                    SizedBox(width: embedded ? 8 : 12),
-                    _supp(specs, narrow, fieldH, colors),
-                  ],
-                ),
+                if (phone) ...[
+                  _text(
+                    specs,
+                    'Category',
+                    narrow,
+                    fieldH,
+                    labelAbove: labelAbove,
+                  ),
+                  _supp(specs, narrow, fieldH, colors),
+                ] else
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _text(
+                        specs,
+                        'Category',
+                        narrow,
+                        fieldH,
+                        fieldWidth: embedded ? 44 : 52,
+                        labelAbove: labelAbove,
+                      ),
+                      SizedBox(width: embedded ? 8 : 12),
+                      _supp(specs, narrow, fieldH, colors),
+                    ],
+                  ),
                 _urgency(specs, narrow, fieldH),
               ],
             );
 
-            // New Session / IPTC Editor v2 — 2×2 cards.
-            final cards = Column(
-              children: [
-                if (embedded)
-                  Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+            // Phone: stack groups vertically (parent scrolls). No Expanded.
+            // Desktop New Session: 2×2 cards.
+            final Widget cards;
+            if (phone) {
+              cards = Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  story,
+                  SizedBox(height: gap),
+                  credit,
+                  SizedBox(height: gap),
+                  location,
+                  SizedBox(height: gap),
+                  filing,
+                ],
+              );
+            } else {
+              cards = Column(
+                children: [
+                  if (embedded)
+                    Expanded(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: story),
+                          SizedBox(width: gap),
+                          Expanded(child: credit),
+                        ],
+                      ),
+                    )
+                  else
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(child: story),
                         SizedBox(width: gap),
                         Expanded(child: credit),
                       ],
                     ),
-                  )
-                else
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(child: story),
-                      SizedBox(width: gap),
-                      Expanded(child: credit),
-                    ],
-                  ),
-                SizedBox(height: gap),
-                if (embedded)
-                  Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                  SizedBox(height: gap),
+                  if (embedded)
+                    Expanded(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: location),
+                          SizedBox(width: gap),
+                          Expanded(child: filing),
+                        ],
+                      ),
+                    )
+                  else
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(child: location),
                         SizedBox(width: gap),
                         Expanded(child: filing),
                       ],
                     ),
-                  )
-                else
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(child: location),
-                      SizedBox(width: gap),
-                      Expanded(child: filing),
-                    ],
-                  ),
-              ],
-            );
+                ],
+              );
+            }
             fieldsBody = TapRegion(
               groupId: _legendFocusTapGroup,
               onTapOutside: (_) {
@@ -929,7 +988,31 @@ class IptcTemplateEditor extends StatelessWidget {
                   ? (compact ? 12.0 : 20.0)
                   : (compact ? 8.0 : 14.0);
           final bodyPadB = embedded ? 2.0 : (compact ? 8.0 : 16.0);
-          final body = embedded
+          final body = phone
+              ? Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    bodyPadL,
+                    bodyPadT,
+                    bodyPadR,
+                    bodyPadB,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (applyMode != null) ...[
+                        _ApplyWhenBar(
+                          mode: applyMode!,
+                          onChanged: onApplyModeChanged,
+                          compact: true,
+                        ),
+                        const SizedBox(height: 4),
+                      ],
+                      fieldsBody,
+                    ],
+                  ),
+                )
+              : embedded
               ? Padding(
                   padding: EdgeInsets.fromLTRB(
                     bodyPadL,

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Photos grid (phone)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0f1114}
+a{color:#8fb6e0}a:hover{color:#b9d3ef}
+.pill{height:34px;border:0;border-radius:17px;background:#22262c;color:#e9edf2;font-family:Inter,sans-serif;font-size:12px;font-weight:600;padding:0 12px;display:flex;align-items:center;gap:6px;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0f1114; color: #e9edf2; font-family: Inter, sans-serif; display: flex; flex-direction: column; overflow: hidden">
+
+  <div style="height: 52px; display: flex; align-items: center; padding: 0 8px; gap: 4px; border-bottom: 1px solid #1f2328; flex-shrink: 0">
+    <a href="Setup.dc.html" aria-label="Back to New session" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #e9edf2">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+    </a>
+    <div style="flex: 1">
+      <div style="font-size: 16px; font-weight: 800">OTT @ TOR</div>
+      <div style="font-size: 11px; color: #8a929c">312 photos · 47 captioned · 3 new</div>
+    </div>
+    <button style="height: 36px; border: 0; border-radius: 8px; background: transparent; color: #8fb6e0; font-family: Inter, sans-serif; font-size: 14px; font-weight: 600; padding: 0 10px; cursor: pointer">Select</button>
+  </div>
+
+  <div style="display: flex; gap: 6px; padding: 10px 14px; flex-shrink: 0; overflow-x: auto">
+    <button class="pill">Earliest first
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <button class="pill" style="background: #f2f4f7; color: #0f1114">All</button>
+    <button class="pill">Not captioned</button>
+    <button class="pill">Flagged</button>
+  </div>
+
+  <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 0 14px 14px">
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px">
+      <sc-for list="{{tiles}}" as="t" hint-placeholder-count="18">
+        <a href="Main.dc.html" aria-label="{{t.aria}}" style="position: relative; display: block; aspect-ratio: 3 / 2; border-radius: 6px; overflow: hidden; background: #1d2126; outline: {{t.outline}}">
+          <img src="{{t.src}}" alt="" style="width: 100%; height: 100%; object-fit: cover; display: block">
+          <span style="position: absolute; right: 4px; top: 4px; width: 16px; height: 16px; border-radius: 8px; background: {{t.dot}}; color: #0f1114; font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center">{{t.mark}}</span>
+        </a>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="flex-shrink: 0; display: flex; justify-content: center; gap: 18px; padding: 8px 14px 16px; border-top: 1px solid #1f2328; background: #121418; font-size: 11px; color: #a3abb5">
+    <span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; border-radius: 5px; background: #4cc38a"></span>Captioned</span>
+    <span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; border-radius: 5px; background: #e2b84a"></span>Not yet</span>
+    <span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; border-radius: 5px; background: #8fb6e0"></span>New from card</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const P = ['/_blob/5e4234da1fbea81f1dc4bde4a685efeb', '/_blob/fbd68c98fad48601f59b54a30d13e972', '/_blob/c8b82b134ba28ff1468988c02f753a7a', '/_blob/bcc055f633a5051b958eab36e02f33be'];
+    const tiles = [];
+    for (let i = 0; i < 24; i++) {
+      const state = i < 9 ? 'done' : i < 21 ? 'todo' : 'new';
+      tiles.push({
+        src: P[i % 4],
+        aria: 'Photo ' + (i + 1) + (state === 'done' ? ', captioned' : state === 'new' ? ', new' : ', not captioned'),
+        dot: state === 'done' ? '#4cc38a' : state === 'new' ? '#8fb6e0' : '#e2b84a',
+        mark: state === 'done' ? '✓' : '',
+        outline: i === 9 ? '2px solid #f2f4f7' : 'none'
+      });
+    }
+    return { tiles };
+  }
+}
+</script>
+</body>
+</html>

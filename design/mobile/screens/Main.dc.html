@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FloFile caption screen (phone)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0f1114}
+a{color:#8fb6e0}a:hover{color:#b9d3ef}
+.pbtn{border:0;border-radius:10px;height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;font-family:Inter,sans-serif;padding:0 2px;min-width:0}
+.pname{font-size:9px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.pnum{font-size:19px;font-weight:800;line-height:1}
+.chip{border:0;background:transparent;color:#a3abb5;font-family:Inter,sans-serif;font-size:13px;font-weight:600;height:32px;padding:0 11px;border-radius:8px;cursor:pointer}
+.tab{flex:1;border:0;background:transparent;font-family:Inter,sans-serif;font-size:13px;font-weight:700;letter-spacing:0.02em;height:44px;cursor:pointer}
+.vrow{display:flex;align-items:center;gap:12px;height:44px;padding:0 12px;border:0;border-radius:10px;width:100%;text-align:left;font-family:Inter,sans-serif;font-size:16px;font-weight:500;cursor:pointer}
+.bar{border:0;border-radius:12px;height:48px;font-family:Inter,sans-serif;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer}
+.other{flex:1;border:1px solid #2c3138;background:#1d2126;color:#d6dbe1;border-radius:10px;height:44px;font-family:Inter,sans-serif;font-size:12px;font-weight:600;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0f1114; color: #e9edf2; font-family: Inter, sans-serif; display: flex; flex-direction: column; overflow: hidden; position: relative">
+
+  <div style="height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid #1f2328; flex-shrink: 0">
+    <button aria-label="Back to sessions" style="width: 44px; height: 44px; border: 0; background: transparent; color: #e9edf2; display: flex; align-items: center; justify-content: center; cursor: pointer">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <div style="flex: 1; min-width: 0">
+      <div style="font-size: 14px; font-weight: 700">OTT @ TOR</div>
+      <div style="font-size: 11px; color: #8a929c">Nov 17, 2026 · Getty</div>
+    </div>
+    <div style="font-size: 12px; font-weight: 700; color: #c7cdd4; background: #1d2126; border-radius: 8px; padding: 6px 10px">{{counter}}</div>
+    <button aria-label="Settings" style="width: 44px; height: 44px; border: 0; background: transparent; color: #c7cdd4; display: flex; align-items: center; justify-content: center; cursor: pointer">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>
+    </button>
+  </div>
+
+  <div style="height: 196px; flex-shrink: 0; position: relative; background: #000">
+    <img src="{{photo}}" alt="Current photo" style="width: 100%; height: 100%; object-fit: cover; display: block">
+    <div style="position: absolute; left: 10px; bottom: 10px; font-size: 11px; font-weight: 600; color: #fff; background: rgba(0,0,0,0.55); padding: 4px 8px; border-radius: 6px">{{fileName}}</div>
+    <button aria-label="Edit photo" style="position: absolute; right: 10px; bottom: 8px; height: 32px; border: 0; border-radius: 8px; background: rgba(0,0,0,0.6); color: #fff; font-family: Inter, sans-serif; font-size: 12px; font-weight: 600; padding: 0 12px; cursor: pointer">Edit</button>
+  </div>
+
+  <div style="height: 30px; flex-shrink: 0; display: flex; align-items: center; padding: 0 14px; background: {{bannerBg}}; color: {{bannerFg}}; font-size: 12px; font-weight: 600">{{bannerText}}</div>
+
+  <div style="flex-shrink: 0; padding: 8px 14px 6px; border-bottom: 1px solid #1f2328">
+    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px">
+      <span style="font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: #e9edf2">CAPTION</span>
+      <span style="font-size: 10px; font-weight: 600; letter-spacing: 0.06em; color: #8a929c">PERSONALITY</span>
+      <span style="font-size: 12px; font-weight: 600; color: #e9edf2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1">{{personality}}</span>
+    </div>
+    <div style="height: 72px; overflow-y: auto; font-size: 13px; line-height: 1.38; color: {{captionColor}}">{{caption}}</div>
+    <div style="display: flex; align-items: center; gap: 2px; margin-top: 6px">
+      <span style="font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: #8a929c; margin-right: 6px">PERIOD</span>
+      <sc-for list="{{periods}}" as="p" hint-placeholder-count="6">
+        <button class="chip" onClick="{{p.pick}}" style="background: {{p.bg}}; color: {{p.fg}}">{{p.label}}</button>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-shrink: 0; border-bottom: 1px solid #1f2328; position: relative">
+    <sc-for list="{{tabs}}" as="t" hint-placeholder-count="3">
+      <button class="tab" onClick="{{t.pick}}" style="color: {{t.fg}}; box-shadow: inset 0 -2px 0 {{t.line}}">{{t.label}}</button>
+    </sc-for>
+  </div>
+
+  <div onPointerDown="{{down}}" onPointerUp="{{up}}" style="flex: 1; min-height: 0; overflow: hidden; position: relative; touch-action: pan-y">
+    <div style="display: flex; width: 1170px; height: 100%; transform: translateX({{tx}}); transition: transform 240ms ease">
+
+      <div style="width: 390px; height: 100%; overflow-y: auto; box-sizing: border-box; padding: 10px 12px 14px">
+        <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px">
+          <sc-for list="{{home}}" as="pl" hint-placeholder-count="20">
+            <button class="pbtn" onClick="{{pl.pick}}" aria-label="{{pl.aria}}" style="background: {{pl.bg}}; color: {{pl.fg}}">
+              <span class="pname">{{pl.short}}</span>
+              <span class="pnum">{{pl.num}}</span>
+            </button>
+          </sc-for>
+        </div>
+        <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: #8a929c; margin: 14px 0 6px">OTHER</div>
+        <div style="display: flex; gap: 6px">
+          <button class="other">Players</button>
+          <button class="other">Team</button>
+          <button class="other">Teammates</button>
+        </div>
+      </div>
+
+      <div style="width: 390px; height: 100%; overflow-y: auto; box-sizing: border-box; padding: 8px 12px 14px">
+        <label style="display: flex; align-items: center; gap: 8px; height: 40px; background: #1d2126; border-radius: 10px; padding: 0 12px; margin-bottom: 6px; color: #8a929c">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <span style="position: absolute; width: 1px; height: 1px; overflow: hidden">Search actions</span>
+          <input placeholder="Search or type a custom action" style="flex: 1; background: transparent; border: 0; color: #e9edf2; font-family: Inter, sans-serif; font-size: 14px; outline: none">
+        </label>
+        <sc-for list="{{verbs}}" as="v" hint-placeholder-count="12">
+          <button class="vrow" onClick="{{v.pick}}" style="background: {{v.bg}}; color: {{v.fg}}">
+            <span style="width: 14px; font-size: 11px; font-weight: 700; color: #6f7781">{{v.letter}}</span>
+            <span style="flex: 1">{{v.label}}</span>
+            <span style="font-size: 13px; font-weight: 800">{{v.check}}</span>
+          </button>
+        </sc-for>
+      </div>
+
+      <div style="width: 390px; height: 100%; overflow-y: auto; box-sizing: border-box; padding: 10px 12px 14px">
+        <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px">
+          <sc-for list="{{away}}" as="pl" hint-placeholder-count="20">
+            <button class="pbtn" onClick="{{pl.pick}}" aria-label="{{pl.aria}}" style="background: {{pl.bg}}; color: {{pl.fg}}">
+              <span class="pname">{{pl.short}}</span>
+              <span class="pnum">{{pl.num}}</span>
+            </button>
+          </sc-for>
+        </div>
+        <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: #8a929c; margin: 14px 0 6px">OTHER</div>
+        <div style="display: flex; gap: 6px">
+          <button class="other">Players</button>
+          <button class="other">Team</button>
+          <button class="other">Teammates</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div style="display: flex; justify-content: center; gap: 6px; padding: 6px 0 2px; flex-shrink: 0">
+    <sc-for list="{{tabs}}" as="t" hint-placeholder-count="3">
+      <span style="width: 6px; height: 6px; border-radius: 3px; background: {{t.dot}}"></span>
+    </sc-for>
+  </div>
+
+  <div style="flex-shrink: 0; display: flex; gap: 8px; padding: 8px 12px 14px; border-top: 1px solid #1f2328; background: #121418">
+    <button class="bar" onClick="{{prev}}" aria-label="Save and previous photo" style="width: 52px; background: #1d2126; color: #e9edf2">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <button class="bar" aria-label="Paste last caption" style="width: 52px; background: #1d2126; color: #e9edf2">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg>
+    </button>
+    <button class="bar" onClick="{{next}}" style="flex: 1; background: #f2f4f7; color: #0f1114">Save &amp; Next
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+    </button>
+    <button class="bar" aria-label="Send by FTP to Getty NHLI" style="width: 64px; background: #1d2126; color: #e9edf2; font-size: 12px">FTP</button>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"startPage":{"editor":"enum","options":[0,1,2],"default":0},"presetHome":{"editor":null,"default":"34"},"presetAway":{"editor":null,"default":""},"presetVerb":{"editor":null,"default":""},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const split = (s) => String(s || '').split(',').map((x) => x.trim()).filter(Boolean).map(Number);
+    this.state = {
+      page: Number(props.startPage ?? 0),
+      home: split(props.presetHome ?? '34'),
+      away: split(props.presetAway ?? ''),
+      verb: props.presetVerb || '',
+      period: '1',
+      photo: 0,
+      warn: false,
+      saved: ''
+    };
+    this.sx = null;
+  }
+  renderVals() {
+    const s = this.state;
+    const photos = ['/_blob/5e4234da1fbea81f1dc4bde4a685efeb', '/_blob/fbd68c98fad48601f59b54a30d13e972', '/_blob/c8b82b134ba28ff1468988c02f753a7a', '/_blob/bcc055f633a5051b958eab36e02f33be'];
+    const files = ['LFS-MDB-261117-vsOTT-0412.jpg', 'LFS-MDB-261117-vsOTT-0413.jpg', 'LFS-MDB-261117-vsOTT-0414.jpg', 'LFS-MDB-261117-vsOTT-0415.jpg'];
+    const TOR = [[8,'Tanev','Chris Tanev'],[19,'MacEwen','Zack MacEwen'],[20,'Paul','Nicholas Paul'],[22,'McCabe','Jake McCabe'],[24,'Duhaime','Brandon Duhaime'],[28,'Stecher','Troy Stecher'],[34,'Matthews','Auston Matthews'],[36,'Mermis','Dakota Mermis'],[37,'Haymes','Haymes'],[41,'Stolarz','Anthony Stolarz'],[43,'Raddysh','Darren Raddysh'],[44,'Rielly','Morgan Rielly'],[53,'Cowan','Easton Cowan'],[54,'Raty','Aatu Raty'],[66,'Hellickson','Hellickson'],[72,'Bobrov','Bobrov'],[73,'Blueger','Teddy Blueger'],[77,'Tverberg','Ryan Tverberg'],[81,'Joshua','Dakota Joshua'],[82,'McWard','McWard'],[88,'Nylander','William Nylander'],[90,'Brisson','Brisson'],[91,'Tavares','John Tavares'],[92,'McKenna','McKenna'],[95,'Ekman-L','Oliver Ekman-Larsson'],[96,'Roslovic','Jack Roslovic']];
+    const OTT = [[2,'Zub','Artem Zub'],[10,'Spence','Jordan Spence'],[12,'Pinto','Shane Pinto'],[18,'Stutzle','Tim Stutzle'],[19,'Batherson','Drake Batherson'],[20,'Zetterlund','Fabian Zetterlund'],[21,'Cousins','Nick Cousins'],[22,'Amadio','Michael Amadio'],[24,'Cozens','Dylan Cozens'],[26,'Yakemchuk','Yakemchuk'],[28,'Giroux','Claude Giroux'],[30,'Ersson','Ersson'],[33,'Matinpalo','Matinpalo'],[34,'Halliday','Stephen Halliday'],[35,'Ullmark','Linus Ullmark'],[42,'Hodgson','Hodgson'],[43,'Kleven','Tyler Kleven'],[54,'Boucher','Boucher'],[62,'Tomasino','Tomasino'],[71,'Greig','Ridly Greig'],[72,'Chabot','Thomas Chabot'],[79,'Blais','Sammy Blais'],[85,'Sanderson','Jake Sanderson']];
+    const VERBS = [['A','Arrives','arrives at the arena'],['B','Battles','battles'],['','Blocks a Shot','blocks a shot'],['C','Celebrates a Goal','celebrates a goal'],['','Checks','checks'],['D','Defends','defends'],['F','Faceoff','takes a faceoff'],['G','Goes to the Net','goes to the net'],['H','Handles the Puck','handles the puck'],['L','Looks On','looks on'],['M','Makes a Save','makes a save'],['N','National Anthem','stands for the national anthem'],['S','Scores','scores'],['','Shoots','shoots'],['','Skates','skates'],['W','Warm-ups','warms up']];
+    const PERIODS = [['Pre','before the game'],['1','during the first period'],['2','during the second period'],['3','during the third period'],['OT','during overtime'],['Post','after the game']];
+
+    const toggle = (side, n) => () => {
+      const cur = s[side];
+      const next = cur.includes(n) ? cur.filter((x) => x !== n) : cur.concat([n]);
+      this.setState({ [side]: next, warn: false, saved: '' });
+    };
+    const mk = (list, side, teamName) => list.map(([n, sh, full]) => {
+      const on = s[side].includes(n);
+      return { num: n, short: sh, aria: (on ? 'Selected: ' : '') + full + ' number ' + n + ', ' + teamName, bg: on ? '#f2f4f7' : '#1d2126', fg: on ? '#0f1114' : '#e9edf2', pick: toggle(side, n) };
+    });
+    const full = (list, nums) => nums.map((n) => { const p = list.find((x) => x[0] === n); return p ? p[2] + ' #' + n : '#' + n; });
+    const join = (a) => a.length <= 1 ? (a[0] || '') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+
+    const h = full(TOR, s.home), a = full(OTT, s.away);
+    const vb = VERBS.find((v) => v[1] === s.verb);
+    const per = PERIODS.find((p) => p[0] === s.period);
+    let caption = 'Tap a player to start the caption.';
+    let captionColor = '#6f7781';
+    if (h.length || a.length) {
+      const subj = h.length ? join(h) + ' of the Toronto Maple Leafs' : join(a) + ' of the Ottawa Senators';
+      const obj = h.length ? (a.length ? join(a) + ' of the Ottawa Senators' : 'the Ottawa Senators') : 'the Toronto Maple Leafs';
+      caption = 'TORONTO, CANADA - NOVEMBER 17: ' + subj + (vb ? ' ' + vb[2] : '') + ' against ' + obj + ' ' + per[1] + ' at Scotiabank Arena on November 17, 2026 in Toronto, Canada. (Photo by Mark Blinch/Getty Images)';
+      captionColor = '#e9edf2';
+    }
+    const personality = full(TOR, s.home).concat(full(OTT, s.away)).map((x) => x.replace(/ #\d+$/, '')).join(';') || '—';
+
+    const go = (p) => () => this.setState({ page: p });
+    const tabNames = ['TOR', 'Actions', 'OTT'];
+    const tabs = tabNames.map((l, i) => ({ label: l, pick: go(i), fg: s.page === i ? '#ffffff' : '#7d858f', line: s.page === i ? '#8fb6e0' : 'transparent', dot: s.page === i ? '#e9edf2' : '#3a4048' }));
+
+    const save = (dir) => () => {
+      if ((s.home.length || s.away.length) && !s.verb) { this.setState({ warn: true, page: 1 }); return; }
+      const n = (s.photo + dir + photos.length) % photos.length;
+      this.setState({ photo: n, home: [], away: [], verb: '', warn: false, page: 0, saved: 'Saved ' + files[s.photo] });
+    };
+
+    let bannerText = '', bannerBg = 'transparent', bannerFg = '#e9edf2';
+    if (s.warn) { bannerText = 'Pick an action before saving — swiped you to Actions'; bannerBg = '#3a1d1f'; bannerFg = '#f3a49d'; }
+    else if (s.saved) { bannerText = s.saved; bannerBg = '#15291f'; bannerFg = '#7fd9a8'; }
+
+    return {
+      counter: (s.photo + 1) + ' / 312',
+      photo: photos[s.photo],
+      fileName: files[s.photo],
+      bannerText, bannerBg, bannerFg,
+      caption, captionColor, personality,
+      periods: PERIODS.map(([l]) => ({ label: l, pick: () => this.setState({ period: l }), bg: s.period === l ? '#2a2f36' : 'transparent', fg: s.period === l ? '#ffffff' : '#a3abb5' })),
+      tabs,
+      tx: (-390 * s.page) + 'px',
+      home: mk(TOR, 'home', 'Toronto Maple Leafs'),
+      away: mk(OTT, 'away', 'Ottawa Senators'),
+      verbs: VERBS.map(([letter, label]) => {
+        const on = s.verb === label;
+        return { letter, label, check: on ? '✓' : '', bg: on ? '#f2f4f7' : 'transparent', fg: on ? '#0f1114' : '#e9edf2', pick: () => this.setState({ verb: on ? '' : label, warn: false, saved: '' }) };
+      }),
+      down: (e) => { this.sx = e.clientX; },
+      up: (e) => {
+        if (this.sx == null) return;
+        const dx = e.clientX - this.sx; this.sx = null;
+        if (dx < -45 && s.page < 2) this.setState({ page: s.page + 1 });
+        else if (dx > 45 && s.page > 0) this.setState({ page: s.page - 1 });
+      },
+      next: save(1),
+      prev: save(-1)
+    };
+  }
+}
+</script>
+</body>
+</html>

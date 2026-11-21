@@ -946,7 +946,7 @@ class CaptionV2Controller extends ChangeNotifier {
   String? guidedSearchPrompt;
   List<SearchHit> _guidedSearchHits = const [];
   int? _pendingCommandInning;
-  int columnFocus = 1; // 0 home, 1 verbs, 2 away, 3 thumbnails
+  int columnFocus = 0; // 0 home, 1 verbs, 2 away, 3 thumbnails
   RosterSortMode rosterSort = RosterSortMode.number;
   bool rosterSortAscending = true;
 
@@ -4600,6 +4600,26 @@ class CaptionV2Controller extends ChangeNotifier {
     );
   }
 
+  /// Mark [paths] as saved (and optionally captioned) in session + on disk.
+  /// Used after multi-photo caption apply / paste so thumbs and filters update.
+  Future<void> markPathsSaved(
+    Iterable<String> paths, {
+    bool captioned = true,
+  }) async {
+    final targets = <String>[
+      for (final path in paths)
+        if (imagePaths.contains(path)) path,
+    ];
+    if (targets.isEmpty) return;
+    savedImages.addAll(targets);
+    if (captioned) {
+      captionedImages.addAll(targets);
+      unawaited(FloCaptionMark.markSaved(targets));
+    }
+    await _persistSaved();
+    notifyListeners();
+  }
+
   Future<void> _refreshFtpDestination() async {
     final prefs = _prefs;
     if (prefs == null) return;
@@ -5209,6 +5229,23 @@ class CaptionV2Controller extends ChangeNotifier {
     }
   }
 
+  /// Removes the most recently added selected player (codes or clicks).
+  ///
+  /// Returns true when a player was removed.
+  bool removeLastSelectedPlayer() {
+    if (selectedPlayers.isEmpty) return false;
+    selectedPlayers.removeLast();
+    manualCaptionOverride = null;
+    _syncPrimaryPlayer();
+    _dropTeammatesIfSubjectLeft();
+    _syncKeywords();
+    if (selectedPlayers.isEmpty && !hasVerbSelection) {
+      captionSelectionStarted = false;
+    }
+    notifyListeners();
+    return true;
+  }
+
   /// Keyboard / caption player codes: `h34`, `v88`, `hh27`, `vv15`.
   ///
   /// Selects the matching roster player without toggling off. Returns true
@@ -5663,7 +5700,8 @@ class CaptionV2Controller extends ChangeNotifier {
 
   void selectVerb(String verb) {
     captionSelectionStarted = true;
-    if (statusMessage == incompleteCaptionWarning) {
+    if (statusMessage == incompleteCaptionWarning ||
+        statusMessage == missingPhotographerWarning) {
       statusMessage = null;
     }
     if (selectedVerb != verb) {
@@ -5833,7 +5871,8 @@ class CaptionV2Controller extends ChangeNotifier {
     customVerbPhrase = value;
     final custom = value.trim();
     if (custom.isNotEmpty) {
-      if (statusMessage == incompleteCaptionWarning) {
+      if (statusMessage == incompleteCaptionWarning ||
+          statusMessage == missingPhotographerWarning) {
         statusMessage = null;
       }
       lastCustomVerbPhrase = custom;
@@ -7033,10 +7072,10 @@ class CaptionV2Controller extends ChangeNotifier {
       if (compound != null) {
         final verbHits = <_FirebarMenuHit>[];
         for (final result in firebarVerbResults) {
-          final label = verbDefinition(result.verbKey ?? '')?.label ??
-              result.verbKey ??
-              '';
-          var score = _firebarMenuTextScore(label, compound.verbQuery);
+          final definition = verbDefinition(result.verbKey ?? '');
+          final label = definition?.label ?? result.verbKey ?? '';
+          var score = _firebarVerbMenuScore(definition, label, compound.verbQuery);
+          // Already filtered by [_firebarVerbMatches]; keep keyword/phrase hits.
           if (score < 0) score = 70;
           verbHits.add(
             _FirebarMenuHit(
@@ -7106,9 +7145,9 @@ class CaptionV2Controller extends ChangeNotifier {
         );
       }
       for (final result in _firebarCatalogVerbs()) {
-        final label =
-            verbDefinition(result.verbKey ?? '')?.label ?? result.verbKey ?? '';
-        final score = _firebarMenuTextScore(label, query);
+        final definition = verbDefinition(result.verbKey ?? '');
+        final label = definition?.label ?? result.verbKey ?? '';
+        final score = _firebarVerbMenuScore(definition, label, query);
         if (score < 0) continue;
         hits.add(
           _FirebarMenuHit(
@@ -7339,6 +7378,44 @@ class CaptionV2Controller extends ChangeNotifier {
     final initials = words.map((word) => word[0]).join();
     if (initials.startsWith(query)) return 35;
     return -1;
+  }
+
+  /// Best menu score across label, phrases, keywords, and authored wording so
+  /// user verbs (and factory aliases like `solo`) show up in Firebar.
+  static int _firebarVerbMenuScore(
+    EffectiveVerb? definition,
+    String fallbackLabel,
+    String query,
+  ) {
+    var best = _firebarMenuTextScore(fallbackLabel, query);
+    if (definition == null) return best;
+
+    void consider(String value) {
+      final score = _firebarMenuTextScore(value, query);
+      if (score > best) best = score;
+    }
+
+    consider(definition.label);
+    consider(definition.key);
+    consider(definition.singularPhrase);
+    consider(definition.pluralPhrase);
+    consider(definition.ingPhrase);
+    for (final keyword in definition.keywords) {
+      consider(keyword);
+    }
+    final phraseText = definition.authoring.phrase.parts
+        .whereType<VerbPhraseText>()
+        .map((part) => part.text)
+        .join();
+    consider(phraseText);
+    for (final group in definition.authoring.groups) {
+      consider(group.name);
+      for (final option in group.options) {
+        consider(option.label);
+        consider(option.value);
+      }
+    }
+    return best;
   }
 
   /// Move between the two same-number players, not the rest of the Firebar list.
@@ -8287,6 +8364,9 @@ class CaptionV2Controller extends ChangeNotifier {
     currentIndex = index.clamp(0, imagePaths.length - 1);
     _clearCaptionSelection();
     _restoreRememberedClicks();
+    // Each new photo opens on the Home players page (phone TOR tab).
+    // Player tap still auto-advances to Actions via [selectPlayer].
+    columnFocus = 0;
     searchQuery = '';
     // Stay in Firebar after Save → next so the user can keep typing.
     // Manual navigation (arrows / thumbnails) still closes it.
@@ -8299,6 +8379,9 @@ class CaptionV2Controller extends ChangeNotifier {
     mlbTimestampMatchedPath = null;
     mlbTimestampLoading = false;
     _mlbTimestampToken++;
+    // Drop previous-frame byline immediately so Use Existing IPTC never shows
+    // another photo's Creator while this file's metadata is still loading.
+    _clearFrameBylineState();
     notifyListeners();
     _schedulePreviewWarmup();
     unawaited(_refreshFrameIptc());
@@ -9520,12 +9603,9 @@ class CaptionV2Controller extends ChangeNotifier {
     take(() => country, (v) => country = v, fromPreset.country);
     take(() => countryCode, (v) => countryCode = v, fromPreset.countryCode);
     take(() => venue, (v) => venue = v, fromPreset.venue);
-    take(
-      () => photographerName,
-      (v) => photographerName = v,
-      fromPreset.photographerName,
-    );
-    take(() => agencyName, (v) => agencyName = v, fromPreset.agencyName);
+    // Do not fill photographerName / agencyName from the IPTC preset — Use
+    // Existing IPTC bylines must come from the current file only (or stay
+    // empty → "Photographer" / sample agency in the formula).
     if (changed) notifyListeners();
   }
 
@@ -9558,6 +9638,78 @@ class CaptionV2Controller extends ChangeNotifier {
 
   Future<bool> deleteImage(String path) async {
     return (await deleteImages([path])) == 1;
+  }
+
+  /// Copies [paths] into [destinationFolder]. Session list is unchanged.
+  /// Returns how many images copied successfully.
+  Future<int> copyImagesToFolder(
+    List<String> paths,
+    String destinationFolder,
+  ) async {
+    final unique = <String>{
+      for (final path in paths)
+        if (path.trim().isNotEmpty) path,
+    };
+    if (unique.isEmpty) return 0;
+    var copied = 0;
+    for (final path in unique) {
+      try {
+        await copyImageToFolder(path, destinationFolder);
+        copied++;
+      } catch (_) {}
+    }
+    return copied;
+  }
+
+  /// Moves [paths] into [destinationFolder] and drops them from this session.
+  /// Returns how many images moved successfully.
+  Future<int> moveImagesToFolder(
+    List<String> paths,
+    String destinationFolder,
+  ) async {
+    final unique = <String>{
+      for (final path in paths)
+        if (path.trim().isNotEmpty) path,
+    };
+    if (unique.isEmpty) return 0;
+
+    final removed = <String>[];
+    for (final path in unique) {
+      try {
+        await moveImageToFolder(path, destinationFolder);
+        removed.add(path);
+      } catch (_) {}
+    }
+    if (removed.isEmpty) return 0;
+
+    final removedSet = removed.toSet();
+    final previousPath = currentPath;
+    final previousIndex = currentIndex;
+    imagePaths.removeWhere(removedSet.contains);
+    for (final path in removed) {
+      captureByPath.remove(path);
+      savedImages.remove(path);
+      _clicksByPath.remove(path);
+      _restoreClicksOnOpen.remove(path);
+      captionedImages.remove(path);
+      sentImages.remove(path);
+      selectedImagePaths.remove(path);
+    }
+
+    if (imagePaths.isEmpty) {
+      currentIndex = 0;
+    } else if (previousPath != null && !removedSet.contains(previousPath)) {
+      final kept = imagePaths.indexOf(previousPath);
+      currentIndex = kept >= 0 ? kept : 0;
+    } else {
+      currentIndex = previousIndex.clamp(0, imagePaths.length - 1);
+    }
+
+    await _persistSaved();
+    notifyListeners();
+    await _refreshFrameIptc();
+    _scheduleJerseyOcr();
+    return removed.length;
   }
 
   /// Moves every path that still exists on disk to the OS trash.
@@ -9638,16 +9790,21 @@ class CaptionV2Controller extends ChangeNotifier {
     return photographerNameFromMetadata(metadata);
   }
 
+  /// IPTC/XMP Creator only — never EXIF Artist.
+  ///
+  /// Cameras often stamp Artist independently of By-line / Creator. Using it
+  /// for caption bylines made "empty" IPTC files show another session's name
+  /// (e.g. gaptest `C_empty.jpg` → Artist "creator test").
   static String photographerNameFromMetadata(Map<dynamic, dynamic> raw) {
+    final meta = <String, dynamic>{
+      for (final e in raw.entries) e.key.toString(): e.value,
+    };
+    final primary =
+        IptcTemplateImportService.creatorPrimaryFromExiftool(meta).trim();
+    if (primary.isNotEmpty) return primary;
+    // Bare Creator from exiftool -j (XMP/IPTC collapsed name). Not Artist.
     return _stringFromMeta(raw['Creator']) ??
-        _stringFromMeta(raw['Artist']) ??
-        _stringFromMeta(raw['Photographer']) ??
-        _stringFromMeta(raw['IPTC:Photographer']) ??
-        _stringFromMeta(raw['XMP:Photographer']) ??
-        _stringFromMeta(raw['IPTC:By-line']) ??
-        _stringFromMeta(raw['By-line']) ??
         _stringFromMeta(raw['Byline']) ??
-        _stringFromMeta(raw['XMP:Creator']) ??
         '';
   }
 
@@ -9954,6 +10111,9 @@ class CaptionV2Controller extends ChangeNotifier {
       _photographerProvenance = _BylineProvenance.serialAssigned;
       if (serial.isNotEmpty) _photographerSerialUsed = serial;
       metadataDirty = true;
+      if (statusMessage == missingPhotographerWarning) {
+        statusMessage = null;
+      }
     }
     final path = currentPath;
     if (path != null) {
@@ -10053,16 +10213,21 @@ class CaptionV2Controller extends ChangeNotifier {
     }
   }
 
+  /// Clears Creator/Credit from the previous frame before async IPTC load.
+  void _clearFrameBylineState() {
+    currentIptcMeta = {};
+    photographerName = '';
+    agencyName = '';
+    _photographerProvenance = _BylineProvenance.none;
+    _photographerSerialUsed = null;
+  }
+
   /// Load the current frame's header EXIF plus caption-related IPTC.
   Future<void> _refreshFrameIptc() async {
     final path = currentPath;
     final gen = ++_iptcLoadGen;
     if (path == null) {
-      currentIptcMeta = {};
-      photographerName = '';
-      agencyName = '';
-      _photographerProvenance = _BylineProvenance.none;
-      _photographerSerialUsed = null;
+      _clearFrameBylineState();
       if (_serialBylinesQueue.isEmpty) pendingSerialBylinesPrompt = null;
       notifyListeners();
       return;
@@ -10195,6 +10360,10 @@ class CaptionV2Controller extends ChangeNotifier {
       _photographerProvenance = photographerName.trim().isEmpty
           ? _BylineProvenance.none
           : _BylineProvenance.iptc;
+      if (photographerName.trim().isNotEmpty &&
+          statusMessage == missingPhotographerWarning) {
+        statusMessage = null;
+      }
       agencyName = _stringFromMeta(raw['IPTC:Credit']) ??
           _stringFromMeta(raw['Credit']) ??
           '';
@@ -10316,8 +10485,25 @@ class CaptionV2Controller extends ChangeNotifier {
       !hasVerbSelection &&
       manualCaptionOverride == null;
 
+  /// True when a generated caption's byline would fall back to "Photographer".
+  ///
+  /// Only IPTC By-line / XMP Creator count — never EXIF Artist.
+  bool get hasMissingPhotographerForCaption {
+    if (!hasCaptionSubject) return false;
+    if (photographerName.trim().isNotEmpty) return false;
+    return photographerNameFromMetadata(currentIptcMeta).isEmpty;
+  }
+
   static const String incompleteCaptionWarning =
       'Pick an action before saving';
+
+  static const String missingPhotographerWarning =
+      'No photographer name — set Creator in the template or IPTC';
+
+  /// Inline save gates shown in the reserved warning slot (not snackbars).
+  bool get hasInlineSaveWarning =>
+      statusMessage == incompleteCaptionWarning ||
+      statusMessage == missingPhotographerWarning;
 
   Future<CaptionSaveResult> savePaths(
     List<String> paths, {
@@ -10349,6 +10535,17 @@ class CaptionV2Controller extends ChangeNotifier {
     // unless the user overrides (Shift / "Save anyway").
     if (hasIncompleteCaptionSelection && !allowIncomplete) {
       statusMessage = incompleteCaptionWarning;
+      notifyListeners();
+      return CaptionSaveResult(
+        requestedPaths: targets,
+        succeededPaths: const [],
+      );
+    }
+
+    // Generated caption would use the "Photographer" byline placeholder.
+    // Refuse unless overridden (Shift / "Save anyway").
+    if (hasMissingPhotographerForCaption && !allowIncomplete) {
+      statusMessage = missingPhotographerWarning;
       notifyListeners();
       return CaptionSaveResult(
         requestedPaths: targets,
@@ -10389,12 +10586,11 @@ class CaptionV2Controller extends ChangeNotifier {
         ? await _writer.writeCaptionToPaths(paths: targets, values: values)
         : templateSucceeded;
     if (succeeded.isNotEmpty) {
-      savedImages.addAll(succeeded);
-      if (generatedCaption || manualCaption) {
-        captionedImages.addAll(succeeded);
-        unawaited(FloCaptionMark.markSaved(succeeded));
-      }
-      await _persistSaved();
+      // Any successful write of a new/edited caption counts as captioned —
+      // including multi-select apply — so thumbs show saved, not todo.
+      final wroteCaption =
+          shouldWriteCaption || generatedCaption || manualCaption;
+      await markPathsSaved(succeeded, captioned: wroteCaption);
       for (final pth in succeeded) {
         await _syncFileSig(pth);
       }
@@ -10481,10 +10677,7 @@ class CaptionV2Controller extends ChangeNotifier {
       values: values,
     );
     if (succeeded.isNotEmpty) {
-      savedImages.addAll(succeeded);
-      captionedImages.addAll(succeeded);
-      unawaited(FloCaptionMark.markSaved(succeeded));
-      await _persistSaved();
+      await markPathsSaved(succeeded, captioned: true);
       for (final pth in succeeded) {
         await _syncFileSig(pth);
       }

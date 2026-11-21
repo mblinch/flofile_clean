@@ -22,6 +22,9 @@ final ValueNotifier<bool> captionV2ForceMobilePreview = ValueNotifier(false);
 /// Max width of the forced desktop phone preview.
 const double kCaptionV2MobilePreviewWidth = 390;
 
+/// Logical height of the forced desktop phone preview (iPhone).
+const double kCaptionV2MobilePreviewHeight = 844;
+
 /// Phone/swipe layout regardless of window width.
 bool get kCaptionV2MobilePreview =>
     kCaptionV2MobileDefine || captionV2ForceMobilePreview.value;

@@ -1189,14 +1189,19 @@ class _CaptionPanelState extends State<_CaptionPanel> {
     final multiLabel = n == 1
         ? 'Applying to this photo'
         : 'Applying to these $n photos';
+    // Always paint a 1.5px border so Burst / multi alerts don't grow the
+    // caption card and shove Save / grids down when navigating frames.
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
       decoration: BoxDecoration(
         color: alert != null ? alert.withValues(alpha: 0.10) : t.surface,
         borderRadius: BorderRadius.circular(FfTokens.radiusCard),
-        border: alert != null
-            ? Border.all(color: alert.withValues(alpha: 0.85), width: 1.5)
-            : null,
+        border: Border.all(
+          color: alert != null
+              ? alert.withValues(alpha: 0.85)
+              : Colors.transparent,
+          width: 1.5,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1641,7 +1646,14 @@ class _InningCardState extends State<_InningCard> {
               'ADD EDITORS NOTE',
               maxLines: 1,
               softWrap: false,
-              style: FfTokens.panelLabel(color: t.textSecondary),
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontWeight: FontWeight.w500,
+                fontSize: 10,
+                letterSpacing: 0.15,
+                height: 1,
+                color: t.textTertiary,
+              ),
             ),
             const SizedBox(width: 6),
             Padding(

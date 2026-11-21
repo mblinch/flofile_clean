@@ -11,6 +11,7 @@ import '../../../services/preferences_service.dart';
 import '../../../theme/ff_tokens.dart';
 import '../../../utils/exiftool_helper.dart';
 import '../../../utils/image_file_operations.dart';
+import '../../../utils/native_file_picker.dart';
 import '../../../widgets/app_styled_dialogs.dart';
 import '../../../widgets/ff_menu.dart';
 import '../../../widgets/oriented_file_preview.dart';
@@ -29,6 +30,8 @@ enum _PhotoAction {
   clearFtp,
   reveal,
   rename,
+  copyToFolder,
+  moveToFolder,
   delete,
 }
 
@@ -222,7 +225,7 @@ Future<void> showCaptionV2PhotoMenu({
   final picked = await showFfMenu<_PhotoAction>(
     context: context,
     anchorGlobal: Rect.fromLTWH(position.dx, position.dy, 0, 0),
-    width: 260,
+    width: 280,
     scrollable: false,
     choices: [
       item(_PhotoAction.copyCaption, 'Copy Caption', PhosphorIconsRegular.copy),
@@ -267,6 +270,20 @@ Future<void> showCaptionV2PhotoMenu({
         _PhotoAction.rename,
         'Rename Image',
         PhosphorIconsRegular.pencilSimple,
+      ),
+      item(
+        _PhotoAction.copyToFolder,
+        targets.length > 1
+            ? 'Copy ${targets.length} to Folder…'
+            : 'Copy to Folder…',
+        PhosphorIconsRegular.copySimple,
+      ),
+      item(
+        _PhotoAction.moveToFolder,
+        targets.length > 1
+            ? 'Move ${targets.length} to Folder…'
+            : 'Move to Folder…',
+        PhosphorIconsRegular.folderSimple,
       ),
       const FfMenuChoice<_PhotoAction>.divider(),
       item(
@@ -339,6 +356,12 @@ Future<void> showCaptionV2PhotoMenu({
     case _PhotoAction.rename:
       await _renameImage(context, controller, imagePath);
       break;
+    case _PhotoAction.copyToFolder:
+      await _copyImagesToFolder(context, controller, targets);
+      break;
+    case _PhotoAction.moveToFolder:
+      await _moveImagesToFolder(context, controller, targets);
+      break;
     case _PhotoAction.delete:
       await _deleteImages(context, controller, targets);
       break;
@@ -357,6 +380,7 @@ Future<void> _pasteCaption(
       throw const FormatException();
     }
     var pastedCount = 0;
+    final pastedPaths = <String>[];
     String? openCaption;
     final current = controller.currentPath;
     final includesCurrent = current != null && imagePaths.contains(current);
@@ -384,7 +408,14 @@ Future<void> _pasteCaption(
         if (payload.keywords.trim().isNotEmpty) 'Keywords': payload.keywords,
       };
       final ok = await controller.writeIptcPanelValues(imagePath, values);
-      if (ok) pastedCount++;
+      if (ok) {
+        pastedCount++;
+        pastedPaths.add(imagePath);
+      }
+    }
+
+    if (pastedPaths.isNotEmpty) {
+      await controller.markPathsSaved(pastedPaths, captioned: true);
     }
 
     final appliesToOpenPreview =
@@ -491,6 +522,83 @@ Future<void> _deleteImages(
     _message(context, '$deleted images moved to the $trash');
   } else {
     _message(context, 'Moved $deleted of $n images to the $trash');
+  }
+}
+
+Future<String?> _pickDestinationFolder(
+  BuildContext context,
+  CaptionV2Controller controller,
+) async {
+  final initial = controller.sessionFolderPath;
+  final folder = await NativeFilePicker.pickDirectory(
+    initialDirectory: initial,
+  );
+  if (folder == null || folder.trim().isEmpty) return null;
+  return folder.trim();
+}
+
+Future<void> _copyImagesToFolder(
+  BuildContext context,
+  CaptionV2Controller controller,
+  List<String> imagePaths,
+) async {
+  final paths = imagePaths.toSet().toList(growable: false);
+  if (paths.isEmpty) return;
+  final folder = await _pickDestinationFolder(context, controller);
+  if (folder == null || !context.mounted) return;
+  final n = paths.length;
+  final copied = await controller.copyImagesToFolder(paths, folder);
+  if (!context.mounted) return;
+  final destName = p.basename(folder);
+  if (copied == 0) {
+    _message(context, 'Could not copy to $destName');
+  } else if (copied == n) {
+    _message(
+      context,
+      n == 1 ? 'Copied to $destName' : 'Copied $copied photos to $destName',
+    );
+  } else {
+    _message(context, 'Copied $copied of $n photos to $destName');
+  }
+}
+
+Future<void> _moveImagesToFolder(
+  BuildContext context,
+  CaptionV2Controller controller,
+  List<String> imagePaths,
+) async {
+  final paths = imagePaths.toSet().toList(growable: false);
+  if (paths.isEmpty) return;
+  final folder = await _pickDestinationFolder(context, controller);
+  if (folder == null || !context.mounted) return;
+  final session = controller.sessionFolderPath;
+  if (session != null &&
+      p.equals(p.normalize(session), p.normalize(folder))) {
+    _message(context, 'Choose a different folder');
+    return;
+  }
+  final n = paths.length;
+  final confirmed = await _showConfirmDialog(
+    context,
+    title: n == 1 ? 'Move image?' : 'Move $n images?',
+    body: n == 1
+        ? '${p.basename(paths.first)} will leave this session and move to ${p.basename(folder)}.'
+        : '$n selected photos will leave this session and move to ${p.basename(folder)}.',
+    confirmLabel: 'Move',
+  );
+  if (!confirmed || !context.mounted) return;
+  final moved = await controller.moveImagesToFolder(paths, folder);
+  if (!context.mounted) return;
+  final destName = p.basename(folder);
+  if (moved == 0) {
+    _message(context, 'Could not move to $destName');
+  } else if (moved == n) {
+    _message(
+      context,
+      n == 1 ? 'Moved to $destName' : 'Moved $moved photos to $destName',
+    );
+  } else {
+    _message(context, 'Moved $moved of $n photos to $destName');
   }
 }
 
