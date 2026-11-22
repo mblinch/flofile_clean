@@ -1895,8 +1895,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // One fixed banner slot — Missing fields or Burst — so Save /
-                // grids never jump when navigating photos.
+                // Missing fields or Burst banner — only mounts when active so
+                // it does not leave empty space above the caption.
                 _WorkspaceBannerSlot(
                   tokens: t,
                   missingLabels: c.missingCaptionIptcLabels,
@@ -2333,7 +2333,9 @@ class _PlayerCodeBox extends StatelessWidget {
   }
 }
 
-/// Fixed-height workspace banner: Missing fields wins over Burst available.
+/// Workspace banner above the caption: Missing fields wins over Burst available.
+///
+/// Collapses when idle so it does not leave empty space above the caption card.
 class _WorkspaceBannerSlot extends StatelessWidget {
   const _WorkspaceBannerSlot({
     required this.tokens,
@@ -2355,7 +2357,7 @@ class _WorkspaceBannerSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget? child;
+    final Widget child;
     if (missingLabels.isNotEmpty) {
       child = _MissingCaptionIptcBanner(
         labels: missingLabels,
@@ -2369,6 +2371,8 @@ class _WorkspaceBannerSlot extends StatelessWidget {
         onReview: onReviewBurst,
         onDismiss: onDismissBurst,
       );
+    } else {
+      return const SizedBox.shrink();
     }
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
