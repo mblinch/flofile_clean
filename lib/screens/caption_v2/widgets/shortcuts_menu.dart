@@ -11,10 +11,12 @@ class CaptionV2ShortcutsMenuButton extends StatefulWidget {
     super.key,
     required this.tokens,
     this.ftpMode = false,
+    this.compact = false,
   });
 
   final FfTokens tokens;
   final bool ftpMode;
+  final bool compact;
 
   @override
   State<CaptionV2ShortcutsMenuButton> createState() =>
@@ -58,6 +60,7 @@ class _CaptionV2ShortcutsMenuButtonState
   Widget build(BuildContext context) {
     final t = widget.tokens;
     final rows = _rowsFor(widget.ftpMode);
+    final compact = widget.compact;
     return MenuAnchor(
       controller: _menu,
       alignmentOffset: const Offset(0, 6),
@@ -75,9 +78,9 @@ class _CaptionV2ShortcutsMenuButtonState
         ),
       ),
       builder: (context, controller, child) {
+        final open = controller.isOpen;
         return Material(
           color: Colors.transparent,
-          borderRadius: BorderRadius.circular(9),
           child: InkWell(
             onTap: () {
               if (controller.isOpen) {
@@ -87,16 +90,38 @@ class _CaptionV2ShortcutsMenuButtonState
               }
             },
             borderRadius: BorderRadius.circular(9),
-            hoverColor: t.hover,
             child: Tooltip(
               message: 'Keyboard shortcuts',
-              child: SizedBox(
-                width: 32,
+              child: Container(
                 height: 32,
-                child: PhosphorIcon(
-                  PhosphorIconsRegular.keyboard,
-                  size: 18,
-                  color: t.textSecondary,
+                padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 10),
+                decoration: BoxDecoration(
+                  color: open ? t.hover : t.surface,
+                  borderRadius: BorderRadius.circular(9),
+                  border: open ? Border.all(color: t.divider) : null,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    PhosphorIcon(
+                      PhosphorIconsRegular.keyboard,
+                      size: 16,
+                      color: open ? t.text : t.textSecondary,
+                    ),
+                    if (!compact) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        'Shortcuts',
+                        style: TextStyle(
+                          fontFamily: FfTokens.fontFamily,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          height: 1,
+                          color: open ? t.text : t.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),

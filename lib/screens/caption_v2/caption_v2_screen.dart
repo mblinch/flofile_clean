@@ -52,6 +52,7 @@ import 'widgets/caption_strip.dart';
 import 'widgets/ftp_active_dialog.dart';
 import 'widgets/ftp_history_dialog.dart';
 import 'widgets/mobile_photo_filmstrip.dart';
+import 'widgets/shortcuts_menu.dart';
 import 'widgets/transmit_dock.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
@@ -2808,6 +2809,14 @@ class _TopChrome extends StatelessWidget {
                     strokeWidth: 2,
                     color: t.accent,
                   ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              if (c != null) ...[
+                CaptionV2ShortcutsMenuButton(
+                  tokens: t,
+                  ftpMode: c.ftpModeEnabled,
+                  compact: compact,
                 ),
                 const SizedBox(width: 8),
               ],
