@@ -1545,6 +1545,30 @@ void main() {
     expect(controller.displayedCaption, 'Pasted caption');
   });
 
+  test('live copy payload keeps unsaved strip caption for burst paste', () {
+    final bo = player('Bo Bichette', '11');
+    final controller = CaptionV2Controller()
+      ..imagePaths = ['/burst1.jpg', '/burst2.jpg']
+      ..homeTeam = 'Toronto Blue Jays'
+      ..awayTeam = 'New York Yankees'
+      ..homeRoster = [bo]
+      ..currentIptcMeta = {'IPTC:Description': ''};
+
+    controller.selectPlayer(bo, isHome: true);
+    controller.selectVerb('Single');
+
+    final payload = controller.captionTransferPayloadForCurrent();
+    expect(payload.caption, controller.displayedCaption);
+    expect(payload.caption, isNotEmpty);
+    expect(payload.clicks?.verb, 'Single');
+    expect(payload.clicks?.players.single.fullName, 'Bo Bichette');
+
+    final decoded = CaptionTransferPayload.decode(payload.encode());
+    expect(decoded, isNotNull);
+    expect(decoded!.caption, payload.caption);
+    expect(decoded.clicks?.verb, 'Single');
+  });
+
   test('paste restores matching clicks and skips players not on the roster',
       () async {
     final bo = player('Bo Bichette', '11');

@@ -301,15 +301,29 @@ Future<void> showCaptionV2PhotoMenu({
 
   switch (action) {
     case _PhotoAction.copyCaption:
-      final values = await controller.readIptcPanelValues(imagePath);
-      final photographer = await controller.photographerNameForPath(imagePath);
-      final payload = CaptionTransferPayload(
-        caption: values['Caption'] ?? '',
-        personality: values['Personality'] ?? '',
-        keywords: values['Keywords'] ?? '',
-        photographerName: photographer,
-        clicks: controller.clicksForTransfer(imagePath),
-      );
+      // Open picture: copy the live strip caption (unsaved burst frames included).
+      // Other pictures: read caption text from file IPTC.
+      final CaptionTransferPayload payload;
+      if (imagePath == controller.currentPath) {
+        payload = controller.captionTransferPayloadForCurrent();
+      } else {
+        final values = await controller.readIptcPanelValues(imagePath);
+        final photographer =
+            await controller.photographerNameForPath(imagePath);
+        payload = CaptionTransferPayload(
+          caption: values['Caption'] ?? '',
+          personality: values['Personality'] ?? '',
+          keywords: values['Keywords'] ?? '',
+          photographerName: photographer,
+          clicks: controller.clicksForTransfer(imagePath),
+        );
+      }
+      if (payload.caption.trim().isEmpty && payload.clicks == null) {
+        if (context.mounted) {
+          _message(context, 'No caption to copy on this photo');
+        }
+        break;
+      }
       await Clipboard.setData(ClipboardData(text: payload.encode()));
       if (context.mounted) _message(context, 'Caption copied');
       break;
@@ -376,7 +390,10 @@ Future<void> _pasteCaption(
   try {
     final text = (await Clipboard.getData('text/plain'))?.text;
     final payload = text == null ? null : CaptionTransferPayload.decode(text);
-    if (payload == null || payload.caption.trim().isEmpty) {
+    // Allow a clicks-only payload (live copy before IPTC was written) so paste
+    // can rebuild the caption from the buttons that created it.
+    if (payload == null ||
+        (payload.caption.trim().isEmpty && payload.clicks == null)) {
       throw const FormatException();
     }
     var pastedCount = 0;
@@ -401,12 +418,22 @@ Future<void> _pasteCaption(
       if (imagePath == current) {
         openCaption = clicksApplied ? controller.displayedCaption : caption;
       }
+      final resolvedCaption =
+          (imagePath == current ? (openCaption ?? caption) : caption).trim();
       final values = <String, String>{
-        'Caption': imagePath == current ? (openCaption ?? caption) : caption,
+        // Never stamp an empty Caption — that would wipe IPTC on clicks-only
+        // pastes to photos that are not currently open.
+        if (resolvedCaption.isNotEmpty) 'Caption': resolvedCaption,
         if (payload.personality.trim().isNotEmpty)
           'Personality': payload.personality,
         if (payload.keywords.trim().isNotEmpty) 'Keywords': payload.keywords,
       };
+      if (values.isEmpty) {
+        // Clicks were remembered above; nothing else to write to this file yet.
+        pastedCount++;
+        pastedPaths.add(imagePath);
+        continue;
+      }
       final ok = await controller.writeIptcPanelValues(imagePath, values);
       if (ok) {
         pastedCount++;

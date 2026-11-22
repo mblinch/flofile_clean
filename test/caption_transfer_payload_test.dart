@@ -143,4 +143,15 @@ void main() {
     expect(CaptionTransferPayload.decode('  '), isNull);
     expect(CaptionTransferPayload.decode('{"Personality":"Player"}'), isNull);
   });
+
+  test('accepts clicks-only JSON so unsaved burst copies can paste', () {
+    final decoded = CaptionTransferPayload.decode(
+      '{"version":1,"caption":"","clicks":{"players":[{"fullName":"Bo Bichette","isHome":true,"jerseyNumber":"11"}],"verb":"Single","customVerb":"","rbi":0,"modifiers":{},"preGame":false,"postGame":false}}',
+    );
+
+    expect(decoded, isNotNull);
+    expect(decoded!.caption, isEmpty);
+    expect(decoded.clicks?.verb, 'Single');
+    expect(decoded.clicks?.players.single.fullName, 'Bo Bichette');
+  });
 }
