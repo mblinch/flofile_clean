@@ -52,6 +52,7 @@ import 'widgets/caption_strip.dart';
 import 'widgets/ftp_active_dialog.dart';
 import 'widgets/ftp_history_dialog.dart';
 import 'widgets/mobile_photo_filmstrip.dart';
+import 'widgets/shortcuts_menu.dart';
 import 'widgets/transmit_dock.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
@@ -229,14 +230,10 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     }
     final path = _controller.currentPath;
     if (path == null) return;
-    final curIdx = _controller.imagePaths.indexOf(path);
-    if (curIdx < 0) return;
-    var lastIdx = -1;
-    for (final pth in pending.chain) {
-      final i = _controller.imagePaths.indexOf(pth);
-      if (i > lastIdx) lastIdx = i;
-    }
-    if (lastIdx >= 0 && curIdx > lastIdx) {
+    // Only keep the offer while still on a frame in that burst. Leaving the
+    // chain (including earlier photos) must dismiss — otherwise every frame
+    // before the chain's last index keeps showing "Burst available".
+    if (!pending.chain.contains(path)) {
       _clearPendingBurst();
     }
   }
@@ -1895,8 +1892,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // One fixed banner slot — Missing fields or Burst — so Save /
-                // grids never jump when navigating photos.
+                // Missing fields or Burst banner — only mounts when active so
+                // it does not leave empty space above the caption.
                 _WorkspaceBannerSlot(
                   tokens: t,
                   missingLabels: c.missingCaptionIptcLabels,
@@ -2333,7 +2330,9 @@ class _PlayerCodeBox extends StatelessWidget {
   }
 }
 
-/// Fixed-height workspace banner: Missing fields wins over Burst available.
+/// Workspace banner above the caption: Missing fields wins over Burst available.
+///
+/// Collapses when idle so it does not leave empty space above the caption card.
 class _WorkspaceBannerSlot extends StatelessWidget {
   const _WorkspaceBannerSlot({
     required this.tokens,
@@ -2355,20 +2354,22 @@ class _WorkspaceBannerSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget? child;
+    final Widget child;
     if (missingLabels.isNotEmpty) {
       child = _MissingCaptionIptcBanner(
         labels: missingLabels,
         tokens: tokens,
         onEdit: onEditMissing,
       );
-    } else if (pendingBurstFrames != null) {
+    } else if (pendingBurstFrames != null && pendingBurstFrames! > 1) {
       child = _BurstAvailableBanner(
         frameCount: pendingBurstFrames!,
         tokens: tokens,
         onReview: onReviewBurst,
         onDismiss: onDismissBurst,
       );
+    } else {
+      return const SizedBox.shrink();
     }
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
@@ -2804,6 +2805,14 @@ class _TopChrome extends StatelessWidget {
                     strokeWidth: 2,
                     color: t.accent,
                   ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              if (c != null) ...[
+                CaptionV2ShortcutsMenuButton(
+                  tokens: t,
+                  ftpMode: c.ftpModeEnabled,
+                  compact: compact,
                 ),
                 const SizedBox(width: 8),
               ],
