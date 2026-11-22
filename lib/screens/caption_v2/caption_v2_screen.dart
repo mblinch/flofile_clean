@@ -230,14 +230,10 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     }
     final path = _controller.currentPath;
     if (path == null) return;
-    final curIdx = _controller.imagePaths.indexOf(path);
-    if (curIdx < 0) return;
-    var lastIdx = -1;
-    for (final pth in pending.chain) {
-      final i = _controller.imagePaths.indexOf(pth);
-      if (i > lastIdx) lastIdx = i;
-    }
-    if (lastIdx >= 0 && curIdx > lastIdx) {
+    // Only keep the offer while still on a frame in that burst. Leaving the
+    // chain (including earlier photos) must dismiss — otherwise every frame
+    // before the chain's last index keeps showing "Burst available".
+    if (!pending.chain.contains(path)) {
       _clearPendingBurst();
     }
   }
@@ -2365,7 +2361,7 @@ class _WorkspaceBannerSlot extends StatelessWidget {
         tokens: tokens,
         onEdit: onEditMissing,
       );
-    } else if (pendingBurstFrames != null) {
+    } else if (pendingBurstFrames != null && pendingBurstFrames! > 1) {
       child = _BurstAvailableBanner(
         frameCount: pendingBurstFrames!,
         tokens: tokens,
