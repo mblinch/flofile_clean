@@ -548,6 +548,13 @@ class _FirebarRosterReference extends StatelessWidget {
               candidate.player!.jerseyNumber == player.jerseyNumber,
         )
         .firstOrNull;
+    final committed = controller.firebarCommitted.any(
+      (chip) =>
+          chip.kind == FirebarResultKind.player &&
+          chip.isHome == isHome &&
+          chip.player?.fullName == player.fullName &&
+          chip.player?.jerseyNumber == player.jerseyNumber,
+    );
     final jersey = player.jerseyNumber ?? '—';
     final listName = controller.playerListName(player);
     final side = isHome ? 'Home' : 'Away';
@@ -555,16 +562,23 @@ class _FirebarRosterReference extends StatelessWidget {
       jersey: jersey,
       name: listName,
       semanticLabel: '$side $jersey $listName',
-      selected: false,
+      selected: committed,
       pinned: controller.isPlayerPinned(player, isHome: isHome),
-      dimmed: dimUnmatched && result == null,
-      firebarSelected: result != null && result.key == selectedKey,
+      dimmed: dimUnmatched && result == null && !committed,
+      firebarSelected: !committed &&
+          result != null &&
+          result.key == selectedKey,
       jerseyColor: FfTokens.firebar,
       highlightQuery: highlight,
       height: rowHeight,
       onTap: result == null
           ? null
-          : () => controller.commitFirebarResultAndClose(result),
+          : () {
+              final index = controller.firebarMenuResults
+                  .indexWhere((row) => row.key == result.key);
+              if (index >= 0) controller.hoverFirebarMenu(index);
+              controller.commitFirebarMenu();
+            },
     );
   }
 }

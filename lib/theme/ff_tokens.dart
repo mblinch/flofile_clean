@@ -15,6 +15,9 @@ class FfTokens extends ThemeExtension<FfTokens> {
   /// Firebar orange (--firebar). Sparingly: Firebar label + flame only.
   static const firebar = Color(0xFFFF5A1F);
 
+  /// Verb / action text in the caption — warmer amber, distinct from [firebar].
+  static const captionVerb = Color(0xFFFF9A3D);
+
   /// Surfaces — soft cool slate (blue kept, but less saturated than before).
   static const nocturneBg = Color(0xFF101315);
   static const nocturneEl = Color(0xFF181D22);

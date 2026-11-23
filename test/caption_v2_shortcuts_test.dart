@@ -4,28 +4,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quick_cap/screens/caption_v2/caption_v2_shortcuts.dart';
 
 void main() {
-  test('maps save, transmit, paste, navigation, and numeric activators', () {
+  test('maps paste, navigation, and numeric activators', () {
     final shortcuts = buildCaptionV2Shortcuts();
 
+    // ⌘S / Shift+Enter / ⌘⇧Enter are hardware chords (captionV2SaveChord),
+    // not Shortcuts entries — keeps Firebar Enter free.
     expect(
       shortcuts[const SingleActivator(LogicalKeyboardKey.keyS, meta: true)],
-      isA<SaveNextIntent>(),
-    );
-    expect(
-      shortcuts[const SingleActivator(LogicalKeyboardKey.keyS, control: true)],
-      isA<SaveNextIntent>(),
+      isNull,
     );
     expect(
       shortcuts[const SingleActivator(LogicalKeyboardKey.enter, shift: true)],
-      isA<SaveNextIntent>(),
-    );
-    expect(
-      shortcuts[const SingleActivator(
-        LogicalKeyboardKey.enter,
-        meta: true,
-        shift: true,
-      )],
-      isA<SaveTransmitNextIntent>(),
+      isNull,
     );
     expect(
       shortcuts[const SingleActivator(
@@ -69,8 +59,8 @@ void main() {
     );
   });
 
-  testWidgets('dispatches configured save and frame actions', (tester) async {
-    var saves = 0;
+  testWidgets('dispatches configured frame and search-hit actions',
+      (tester) async {
     var frameDelta = 0;
     var searchHit = 0;
 
@@ -80,12 +70,6 @@ void main() {
           shortcuts: buildCaptionV2Shortcuts(),
           child: Actions(
             actions: <Type, Action<Intent>>{
-              SaveNextIntent: CaptionV2GuardedAction<SaveNextIntent>(
-                onInvoke: (_) {
-                  saves++;
-                  return null;
-                },
-              ),
               NavigateFrameIntent: CaptionV2GuardedAction<NavigateFrameIntent>(
                 onInvoke: (intent) {
                   frameDelta += intent.delta;
@@ -108,13 +92,9 @@ void main() {
       ),
     );
 
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.sendKeyEvent(LogicalKeyboardKey.digit4);
 
-    expect(saves, 1);
     expect(frameDelta, 1);
     expect(searchHit, 4);
   });
@@ -138,12 +118,13 @@ void main() {
       );
     }
 
-    expect(chord(meta: true), CaptionV2SaveChord.transmit);
+    // Plain ⌘Enter must NOT FTP — too close to Firebar Return.
+    expect(chord(meta: true), CaptionV2SaveChord.none);
     expect(
       chord(key: LogicalKeyboardKey.numpadEnter, meta: true),
-      CaptionV2SaveChord.transmit,
+      CaptionV2SaveChord.none,
     );
-    expect(chord(control: true), CaptionV2SaveChord.transmit);
+    expect(chord(control: true), CaptionV2SaveChord.none);
     expect(chord(shift: true), CaptionV2SaveChord.transmit);
     expect(chord(shift: true, meta: true), CaptionV2SaveChord.transmit);
     expect(
@@ -164,42 +145,19 @@ void main() {
     expect(chord(meta: true, alt: true), CaptionV2SaveChord.none);
   });
 
-  testWidgets('save shortcut works while editable text is focused',
-      (tester) async {
-    var saves = 0;
-    final text = TextEditingController();
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Shortcuts(
-          shortcuts: buildCaptionV2Shortcuts(),
-          child: Actions(
-            actions: <Type, Action<Intent>>{
-              SaveNextIntent: CallbackAction<SaveNextIntent>(
-                onInvoke: (_) {
-                  saves++;
-                  return null;
-                },
-              ),
-            },
-            child: Scaffold(
-              body: TextField(
-                controller: text,
-                autofocus: true,
-              ),
-            ),
-          ),
-        ),
+  test('save chord still resolves while editable text would be focused', () {
+    // Hardware handler uses captionV2SaveChord so ⌘S works in text fields.
+    expect(
+      captionV2SaveChord(
+        key: LogicalKeyboardKey.keyS,
+        shift: false,
+        meta: true,
+        control: false,
+        alt: false,
+        ftpMode: true,
       ),
+      CaptionV2SaveChord.save,
     );
-    await tester.pump();
-
-    expect(captionV2FocusIsEditable(), isTrue);
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
-
-    expect(saves, 1);
   });
 
   testWidgets('editable text suppresses global printable and arrow actions',

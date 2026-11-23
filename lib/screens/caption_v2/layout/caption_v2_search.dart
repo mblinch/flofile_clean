@@ -3,10 +3,10 @@ import 'package:flutter/services.dart';
 
 import '../../../theme/ff_tokens.dart';
 import '../data/caption_v2_controller.dart';
-import 'caption_v2_firebar_menu.dart';
+import '../data/firebar_shorthand.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
-/// Inline Firebar. The three workspace columns are its result list.
+/// Inline Firebar. Roster / verb columns remain the board reference list.
 class CaptionV2SearchBar extends StatefulWidget {
   const CaptionV2SearchBar({
     super.key,
@@ -31,23 +31,27 @@ class CaptionV2SearchBar extends StatefulWidget {
   State<CaptionV2SearchBar> createState() => _CaptionV2SearchBarState();
 }
 
-class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
-  final GlobalKey _selectedChipKey = GlobalKey();
-  final GlobalKey _menuKey = GlobalKey();
+class _CaptionV2SearchBarState extends State<CaptionV2SearchBar>
+    with SingleTickerProviderStateMixin {
+  String? _completionQuery;
+  late final AnimationController _ambNudge;
+  bool _writtenToast = false;
+  /// Keeps the EditableText element alive across the amb ↔ typing layout swap
+  /// so the caret is not dropped when H/V closes.
+  final GlobalKey _firebarInputKey = GlobalKey();
   final LayerLink _menuLink = LayerLink();
   final OverlayPortalController _menuPortal = OverlayPortalController();
-  final ScrollController _menuScroll = ScrollController();
-  String? _scrolledSelection;
-  int? _scrolledMenuIndex;
-  Offset? _menuPointer;
-  String? _completionQuery;
 
   @override
   void initState() {
     super.initState();
+    _ambNudge = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
     widget.controller.addListener(_syncText);
-    widget.focusNode.addListener(_syncMenu);
-    widget.controller.addListener(_syncMenu);
+    widget.focusNode.addListener(_onFocusOrController);
+    widget.controller.addListener(_onFocusOrController);
   }
 
   @override
@@ -55,26 +59,27 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller.removeListener(_syncText);
-      oldWidget.controller.removeListener(_syncMenu);
+      oldWidget.controller.removeListener(_onFocusOrController);
       widget.controller.addListener(_syncText);
-      widget.controller.addListener(_syncMenu);
+      widget.controller.addListener(_onFocusOrController);
     }
     if (oldWidget.focusNode != widget.focusNode) {
-      oldWidget.focusNode.removeListener(_syncMenu);
-      widget.focusNode.addListener(_syncMenu);
+      oldWidget.focusNode.removeListener(_onFocusOrController);
+      widget.focusNode.addListener(_onFocusOrController);
     }
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_syncText);
-    widget.controller.removeListener(_syncMenu);
-    widget.focusNode.removeListener(_syncMenu);
-    _menuScroll.dispose();
+    widget.controller.removeListener(_onFocusOrController);
+    widget.focusNode.removeListener(_onFocusOrController);
+    if (_menuPortal.isShowing) _menuPortal.hide();
+    _ambNudge.dispose();
     super.dispose();
   }
 
-  void _syncMenu() {
+  void _onFocusOrController() {
     final controller = widget.controller;
     final query = controller.searchQuery;
     if (_completionQuery != query) {
@@ -87,50 +92,26 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
           controller.hoverFirebarMenu(index);
         }
       }
-      if (mounted) setState(() {});
     }
-    final show = widget.focusNode.hasFocus && controller.firebarMenuOpen;
+    _syncMenuPortal();
+    if (mounted) setState(() {});
+  }
+
+  bool get _showSuggestions {
+    final controller = widget.controller;
+    return controller.searchOpen &&
+        !controller.firebarJerseySideChoiceOpen &&
+        controller.firebarMenuOpen &&
+        controller.firebarMenuResults.isNotEmpty;
+  }
+
+  void _syncMenuPortal() {
+    final show = _showSuggestions;
     if (show && !_menuPortal.isShowing) {
       _menuPortal.show();
     } else if (!show && _menuPortal.isShowing) {
       _menuPortal.hide();
     }
-    if (show) _revealMenuRow();
-  }
-
-  void _revealMenuRow() {
-    final index = widget.controller.firebarMenuIndex;
-    if (index == _scrolledMenuIndex) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_menuScroll.hasClients) return;
-      if (index == _scrolledMenuIndex) return;
-      _scrolledMenuIndex = index;
-      final position = _menuScroll.position;
-      const row = 28.0;
-      const header = 22.0;
-      final top = header + index * (row + 2);
-      final bottom = top + row;
-      final viewTop = position.pixels + 30;
-      final viewBottom = position.pixels + position.viewportDimension - 44;
-      if (top < viewTop) {
-        position.jumpTo((top - 30).clamp(0.0, position.maxScrollExtent));
-      } else if (bottom > viewBottom) {
-        position.jumpTo(
-          (bottom - position.viewportDimension + 44)
-              .clamp(0.0, position.maxScrollExtent),
-        );
-      }
-    });
-  }
-
-  bool _tapInsideMenu(Offset global) {
-    final box = _menuKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize || !box.attached) return false;
-    final local = box.globalToLocal(global);
-    return local.dx >= 0 &&
-        local.dy >= 0 &&
-        local.dx <= box.size.width &&
-        local.dy <= box.size.height;
   }
 
   void _syncText() {
@@ -142,71 +123,184 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
     );
   }
 
+  void _syncFieldFromController() {
+    final left = widget.controller.searchQuery;
+    widget.textController.value = TextEditingValue(
+      text: left,
+      selection: TextSelection.collapsed(offset: left.length),
+    );
+  }
+
+  /// After H/V or a menu pick, keep the cursor in the Firebar field.
+  /// Layout may swap the field's parent; request focus now and for two frames
+  /// so the caret lands on the visible, mounted TextField.
+  void _retainFirebarFocus() {
+    if (!widget.controller.searchOpen) {
+      widget.controller.setSearchOpen(true);
+    }
+    _syncFieldFromController();
+    void focusIfReady() {
+      if (!mounted || !widget.controller.searchOpen) return;
+      // Re-assert even if already focused so a remounted EditableText shows the caret.
+      widget.focusNode.requestFocus();
+    }
+
+    focusIfReady();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      focusIfReady();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        focusIfReady();
+      });
+    });
+  }
+
+  bool _backspaceFirebarEntry() {
+    final text = widget.textController.text;
+    final sel = widget.textController.selection;
+    if (!sel.isCollapsed || sel.baseOffset != text.length) return false;
+    if (!widget.controller.backspaceFirebarShorthand()) return false;
+    _syncFieldFromController();
+    return true;
+  }
+
+  void _nudgeAmbiguous() {
+    _ambNudge
+      ..reset()
+      ..forward();
+  }
+
+  Future<void> _flashWrittenToast() async {
+    if (!mounted) return;
+    setState(() => _writtenToast = true);
+    await Future<void>.delayed(const Duration(milliseconds: 1600));
+    if (!mounted) return;
+    setState(() => _writtenToast = false);
+  }
+
   KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
     final controller = widget.controller;
     if (!controller.searchOpen || event is! KeyDownEvent) {
       return KeyEventResult.ignored;
     }
-    final queryEmpty = widget.textController.text.isEmpty;
-    if (event.logicalKey == LogicalKeyboardKey.arrowUp ||
-        event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      // The hardware handler already steps the number menu. Handling it
-      // here too skipped a row on every press.
-      if (controller.firebarMenuOpen) return KeyEventResult.handled;
-      controller.moveFirebarSelection(
-        event.logicalKey == LogicalKeyboardKey.arrowUp ? -1 : 1,
-      );
-      return KeyEventResult.handled;
-    }
-    if (queryEmpty && event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      controller.moveFirebarChipCursor(-1);
-      return KeyEventResult.handled;
-    }
-    if (queryEmpty && event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      controller.moveFirebarChipCursor(1);
-      return KeyEventResult.handled;
-    }
-    if (controller.firebarJerseySideChoiceOpen &&
-        !HardwareKeyboard.instance.isMetaPressed &&
-        !HardwareKeyboard.instance.isControlPressed &&
-        !HardwareKeyboard.instance.isAltPressed) {
+    final keys = HardwareKeyboard.instance;
+    final amb = controller.firebarJerseySideChoiceOpen;
+
+    // While H/V is open: only h/v (or click). Space/Tab/Enter/arrows nudge.
+    if (amb) {
       if (event.logicalKey == LogicalKeyboardKey.keyH) {
         controller.chooseFirebarJerseySide(isHome: true);
+        _retainFirebarFocus();
         return KeyEventResult.handled;
       }
       if (event.logicalKey == LogicalKeyboardKey.keyV) {
         controller.chooseFirebarJerseySide(isHome: false);
+        _retainFirebarFocus();
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.space ||
+          event.logicalKey == LogicalKeyboardKey.tab ||
+          event.logicalKey == LogicalKeyboardKey.enter ||
+          event.logicalKey == LogicalKeyboardKey.numpadEnter ||
+          event.logicalKey == LogicalKeyboardKey.arrowUp ||
+          event.logicalKey == LogicalKeyboardKey.arrowDown) {
+        _nudgeAmbiguous();
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.escape) {
+        widget.onExit();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+
+    // ⌘1–⌘4 pick a suggestion directly.
+    if ((keys.isMetaPressed || keys.isControlPressed) &&
+        !keys.isShiftPressed &&
+        !keys.isAltPressed) {
+      final digit = switch (event.logicalKey) {
+        LogicalKeyboardKey.digit1 || LogicalKeyboardKey.numpad1 => 0,
+        LogicalKeyboardKey.digit2 || LogicalKeyboardKey.numpad2 => 1,
+        LogicalKeyboardKey.digit3 || LogicalKeyboardKey.numpad3 => 2,
+        LogicalKeyboardKey.digit4 || LogicalKeyboardKey.numpad4 => 3,
+        _ => -1,
+      };
+      if (digit >= 0) {
+        final results = controller.firebarMenuResults;
+        if (digit < results.length) {
+          controller.hoverFirebarMenu(digit);
+          controller.commitFirebarMenu();
+          _retainFirebarFocus();
+        }
         return KeyEventResult.handled;
       }
     }
+
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp ||
+        event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      final delta =
+          event.logicalKey == LogicalKeyboardKey.arrowUp ? -1 : 1;
+      if (controller.firebarMenuOpen) {
+        controller.moveFirebarMenu(delta);
+      } else {
+        controller.moveFirebarSelection(delta);
+      }
+      return KeyEventResult.handled;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.tab) {
+      if (controller.firebarMenuOpen) {
+        controller.commitFirebarMenu();
+        _retainFirebarFocus();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.space) {
+      // Shared jersey # → trailing space opens H/V (do not commit the menu).
+      if (controller.firebarSpaceOpensJerseySide) {
+        final raw = controller.searchQuery.trimRight();
+        controller.setSearchQuery(raw.isEmpty ? ' ' : '$raw ');
+        _syncFieldFromController();
+        _retainFirebarFocus();
+        return KeyEventResult.handled;
+      }
+      final q = controller.searchQuery.trim();
+      if (q.isNotEmpty &&
+          controller.firebarMenuOpen &&
+          !controller.firebarJerseySideChoiceOpen) {
+        controller.commitFirebarMenu();
+        _retainFirebarFocus();
+        return KeyEventResult.handled;
+      }
+      // Empty / mid-token space falls through to the field.
+      return KeyEventResult.ignored;
+    }
+
     if (event.logicalKey == LogicalKeyboardKey.enter ||
         event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-      // Shift+Enter / ⌘Enter / ⌘⇧Enter are handled globally as FTP (and may
-      // commit the highlighted player first). Don't also insert here.
-      final keys = HardwareKeyboard.instance;
       if (keys.isShiftPressed || keys.isMetaPressed || keys.isControlPressed) {
         return KeyEventResult.ignored;
       }
-      if (controller.firebarMenuOpen) {
+      final wrote = controller.applyFirebarLine();
+      if (wrote) {
+        _flashWrittenToast();
+      } else if (controller.firebarJerseySideChoiceOpen) {
+        _retainFirebarFocus();
+        return KeyEventResult.handled;
+      } else if (controller.firebarMenuOpen) {
         controller.commitFirebarMenu();
-      } else {
-        controller.commitSelectedFirebarResult();
       }
-      final left = controller.searchQuery;
-      widget.textController.value = TextEditingValue(
-        text: left,
-        selection: TextSelection.collapsed(offset: left.length),
-      );
+      _retainFirebarFocus();
       return KeyEventResult.handled;
     }
+
     if (event.logicalKey == LogicalKeyboardKey.escape) {
       widget.onExit();
       return KeyEventResult.handled;
     }
-    if (event.logicalKey == LogicalKeyboardKey.backspace &&
-        widget.textController.text.isEmpty) {
-      controller.backspaceFirebarChip();
-      return KeyEventResult.handled;
+    if (event.logicalKey == LogicalKeyboardKey.backspace) {
+      if (_backspaceFirebarEntry()) return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
   }
@@ -216,299 +310,388 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
     final controller = widget.controller;
     final tokens = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final active = controller.searchOpen;
-    final searching = active &&
-        controller.searchQuery.trim().isNotEmpty &&
-        controller.firebarOptions.isEmpty;
-    final typingVerbs = searching &&
-        (controller.firebarVerbResults.isNotEmpty ||
-            controller.firebarCustomVerbOffer != null);
-    final committedKeys =
-        controller.firebarCommitted.map((chip) => chip.key).toSet();
-    final suggestions = searching
-        ? controller.firebarOrderedResults
-            .where((result) => !committedKeys.contains(result.key))
-            .toList(growable: false)
-        : const <FirebarResult>[];
-    final selectedKey = controller.firebarSelectedResult?.key;
-    if (selectedKey != null &&
-        selectedKey != _scrolledSelection &&
-        (committedKeys.contains(selectedKey) ||
-            suggestions.any((result) => result.key == selectedKey))) {
-      _scrolledSelection = selectedKey;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final chipContext = _selectedChipKey.currentContext;
-        if (chipContext == null || !chipContext.mounted) return;
-        Scrollable.ensureVisible(
-          chipContext,
-          alignment: 0.5,
-          duration: const Duration(milliseconds: 120),
-          curve: Curves.easeOut,
-        );
-      });
-    }
+    final amb = controller.firebarJerseySideChoiceOpen;
+    final labelColor = active ? FfTokens.firebar : const Color(0xFF959AA0);
+    final borderColor = active
+        ? FfTokens.firebar.withValues(alpha: 0.7)
+        : const Color(0x1EE8EEF4);
 
-    final showMenu =
-        widget.focusNode.hasFocus && controller.firebarMenuOpen;
-    if (showMenu != _menuPortal.isShowing) {
+    // Keep portal visibility in sync even when rebuilds arrive without a
+    // controller listener tick (e.g. focus-only paint paths).
+    if (_showSuggestions != _menuPortal.isShowing) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        final still = widget.focusNode.hasFocus &&
-            widget.controller.firebarMenuOpen;
-        if (still && !_menuPortal.isShowing) {
-          _menuPortal.show();
-        } else if (!still && _menuPortal.isShowing) {
-          _menuPortal.hide();
-        }
+        _syncMenuPortal();
       });
     }
 
-    return OverlayPortal(
-      controller: _menuPortal,
-      overlayChildBuilder: (context) {
-        // Read matches from the controller here so the overlay stays in sync
-        // even when the portal was opened before a later query rebuild.
-        return ListenableBuilder(
-          listenable: controller,
-          builder: (context, _) {
-            final menuSections = controller.firebarMenuSections;
-            final menuResults = controller.firebarMenuResults;
-            final menuIndex = menuResults.isEmpty
-                ? 0
-                : controller.firebarMenuIndex
-                    .clamp(0, menuResults.length - 1);
-            return CompositedTransformFollower(
-              link: _menuLink,
-              showWhenUnlinked: false,
-              targetAnchor: Alignment.bottomLeft,
-              followerAnchor: Alignment.topLeft,
-              offset: const Offset(0, 8),
-              child: FirebarAutocompleteMenu(
-                key: _menuKey,
-                controller: controller,
-                tokens: tokens,
-                sections: menuSections,
-                results: menuResults,
-                selectedIndex: menuIndex,
-                scrollController: _menuScroll,
-                onHover: (index, position) {
-                  if (_menuPointer == position) return;
-                  _menuPointer = position;
-                  controller.hoverFirebarMenu(index);
-                },
-                onCommit: (index) {
-                  controller.hoverFirebarMenu(index);
-                  controller.commitFirebarMenu();
-                  // Player picks in `41 skates` leave the verb text; don't
-                  // wipe the field. Sync from the controller instead.
-                  final left = controller.searchQuery;
-                  widget.textController.value = TextEditingValue(
-                    text: left,
-                    selection: TextSelection.collapsed(offset: left.length),
-                  );
-                  widget.focusNode.requestFocus();
-                },
-              ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        OverlayPortal(
+          controller: _menuPortal,
+          overlayChildBuilder: (context) {
+            final width = _menuLink.leaderSize?.width;
+            if (width == null || width <= 0) {
+              return const SizedBox.shrink();
+            }
+            return Stack(
+              children: [
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _retainFirebarFocus,
+                    child: const ColoredBox(
+                      color: Color(0x99000000),
+                    ),
+                  ),
+                ),
+                CompositedTransformFollower(
+                  link: _menuLink,
+                  showWhenUnlinked: false,
+                  targetAnchor: Alignment.bottomLeft,
+                  followerAnchor: Alignment.topLeft,
+                  offset: const Offset(0, 6),
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    // At least as wide as the typing field; grow for long
+                    // names so rows don't overflow.
+                    child: SizedBox(
+                      width: width.clamp(280.0, 420.0),
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: _FirebarInlineSuggestions(
+                          key: const Key('firebar_suggestions_overlay'),
+                          controller: controller,
+                          tokens: tokens,
+                          onCommit: (index) {
+                            controller.hoverFirebarMenu(index);
+                            controller.commitFirebarMenu();
+                            _retainFirebarFocus();
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             );
           },
-        );
-      },
-      child: CompositedTransformTarget(
-        link: _menuLink,
-        child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () {
-        if (!active) widget.onActivate();
-        widget.focusNode.requestFocus();
-      },
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 36),
-        padding: const EdgeInsets.fromLTRB(14, 4, 8, 4),
-        decoration: BoxDecoration(
-          color: tokens.bg,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: FfTokens.firebar.withValues(alpha: 0.35),
-          ),
-        ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final shortcutWidth = _shortcutClusterWidth(controller);
-            final compactIndexes = _compactPlayerIndexes(
-              maxWidth: (constraints.maxWidth - shortcutWidth)
-                  .clamp(0.0, double.infinity),
-              controller: controller,
-              tokens: tokens,
-              typed: widget.textController.text,
-            );
-            return Row(
+          child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                if (!active) widget.onActivate();
+                widget.focusNode.requestFocus();
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                constraints: const BoxConstraints(minHeight: 48),
+                padding: const EdgeInsets.fromLTRB(14, 6, 8, 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E242A),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Expanded(
-                  child: Wrap(
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 6,
-          runSpacing: 4,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const PhosphorIcon(PhosphorIconsRegular.flame,
-                  size: 15,
-                  color: FfTokens.firebar,
+                PhosphorIcon(
+                  PhosphorIconsFill.fire,
+                  size: 16,
+                  color: labelColor,
                 ),
-                const SizedBox(width: 5),
+                const SizedBox(width: 6),
                 Text(
                   'Firebar',
                   maxLines: 1,
                   softWrap: false,
                   style: TextStyle(
                     fontFamily: FfTokens.fontFamily,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
                     height: 1,
-                    color: FfTokens.firebar,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: tokens.divider),
-                  ),
-                  child: Text(
-                    '⌘K',
-                    style: TextStyle(
-                      fontFamily: FfTokens.fontFamily,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w400,
-                      letterSpacing: 0,
-                      height: 1,
-                      color: tokens.textSecondary,
-                    ),
+                    color: labelColor,
                   ),
                 ),
                 const SizedBox(width: 8),
-                Container(width: 1, height: 14, color: tokens.divider),
-              ],
-            ),
-            // Chips first, then the typing caret — cursor sits to the right
-            // of each committed entry (Gmail-style).
-            for (var index = 0;
-                index < controller.firebarCommitted.length;
-                index++)
-              _FirebarChip(
-                key: index == controller.firebarChipCursor
-                    ? _selectedChipKey
-                    : null,
-                result: controller.firebarCommitted[index],
-                controller: controller,
-                tokens: tokens,
-                compact: compactIndexes.contains(index),
-                subdued: _pinnedVerbIsPaused(
-                  controller,
-                  controller.firebarCommitted[index],
-                  typingVerbs,
+                Container(
+                  width: 1,
+                  height: 22,
+                  color: const Color(0x1EE8EEF4),
                 ),
-                selected: index == controller.firebarChipCursor,
-                onSelect: typingVerbs &&
-                        controller.firebarCommitted[index].kind ==
-                            FirebarResultKind.verb
-                    ? () => controller.commitFirebarResultAndClose(
-                          controller.firebarCommitted[index],
-                        )
-                    : null,
-              ),
-            _FirebarTypingField(
-              active: active,
-              focusNode: widget.focusNode,
-              textController: widget.textController,
-              tokens: tokens,
-              onKey: _handleKey,
-              onChanged: controller.setSearchQuery,
-              onTapOutside: (event) {
-                if (_tapInsideMenu(event.position)) {
-                  widget.focusNode.requestFocus();
-                  return;
-                }
-                widget.focusNode.unfocus();
-              },
-              onSubmitted: () {
-                if (controller.firebarMenuOpen) {
-                  controller.commitFirebarMenu();
-                } else {
-                  controller.commitSelectedFirebarResult();
-                }
-                final left = controller.searchQuery;
-                widget.textController.value = TextEditingValue(
-                  text: left,
-                  selection: TextSelection.collapsed(offset: left.length),
-                );
-              },
-            ),
-            if (controller.firebarOptions.isNotEmpty) ...[
-              Text(
-                controller.firebarOptionPrompt ?? 'Choose:',
-                style: tokens.metaStyle.copyWith(
-                  color: tokens.text,
-                  fontSize: 12,
-                ),
-              ),
-              for (var index = 0;
-                  index < controller.filteredFirebarOptions.length;
-                  index++)
-                _FirebarOptionButton(
-                  option: controller.filteredFirebarOptions[index],
-                  selected: index == controller.firebarOptionIndex,
-                  controller: controller,
-                  tokens: tokens,
-                ),
-            ],
-          ],
-                  ),
-                ),
-                if (active) ...[
-                  const SizedBox(width: 8),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Row(
                     children: [
-                      Container(width: 1, height: 18, color: tokens.divider),
-                      const SizedBox(width: 6),
-                      _FirebarShortcutHint(
-                        keys: '⌘S',
-                        action: 'save',
-                        tokens: tokens,
-                        onTap: widget.onSave,
-                      ),
-                      if (controller.ftpModeEnabled) ...[
-                        const SizedBox(width: 4),
-                        _FirebarShortcutHint(
-                          keys: '⌘↵',
-                          action: 'ftp',
-                          tokens: tokens,
-                          onTap: widget.onTransmit,
+                      if (!amb &&
+                          controller.firebarCommitted.isNotEmpty) ...[
+                        Flexible(
+                          flex: 3,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                for (var index = 0;
+                                    index <
+                                        controller.firebarCommitted.length;
+                                    index++) ...[
+                                  if (index > 0) const SizedBox(width: 6),
+                                  _FirebarChip(
+                                    result:
+                                        controller.firebarCommitted[index],
+                                    controller: controller,
+                                    tokens: tokens,
+                                    selected: index ==
+                                        controller.firebarChipCursor,
+                                    onSelect: () => controller
+                                        .selectFirebarChip(index),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      // One TextField identity across amb ↔ typing layouts so
+                      // H/V teardown does not dispose the EditableText / caret.
+                      // LayerLink anchors the suggestions under this field.
+                      if (amb)
+                        SizedBox(
+                          width: _shrunkInputWidth(
+                            widget.textController.text,
+                          ),
+                          child: CompositedTransformTarget(
+                            link: _menuLink,
+                            child: _buildTypingField(
+                              controller: controller,
+                              tokens: tokens,
+                              active: active,
+                              amb: true,
+                            ),
+                          ),
+                        )
+                      else
+                        Expanded(
+                          child: CompositedTransformTarget(
+                            link: _menuLink,
+                            child: _buildTypingField(
+                              controller: controller,
+                              tokens: tokens,
+                              active: active,
+                              amb: false,
+                            ),
+                          ),
+                        ),
+                      if (amb) ...[
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: AnimatedBuilder(
+                            animation: _ambNudge,
+                            builder: (context, child) {
+                              final t = _ambNudge.value;
+                              final dx = t == 0
+                                  ? 0.0
+                                  : (t < 0.5 ? -3.0 : 3.0) *
+                                      (1 - (t - 0.5).abs() * 2);
+                              return Transform.translate(
+                                offset: Offset(dx, 0),
+                                child: child,
+                              );
+                            },
+                            child: _FirebarJerseySideChoices(
+                              controller: controller,
+                              tokens: tokens,
+                              onPicked: _retainFirebarFocus,
+                            ),
+                          ),
                         ),
                       ],
-                      const SizedBox(width: 4),
-                      _FirebarShortcutHint(
-                        keys: 'esc',
-                        action: 'exit',
-                        tokens: tokens,
-                        onTap: widget.onExit,
-                      ),
+                      if (!amb &&
+                          controller.firebarOptions.isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  controller.firebarOptionPrompt ??
+                                      'Choose:',
+                                  style: tokens.metaStyle.copyWith(
+                                    color: tokens.text,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                for (var index = 0;
+                                    index <
+                                        controller
+                                            .filteredFirebarOptions.length;
+                                    index++) ...[
+                                  const SizedBox(width: 4),
+                                  _FirebarOptionButton(
+                                    option: controller
+                                        .filteredFirebarOptions[index],
+                                    selected: index ==
+                                        controller.firebarOptionIndex,
+                                    controller: controller,
+                                    tokens: tokens,
+                                    onPicked: _retainFirebarFocus,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
+                ),
+                if (active && !amb) ...[
+                  const SizedBox(width: 8),
+                  const _FirebarKbd('Tab accept'),
+                  const SizedBox(width: 4),
+                  const _FirebarKbd('↵ write'),
+                  const SizedBox(width: 4),
+                  const _FirebarKbd('Esc'),
+                ] else if (!active) ...[
+                  const SizedBox(width: 8),
+                  const _FirebarKbd('⌘K'),
                 ],
               ],
-            );
-          },
+                ),
+              ),
+            ),
         ),
+        if (_writtenToast) ...[
+          const SizedBox(height: 6),
+          const Row(
+            children: [
+              PhosphorIcon(
+                PhosphorIconsBold.check,
+                size: 14,
+                color: Color(0xFF7FD6A0),
+              ),
+              SizedBox(width: 6),
+              Text(
+                'Written to caption',
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 12,
+                  color: Color(0xFF7FD6A0),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// Prototype `inw.sh` width while the H/V chooser owns the bar.
+  double _shrunkInputWidth(String text) {
+    final chars = text.isEmpty ? 1 : text.length;
+    return (chars * 9.5) + 6;
+  }
+
+  Widget _buildTypingField({
+    required CaptionV2Controller controller,
+    required FfTokens tokens,
+    required bool active,
+    required bool amb,
+  }) {
+    return _FirebarTypingField(
+      inputKey: _firebarInputKey,
+      active: active,
+      focusNode: widget.focusNode,
+      textController: widget.textController,
+      tokens: tokens,
+      lineTokens: amb ? const [] : controller.firebarLineTokens,
+      ghostCompletion: amb ? null : _ghostSuffix(controller),
+      onKey: _handleKey,
+      onChanged: (value) {
+        controller.setSearchQuery(value);
+        if (controller.searchQuery != value) {
+          _syncFieldFromController();
+        }
+      },
+      // H/V chips and suggestions sit outside the TextField; unfocusing on
+      // tap-outside races with pick handlers and drops the caret.
+      onTapOutside: active
+          ? null
+          : (_) {
+              widget.focusNode.unfocus();
+            },
+      onSubmitted: amb
+          ? () {}
+          : () {
+              final wrote = controller.applyFirebarLine();
+              if (wrote) {
+                _flashWrittenToast();
+              } else if (controller.firebarMenuOpen) {
+                controller.commitFirebarMenu();
+              }
+              _retainFirebarFocus();
+            },
+    );
+  }
+
+  /// Grey ghost completion after the caret (top unique / word completion).
+  String? _ghostSuffix(CaptionV2Controller controller) {
+    if (controller.firebarJerseySideChoiceOpen) return null;
+    final typed = controller.searchQuery;
+    if (typed.isEmpty) return null;
+    final completion = controller.firebarWordCompletion;
+    if (completion != null &&
+        completion.toLowerCase().startsWith(typed.toLowerCase()) &&
+        completion.length > typed.length) {
+      return completion.substring(typed.length);
+    }
+    final sel = controller.firebarMenuSelection;
+    if (sel == null) return null;
+    final label = sel.kind == FirebarResultKind.player
+        ? (sel.player?.fullName ?? '')
+        : (controller.verbDefinition(sel.verbKey ?? '')?.label ??
+            sel.verbKey ??
+            '');
+    if (label.isEmpty) return null;
+    final lower = label.toLowerCase();
+    final q = typed.toLowerCase();
+    if (lower.startsWith(q)) return label.substring(typed.length);
+    final words = lower.split(RegExp(r'\s+'));
+    for (final w in words) {
+      if (w.startsWith(q)) {
+        final at = lower.indexOf(w);
+        if (at >= 0) return '  → ${label.substring(at)}';
+      }
+    }
+    return null;
+  }
+}
+
+class _FirebarKbd extends StatelessWidget {
+  const _FirebarKbd(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: const Color(0xFF262D35),
+        borderRadius: BorderRadius.circular(5),
       ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontFamily: FfTokens.fontFamily,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF959AA0),
         ),
       ),
     );
@@ -517,120 +700,131 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
 
 class _FirebarTypingField extends StatelessWidget {
   const _FirebarTypingField({
+    required this.inputKey,
     required this.active,
     required this.focusNode,
     required this.textController,
     required this.tokens,
+    required this.lineTokens,
     required this.onKey,
     required this.onChanged,
     required this.onSubmitted,
     this.onTapOutside,
+    this.ghostCompletion,
   });
 
+  final GlobalKey inputKey;
   final bool active;
   final FocusNode focusNode;
   final TextEditingController textController;
   final FfTokens tokens;
+  final List<FirebarShorthandToken> lineTokens;
   final FocusOnKeyEventCallback onKey;
   final ValueChanged<String> onChanged;
   final VoidCallback onSubmitted;
   final TapRegionCallback? onTapOutside;
+  final String? ghostCompletion;
 
   @override
   Widget build(BuildContext context) {
-    final style = tokens.metaStyle.copyWith(
+    final baseStyle = TextStyle(
+      fontFamily: FfTokens.fontFamily,
       color: tokens.text,
-      fontSize: 12,
+      fontSize: 15,
+      fontWeight: FontWeight.w500,
+      height: 1.2,
     );
     final typed = textController.text;
+    final errorStyle = baseStyle.copyWith(color: const Color(0xFFFF5A5A));
+    final verbStyle = baseStyle.copyWith(color: const Color(0xFFFFB08F));
     final field = Focus(
       onKeyEvent: onKey,
-      child: TextField(
+      child: KeyedSubtree(
         key: const ValueKey('firebar-input'),
-        enabled: active,
-        focusNode: focusNode,
-        controller: textController,
-        maxLines: 1,
-        style: style,
-        cursorColor: FfTokens.firebar,
-        decoration: const InputDecoration(
-          border: InputBorder.none,
-          isDense: true,
-          contentPadding: EdgeInsets.symmetric(vertical: 6),
+        child: TextField(
+          key: inputKey,
+          // Keep enabled while Firebar is open so focus/caret survive rebuilds.
+          enabled: active,
+          readOnly: false,
+          showCursor: active,
+          focusNode: focusNode,
+          controller: textController,
+          maxLines: 1,
+          style: baseStyle.copyWith(color: Colors.transparent),
+          cursorColor: FfTokens.firebar,
+          cursorWidth: 2,
+          decoration: const InputDecoration(
+            border: InputBorder.none,
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(vertical: 6),
+          ),
+          onChanged: onChanged,
+          onSubmitted: (_) => onSubmitted(),
+          onTapOutside: onTapOutside,
         ),
-        onChanged: onChanged,
-        onSubmitted: (_) => onSubmitted(),
-        onTapOutside: onTapOutside,
       ),
     );
-    // Always the same Stack. Dropping it when the ending appears or
-    // disappears was disposing the field mid-Backspace, and macOS beeped.
-    // The orange ending is painted above the field so the field cannot cover it.
-    final ghost = Stack(
-      alignment: Alignment.centerLeft,
-      children: [
-        field,
-        IgnorePointer(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
+
+    final spans = <InlineSpan>[];
+    if (lineTokens.isEmpty) {
+      spans.add(
+        TextSpan(
+          text: typed.isEmpty ? (active ? '' : ' ') : typed,
+          style: baseStyle,
+        ),
+      );
+    } else {
+      for (var i = 0; i < lineTokens.length; i++) {
+        if (i > 0) spans.add(TextSpan(text: ' ', style: baseStyle));
+        final token = lineTokens[i];
+        final TextStyle tokenStyle;
+        if (token.error) {
+          tokenStyle = errorStyle;
+        } else if (token.completed && token.isVerb) {
+          tokenStyle = verbStyle;
+        } else {
+          tokenStyle = baseStyle;
+        }
+        spans.add(TextSpan(text: token.display, style: tokenStyle));
+      }
+      if (typed.endsWith(' ')) {
+        spans.add(TextSpan(text: ' ', style: baseStyle));
+      }
+    }
+    if (ghostCompletion != null && ghostCompletion!.isNotEmpty) {
+      spans.add(
+        TextSpan(
+          text: ghostCompletion,
+          style: baseStyle.copyWith(color: const Color(0xFF6A6E73)),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 30,
+      child: Stack(
+        alignment: Alignment.centerLeft,
+        children: [
+          field,
+          IgnorePointer(
             child: Text.rich(
-              TextSpan(
-                style: style,
-                children: [
-                  TextSpan(
-                    text: typed.isEmpty ? ' ' : typed,
-                    style: const TextStyle(color: Colors.transparent),
-                  ),
-                  const TextSpan(text: ''),
-                ],
-              ),
+              TextSpan(style: baseStyle, children: spans),
               maxLines: 1,
               overflow: TextOverflow.clip,
               softWrap: false,
             ),
           ),
-        ),
-      ],
-    );
-    // Keep this field in a SizedBox. Swapping that box for Expanded or Flexible
-    // disposed the field mid-keystroke, and macOS beeped.
-    // Only the letters the user typed. The rest of a match waits for Enter.
-    final visible = typed;
-    final painter = TextPainter(
-      text: TextSpan(
-        text: visible.isEmpty ? ' ' : visible,
-        style: tokens.metaStyle.copyWith(fontSize: 12),
+        ],
       ),
-      maxLines: 1,
-      textDirection: TextDirection.ltr,
-    )..layout();
-    // Always a small slot. It grows with the letters the user typed,
-    // which pushes chips and shortcuts along the line.
-    final tightWidth = visible.isEmpty ? 18.0 : painter.width + 10;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final maxWidth = constraints.maxWidth;
-        final width = maxWidth.isFinite && tightWidth > maxWidth
-            ? maxWidth
-            : tightWidth;
-        return SizedBox(
-          width: width,
-          height: 28,
-          child: ghost,
-        );
-      },
     );
   }
 }
 
 class _FirebarChip extends StatelessWidget {
   const _FirebarChip({
-    super.key,
     required this.result,
     required this.controller,
     required this.tokens,
-    this.compact = false,
-    this.subdued = false,
     this.selected = false,
     this.onSelect,
   });
@@ -638,142 +832,100 @@ class _FirebarChip extends StatelessWidget {
   final FirebarResult result;
   final CaptionV2Controller controller;
   final FfTokens tokens;
-  final bool compact;
-  final bool subdued;
   final bool selected;
   final VoidCallback? onSelect;
-
-  static String labelFor(
-    FirebarResult result,
-    CaptionV2Controller controller, {
-    required bool compact,
-  }) {
-    final player = result.player;
-    if (result.kind == FirebarResultKind.player && player != null) {
-      return compact
-          ? _compactPlayerLabel(player.fullName, player.jerseyNumber)
-          : player.fullName;
-    }
-    var label =
-        controller.verbDefinition(result.verbKey!)?.label ?? result.verbKey!;
-    if (result.kind == FirebarResultKind.verb &&
-        result.verbKey == controller.selectedVerb) {
-      if (result.verbKey == 'Home Run' && controller.rbi > 0) {
-        label = '$label · ${controller.rbi}R';
-      } else if (controller.verbNeedsRbi(result.verbKey!) &&
-          controller.rbi > 0) {
-        label = '$label · RBI ${controller.rbi}';
-      } else if (controller.verbNeedsBase(result.verbKey!) &&
-          (controller.selectedBase?.trim().isNotEmpty ?? false)) {
-        label = '$label · ${controller.selectedBase}';
-      }
-      if (controller.celebrationType != null) {
-        label = '$label · ${controller.celebrationType}';
-      }
-    }
-    return label;
-  }
 
   @override
   Widget build(BuildContext context) {
     final player = result.player;
-    final label = labelFor(result, controller, compact: compact);
-    final showJersey = player != null && !compact;
     final isVerb = result.kind == FirebarResultKind.verb;
-    final fill = subdued
-        ? tokens.badgeFill.withValues(alpha: 0.55)
-        : isVerb
-            ? const Color(0xFF322820)
-            : FfTokens.nocturneEl;
-    final border = subdued
-        ? tokens.divider
-        : selected
-            ? FfTokens.firebar
-            : isVerb
-                ? const Color(0xFFC4A574).withValues(alpha: 0.7)
-                : Colors.transparent;
-    final textColor = subdued
-        ? tokens.text.withValues(alpha: 0.38)
-        : isVerb
-            ? const Color(0xFFF6E7D2)
-            : tokens.text;
+    final isHome = result.isHome == true;
+    final abbr = isVerb
+        ? ''
+        : (isHome ? controller.homeAbbr : controller.awayAbbr).toUpperCase();
+    final jersey = (player?.jerseyNumber ?? '').trim();
+    final name = isVerb
+        ? (controller.verbDefinition(result.verbKey ?? '')?.label ??
+            result.verbKey ??
+            '')
+        : (player?.fullName ?? '');
+
+    final fill = isVerb
+        ? FfTokens.firebar.withValues(alpha: 0.14)
+        : const Color(0xFF262D35);
+    final textColor = isVerb ? const Color(0xFFFFB08F) : tokens.text;
+    final border = selected
+        ? FfTokens.firebar
+        : Colors.transparent;
+
     return Container(
-      key: subdued ? const ValueKey('firebar-chip-subdued') : null,
       height: 28,
-      padding: const EdgeInsets.fromLTRB(4, 3, 5, 3),
+      padding: const EdgeInsets.fromLTRB(9, 0, 4, 0),
       decoration: BoxDecoration(
         color: fill,
         borderRadius: BorderRadius.circular(7),
-        border: Border.all(
-          color: border,
-        ),
+        border: Border.all(color: border),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (showJersey) ...[
-            Container(
-              constraints: const BoxConstraints(minWidth: 24, minHeight: 20),
-              alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              decoration: BoxDecoration(
-                color: FfTokens.firebar.withValues(alpha: 0.32),
-                borderRadius: BorderRadius.circular(5),
-              ),
-              child: Text(
-                player.jerseyNumber ?? '—',
-                style: tokens.jerseyStyle.copyWith(
-                  color: FfTokens.firebar,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            const SizedBox(width: 5),
-          ],
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: onSelect,
-            child: Text(
-              label,
-              maxLines: 1,
-              style: tokens.metaStyle.copyWith(
-                color: textColor,
-                fontSize: 13,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!isVerb && jersey.isNotEmpty) ...[
+                  Text(
+                    jersey,
+                    style: const TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: FfTokens.firebar,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                Text(
+                  name,
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: textColor,
+                  ),
+                ),
+                if (!isVerb && abbr.isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    abbr,
+                    style: const TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF6A6E73),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
-          if ((result.kind == FirebarResultKind.verb &&
-                  result.verbKey != null &&
-                  controller.isVerbPinned(result.verbKey!)) ||
-              (result.kind == FirebarResultKind.player &&
-                  player != null &&
-                  result.isHome != null &&
-                  controller.isPlayerPinned(
-                    player,
-                    isHome: result.isHome!,
-                  ))) ...[
-            const SizedBox(width: 4),
-            PhosphorIcon(PhosphorIconsFill.pushPin,
-              size: 12,
-              color: subdued
-                  ? tokens.text.withValues(alpha: 0.38)
-                  : FfTokens.pinned,
-            ),
-          ],
           const SizedBox(width: 4),
           GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTapDown: (_) {
-              controller.removeFirebarChip(result);
-            },
-            child: const Padding(
-              padding: EdgeInsets.all(2),
-              child: PhosphorIcon(
-                PhosphorIconsBold.x,
-                size: 12,
-                color: FfTokens.nocturneT3,
+            onTapDown: (_) => controller.removeFirebarChip(result),
+            child: const SizedBox(
+              width: 20,
+              height: 20,
+              child: Center(
+                child: PhosphorIcon(
+                  PhosphorIconsBold.x,
+                  size: 11,
+                  color: Color(0xFF6A6E73),
+                ),
               ),
             ),
           ),
@@ -783,92 +935,361 @@ class _FirebarChip extends StatelessWidget {
   }
 }
 
-class _FirebarShortcutHint extends StatelessWidget {
-  const _FirebarShortcutHint({
-    required this.keys,
-    required this.action,
+/// Prototype H/V chooser: "Which #22?" + [H] #22 Name TOR · [V] #22 Name OTT.
+class _FirebarJerseySideChoices extends StatelessWidget {
+  const _FirebarJerseySideChoices({
+    required this.controller,
     required this.tokens,
-    this.onTap,
+    required this.onPicked,
   });
 
-  final String keys;
-  final String action;
+  final CaptionV2Controller controller;
   final FfTokens tokens;
-  final VoidCallback? onTap;
-
-  static const double height = 38;
-
-  static double widthFor(String keys, String action) {
-    const keyStyle = TextStyle(
-      fontFamily: FfTokens.fontFamily,
-      fontSize: 11,
-      fontWeight: FontWeight.w600,
-      letterSpacing: 0,
-    );
-    const actionStyle = TextStyle(
-      fontFamily: FfTokens.fontFamily,
-      fontSize: 9,
-      fontWeight: FontWeight.w600,
-      letterSpacing: 0.4,
-    );
-    final keyWidth = _firebarTextWidth(keys.toUpperCase(), keyStyle);
-    final actionWidth = _firebarTextWidth(action.toUpperCase(), actionStyle);
-    final text = keyWidth > actionWidth ? keyWidth : actionWidth;
-    const sidePadding = 20.0;
-    return text + sidePadding < height ? height : text + sidePadding;
-  }
+  final VoidCallback onPicked;
 
   @override
   Widget build(BuildContext context) {
-    final color = tokens.textSecondary;
-    final label = action.toUpperCase();
-    final shortcut = keys.toUpperCase();
+    final options = controller.filteredFirebarOptions;
+    final prompt = controller.firebarOptionPrompt ?? 'Which player?';
+    final jersey = RegExp(r'#(\d+)').firstMatch(prompt)?.group(1) ?? '';
+    String nameOf(FirebarOption o) {
+      final label = o.label;
+      final dash = label.indexOf('-');
+      if (dash < 0) return label;
+      return label.substring(dash + 1).trim();
+    }
+
+    FirebarOption? home;
+    FirebarOption? away;
+    for (final o in options) {
+      if (o.jerseyIsHome == true) home = o;
+      if (o.jerseyIsHome == false) away = o;
+    }
+
+    void pick(FirebarOption option) {
+      controller.chooseFirebarOption(option);
+      onPicked();
+    }
+
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        Text(
+          prompt,
+          style: const TextStyle(
+            fontFamily: FfTokens.fontFamily,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF959AA0),
+          ),
+        ),
+        if (home != null)
+          _AmbiguousPickButton(
+            sideKey: 'H',
+            jersey: jersey,
+            name: nameOf(home),
+            abbr: controller.homeAbbr.toUpperCase(),
+            onTap: () => pick(home!),
+          ),
+        if (away != null)
+          _AmbiguousPickButton(
+            sideKey: 'V',
+            jersey: jersey,
+            name: nameOf(away),
+            abbr: controller.awayAbbr.toUpperCase(),
+            onTap: () => pick(away!),
+          ),
+      ],
+    );
+  }
+}
+
+class _AmbiguousPickButton extends StatefulWidget {
+  const _AmbiguousPickButton({
+    required this.sideKey,
+    required this.jersey,
+    required this.name,
+    required this.abbr,
+    required this.onTap,
+  });
+
+  final String sideKey;
+  final String jersey;
+  final String name;
+  final String abbr;
+  final VoidCallback onTap;
+
+  @override
+  State<_AmbiguousPickButton> createState() => _AmbiguousPickButtonState();
+}
+
+class _AmbiguousPickButtonState extends State<_AmbiguousPickButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
     return MouseRegion(
-      cursor: onTap == null
-          ? SystemMouseCursors.basic
-          : SystemMouseCursors.click,
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Container(
-      width: widthFor(keys, action),
-      height: height,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      alignment: Alignment.center,
-      clipBehavior: Clip.hardEdge,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: tokens.divider),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            shortcut,
-            style: TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0,
-              height: 1,
-              color: color,
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          height: 28,
+          padding: const EdgeInsets.fromLTRB(4, 0, 10, 0),
+          decoration: BoxDecoration(
+            color: _hovered ? const Color(0xFF2A3035) : const Color(0xFF262D35),
+            borderRadius: BorderRadius.circular(7),
+            border: Border.all(
+              color: _hovered
+                  ? FfTokens.firebar.withValues(alpha: 0.6)
+                  : const Color(0x1EE8EEF4),
             ),
           ),
-          const SizedBox(height: 1),
-          Text(
-            label,
-            style: TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.4,
-              height: 1,
-              color: color,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                constraints: const BoxConstraints(minWidth: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: FfTokens.firebar,
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Text(
+                  widget.sideKey,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1A0A03),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 7),
+              if (widget.jersey.isNotEmpty) ...[
+                Text(
+                  widget.jersey,
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: FfTokens.firebar,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                widget.name,
+                style: const TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFFE8EEF4),
+                ),
+              ),
+              if (widget.abbr.isNotEmpty) ...[
+                const SizedBox(width: 6),
+                Text(
+                  widget.abbr,
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF6A6E73),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FirebarInlineSuggestions extends StatelessWidget {
+  const _FirebarInlineSuggestions({
+    super.key,
+    required this.controller,
+    required this.tokens,
+    required this.onCommit,
+  });
+
+  final CaptionV2Controller controller;
+  final FfTokens tokens;
+  final ValueChanged<int> onCommit;
+
+  @override
+  Widget build(BuildContext context) {
+    final results = controller.firebarMenuResults.take(4).toList();
+    if (results.isEmpty) return const SizedBox.shrink();
+    final selected = controller.firebarMenuIndex.clamp(0, results.length - 1);
+
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E242A),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0x1EE8EEF4)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x66000000),
+            blurRadius: 18,
+            offset: Offset(0, 8),
           ),
         ],
       ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < results.length; i++)
+            _SuggestionRow(
+              controller: controller,
+              result: results[i],
+              selected: i == selected,
+              hint: i == selected ? '↵' : '⌘${i + 1}',
+              onHover: () => controller.hoverFirebarMenu(i),
+              onCommit: () => onCommit(i),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SuggestionRow extends StatefulWidget {
+  const _SuggestionRow({
+    required this.controller,
+    required this.result,
+    required this.selected,
+    required this.hint,
+    required this.onHover,
+    required this.onCommit,
+  });
+
+  final CaptionV2Controller controller;
+  final FirebarResult result;
+  final bool selected;
+  final String hint;
+  final VoidCallback onHover;
+  final VoidCallback onCommit;
+
+  @override
+  State<_SuggestionRow> createState() => _SuggestionRowState();
+}
+
+class _SuggestionRowState extends State<_SuggestionRow> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final result = widget.result;
+    final isPlayer = result.kind == FirebarResultKind.player;
+    final player = result.player;
+    final jersey = (player?.jerseyNumber ?? '').trim();
+    final name = isPlayer
+        ? (player?.fullName ?? '')
+        : (widget.controller.verbDefinition(result.verbKey ?? '')?.label ??
+            result.verbKey ??
+            '');
+    final abbr = isPlayer
+        ? ((result.isHome == true
+                ? widget.controller.homeAbbr
+                : widget.controller.awayAbbr)
+            .toUpperCase())
+        : '';
+    final fill = widget.selected
+        ? const Color(0xFF2A3035)
+        : (_hovered ? const Color(0xFF262D35) : Colors.transparent);
+    final showKbd = widget.selected || _hovered;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) {
+        setState(() => _hovered = true);
+        widget.onHover();
+      },
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onCommit,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 36),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: fill,
+            borderRadius: BorderRadius.circular(7),
+          ),
+          child: Row(
+            children: [
+              PhosphorIcon(
+                PhosphorIconsRegular.arrowBendDownRight,
+                size: 15,
+                color: widget.selected
+                    ? FfTokens.firebar
+                    : const Color(0xFF6A6E73),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text.rich(
+                  TextSpan(
+                    style: const TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 13,
+                      color: Color(0xFFE8EEF4),
+                    ),
+                    children: [
+                      if (isPlayer) ...[
+                        TextSpan(
+                          text: name,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        if (jersey.isNotEmpty)
+                          TextSpan(
+                            text: ' #$jersey',
+                            style: const TextStyle(
+                              color: Color(0xFFFF8A5C),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        if (abbr.isNotEmpty)
+                          TextSpan(
+                            text: '  $abbr',
+                            style: const TextStyle(
+                              color: Color(0xFF6A6E73),
+                              fontSize: 12,
+                            ),
+                          ),
+                      ] else
+                        TextSpan(
+                          text: name,
+                          style: const TextStyle(
+                            color: Color(0xFFFFB08F),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                    ],
+                  ),
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Opacity(
+                opacity: showKbd ? 1 : 0,
+                child: _FirebarKbd(widget.hint),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -881,12 +1302,14 @@ class _FirebarOptionButton extends StatelessWidget {
     required this.selected,
     required this.controller,
     required this.tokens,
+    required this.onPicked,
   });
 
   final FirebarOption option;
   final bool selected;
   final CaptionV2Controller controller;
   final FfTokens tokens;
+  final VoidCallback onPicked;
 
   @override
   Widget build(BuildContext context) {
@@ -900,7 +1323,10 @@ class _FirebarOptionButton extends StatelessWidget {
 
     return InkWell(
       canRequestFocus: false,
-      onTap: () => controller.chooseFirebarOption(option),
+      onTap: () {
+        controller.chooseFirebarOption(option);
+        onPicked();
+      },
       borderRadius: BorderRadius.circular(6),
       child: Container(
         height: 26,
@@ -913,6 +1339,9 @@ class _FirebarOptionButton extends StatelessWidget {
         ),
         child: Text(
           option.label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          softWrap: false,
           style: tokens.metaStyle.copyWith(
             color: textColor,
             fontSize: 12,
@@ -923,192 +1352,3 @@ class _FirebarOptionButton extends StatelessWidget {
     );
   }
 }
-
-
-String _compactPlayerLabel(String fullName, String? jerseyNumber) {
-  final parts = fullName
-      .trim()
-      .split(RegExp(r'\s+'))
-      .where((part) => part.isNotEmpty)
-      .toList(growable: false);
-  final jersey = (jerseyNumber ?? '').trim();
-  final number = jersey.isEmpty ? '' : '#$jersey ';
-  if (parts.length <= 1) {
-    return '$number$fullName'.trim();
-  }
-  final rest = parts.sublist(1).join(' ');
-  return '$number${parts.first[0]}. $rest';
-}
-
-double _firebarTextWidth(String text, TextStyle style) {
-  final painter = TextPainter(
-    text: TextSpan(text: text.isEmpty ? ' ' : text, style: style),
-    maxLines: 1,
-    textDirection: TextDirection.ltr,
-  )..layout();
-  return painter.width;
-}
-
-double _typingSlotWidth(String typed, TextStyle style) {
-  if (typed.isEmpty) return 18;
-  return _firebarTextWidth(typed, style) + 10;
-}
-
-bool _firebarChipPinned(CaptionV2Controller controller, FirebarResult result) {
-  final player = result.player;
-  if (result.kind == FirebarResultKind.verb &&
-      result.verbKey != null &&
-      controller.isVerbPinned(result.verbKey!)) {
-    return true;
-  }
-  if (result.kind == FirebarResultKind.player &&
-      player != null &&
-      result.isHome != null &&
-      controller.isPlayerPinned(player, isHome: result.isHome!)) {
-    return true;
-  }
-  return false;
-}
-
-double _firebarChipWidth(
-  CaptionV2Controller controller,
-  FfTokens tokens,
-  FirebarResult result, {
-  required bool compact,
-  required bool selected,
-}) {
-  final label = _FirebarChip.labelFor(result, controller, compact: compact);
-  final nameStyle = tokens.metaStyle.copyWith(
-    fontSize: 13,
-    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-  );
-  var width = 11.0;
-  final player = result.player;
-  if (player != null && !compact) {
-    final jersey = player.jerseyNumber ?? '—';
-    final jerseyWidth = _firebarTextWidth(
-      jersey,
-      tokens.jerseyStyle.copyWith(fontSize: 11, fontWeight: FontWeight.w600),
-    );
-    final badge = jerseyWidth + 8;
-    width += (badge < 24 ? 24 : badge) + 5;
-  }
-  width += _firebarTextWidth(label, nameStyle);
-  if (_firebarChipPinned(controller, result)) width += 16;
-  width += 20;
-  return width;
-}
-
-double _firebarContentWidth({
-  required CaptionV2Controller controller,
-  required FfTokens tokens,
-  required String typed,
-  required Set<int> compact,
-}) {
-  const titleStyle = TextStyle(
-    fontFamily: FfTokens.fontFamily,
-    fontSize: 13,
-    fontWeight: FontWeight.w600,
-    letterSpacing: 0,
-  );
-  const keyStyle = TextStyle(
-    fontFamily: FfTokens.fontFamily,
-    fontSize: 10.5,
-    fontWeight: FontWeight.w400,
-    letterSpacing: 0,
-  );
-  final typingStyle = tokens.metaStyle.copyWith(fontSize: 12);
-  var width = 15 +
-      5 +
-      _firebarTextWidth('Firebar', titleStyle) +
-      6 +
-      (_firebarTextWidth('⌘K', keyStyle) + 12) +
-      8 +
-      1;
-  var children = 1;
-  width += _typingSlotWidth(typed, typingStyle);
-  children++;
-  final chips = controller.firebarCommitted;
-  for (var index = 0; index < chips.length; index++) {
-    width += _firebarChipWidth(
-      controller,
-      tokens,
-      chips[index],
-      compact: compact.contains(index),
-      selected: index == controller.firebarChipCursor,
-    );
-    children++;
-  }
-  if (controller.firebarOptions.isNotEmpty) {
-    width += _firebarTextWidth(
-      controller.firebarOptionPrompt ?? 'Choose:',
-      tokens.metaStyle.copyWith(fontSize: 12),
-    );
-    children++;
-    for (var index = 0;
-        index < controller.filteredFirebarOptions.length;
-        index++) {
-      final option = controller.filteredFirebarOptions[index];
-      width += _firebarTextWidth(
-            option.label,
-            tokens.metaStyle.copyWith(
-              fontSize: 12,
-              fontWeight: index == controller.firebarOptionIndex
-                  ? FontWeight.w600
-                  : FontWeight.w400,
-            ),
-          ) +
-          22;
-      children++;
-    }
-  }
-  if (children > 1) width += (children - 1) * 6;
-  return width;
-}
-
-double _shortcutClusterWidth(CaptionV2Controller controller) {
-  if (!controller.searchOpen) return 0;
-  var width = 8 + 1 + 6 + _FirebarShortcutHint.widthFor('⌘S', 'save');
-  if (controller.ftpModeEnabled) {
-    width += 4 + _FirebarShortcutHint.widthFor('⌘↵', 'ftp');
-  }
-  width += 4 + _FirebarShortcutHint.widthFor('esc', 'exit');
-  return width;
-}
-
-Set<int> _compactPlayerIndexes({
-  required double maxWidth,
-  required CaptionV2Controller controller,
-  required FfTokens tokens,
-  required String typed,
-}) {
-  final players = <int>[
-    for (var index = 0; index < controller.firebarCommitted.length; index++)
-      if (controller.firebarCommitted[index].kind == FirebarResultKind.player)
-        index,
-  ];
-  if (players.isEmpty || !maxWidth.isFinite) return const {};
-  for (var count = 0; count <= players.length; count++) {
-    final compact = players.take(count).toSet();
-    final used = _firebarContentWidth(
-      controller: controller,
-      tokens: tokens,
-      typed: typed,
-      compact: compact,
-    );
-    if (used <= maxWidth) return compact;
-  }
-  return players.toSet();
-}
-
-bool _pinnedVerbIsPaused(
-  CaptionV2Controller controller,
-  FirebarResult chip,
-  bool typingVerbs,
-) {
-  if (!typingVerbs || chip.kind != FirebarResultKind.verb) return false;
-  final verb = chip.verbKey;
-  if (verb == null || !controller.isVerbPinned(verb)) return false;
-  return controller.firebarSelectedResult?.verbKey != verb;
-}
-

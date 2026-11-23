@@ -101,8 +101,6 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   bool _saveInFlight = false;
   VoidCallback? _confirmBurstSaveSelected;
   bool _serialBylinesPromptOpen = false;
-  /// Burst available after a normal save — user opts in via Review burst / B.
-  _PendingBurstOffer? _pendingBurst;
   bool _mobileThumbsOpen = false;
   bool _captionExpanded = false;
   int _lastSyncedColumnFocus = -1;
@@ -158,7 +156,6 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         selection: TextSelection.collapsed(offset: query.length),
       );
     }
-    _clearPendingBurstIfPastChain();
     final status = _controller.statusMessage;
     if (status != _lastObservedStatus) {
       _lastObservedStatus = status;
@@ -215,32 +212,6 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     setState(() {});
   }
 
-  void _clearPendingBurst() {
-    if (_pendingBurst == null) return;
-    _pendingBurst = null;
-  }
-
-  void _clearPendingBurstIfPastChain() {
-    final pending = _pendingBurst;
-    if (pending == null) return;
-    if (!_controller.burstDetectionEnabled) {
-      _clearPendingBurst();
-      return;
-    }
-    final path = _controller.currentPath;
-    if (path == null) return;
-    final curIdx = _controller.imagePaths.indexOf(path);
-    if (curIdx < 0) return;
-    var lastIdx = -1;
-    for (final pth in pending.chain) {
-      final i = _controller.imagePaths.indexOf(pth);
-      if (i > lastIdx) lastIdx = i;
-    }
-    if (lastIdx >= 0 && curIdx > lastIdx) {
-      _clearPendingBurst();
-    }
-  }
-
   Map<String, String> _snapshotSavedCaptionValues() {
     final previous = _controller.previousCaption;
     // Prefer the live caption when the user is actively captioning so
@@ -283,64 +254,6 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       'XMP:Subject': keywords,
       'XMP-dc:Subject': keywords,
     };
-  }
-
-  void _setPendingBurst({
-    required List<String> chain,
-    Set<String>? initiallySelected,
-  }) {
-    if (chain.length < 2) return;
-    setState(() {
-      _pendingBurst = _PendingBurstOffer(
-        chain: List<String>.from(chain),
-        initiallySelected: initiallySelected == null
-            ? null
-            : Set<String>.from(initiallySelected),
-        captionValues: _snapshotSavedCaptionValues(),
-      );
-    });
-  }
-
-  Future<void> _reviewPendingBurst() async {
-    final pending = _pendingBurst;
-    if (pending == null || _burstSaveDialogOpen) return;
-    final decision = await _showBurstSaveDialog(
-      pending.chain,
-      initiallySelected: pending.initiallySelected,
-    );
-    if (!mounted) return;
-    if (decision == null || decision.currentOnly) {
-      _clearPendingBurst();
-      setState(() {});
-      return;
-    }
-    final alreadySaved = decision.paths
-        .where(_controller.savedImages.contains)
-        .toList();
-    final toWrite = decision.paths
-        .where((p) => !_controller.savedImages.contains(p))
-        .toList();
-    CaptionSaveResult? result;
-    if (toWrite.isNotEmpty) {
-      result = await _controller.savePathsWithFixedValues(
-        toWrite,
-        pending.captionValues,
-      );
-    }
-    if (!mounted) return;
-    final savedPaths = <String>{
-      ...alreadySaved,
-      ...?result?.succeededPaths,
-    };
-    _clearPendingBurst();
-    if (savedPaths.isNotEmpty) {
-      _controller.advanceAfterBurstSelection(
-        chain: pending.chain,
-        savedPaths: savedPaths,
-        keepSearchOpen: _controller.searchOpen,
-      );
-    }
-    setState(() {});
   }
 
   Future<void> _promptSerialBylines() async {
@@ -427,7 +340,19 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   Future<void> _openCaptionIptcEditor({bool force = false}) async {
     if (!mounted || _captionIptcDialogOpen) return;
     final c = _controller;
-    if (!force && c.missingCaptionIptcLabels.isEmpty) return;
+    final missing = c.missingCaptionIptcLabels;
+    if (!force && missing.isEmpty) return;
+
+    // Match the session caption style so red gaps match the chip warning.
+    final game = c.currentGameInfoForCaption();
+    final template = c.captionTemplateForGame(game);
+    // Panel field ids are title-case ('Country Code'); missing labels may
+    // lower-case the trailing word ('Country code').
+    String? focusField;
+    if (missing.isNotEmpty) {
+      final raw = missing.first.trim();
+      focusField = raw.toLowerCase() == 'country code' ? 'Country Code' : raw;
+    }
 
     _captionIptcDialogOpen = true;
     try {
@@ -436,9 +361,10 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         folderPath: c.sessionFolderPath,
         enableWriting: true,
         populateFromFolder: true,
-        initialMissingHighlight: c.missingCaptionIptcLabels.isNotEmpty
-            ? IptcMissingHighlight.caption
-            : null,
+        captionTemplate: template,
+        initialFocusField: focusField,
+        initialMissingHighlight:
+            missing.isNotEmpty ? IptcMissingHighlight.caption : null,
       );
       if (!mounted || summary == null) return;
 
@@ -534,7 +460,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     if (_handleCropShortcut(event)) return true;
     if (_handleCropSwapShortcut(event)) return true;
     if (_handleSaveShortcut(event)) return true;
-    if (_handleBurstReviewShortcut(event)) return true;
+    if (_handleIptcShortcut(event)) return true;
     if (_handleFirebarUndoShortcut(event)) return true;
     if (_handleFirebarFocusShortcut(event)) return true;
     if (_searchFocus.hasFocus && _handleFirebarMenuKey(event)) return true;
@@ -613,10 +539,11 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     return true;
   }
 
-  /// B opens the pending burst review when the alert is showing.
-  bool _handleBurstReviewShortcut(KeyEvent event) {
+  /// I opens the IPTC editor while the thumbnail / photo column is focused.
+  bool _handleIptcShortcut(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
-    if (_pendingBurst == null || _burstSaveDialogOpen) return false;
+    if (!_controller.sessionReady || _controller.sessionLoading) return false;
+    if (_controller.columnFocus != 3) return false;
     if (captionV2FocusIsEditable()) return false;
     final keys = HardwareKeyboard.instance;
     if (keys.isMetaPressed ||
@@ -625,12 +552,14 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         keys.isShiftPressed) {
       return false;
     }
-    if (event.logicalKey != LogicalKeyboardKey.keyB) return false;
-    unawaited(_reviewPendingBurst());
+    final isI = event.logicalKey == LogicalKeyboardKey.keyI ||
+        event.character?.toLowerCase() == 'i';
+    if (!isI) return false;
+    unawaited(_openCaptionIptcEditor(force: true));
     return true;
   }
 
-  /// ⌘K / Ctrl+K focuses Firebar even when another text field has focus.
+  /// ⌘K / Ctrl+K focuses Firebar from anywhere except an active text field.
   bool _handleFirebarFocusShortcut(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
     final keys = HardwareKeyboard.instance;
@@ -638,6 +567,9 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         !keys.isAltPressed &&
         event.logicalKey == LogicalKeyboardKey.keyK;
     if (!chord) return false;
+    if (captionV2FocusIsEditable() && !_searchFocus.hasFocus) {
+      return false;
+    }
     _openSearch();
     return true;
   }
@@ -716,21 +648,48 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     final key = event.logicalKey;
     if (key == LogicalKeyboardKey.keyH) {
       _controller.chooseFirebarJerseySide(isHome: true);
+      _retainFirebarFocusAfterPick();
       return true;
     }
     if (key == LogicalKeyboardKey.keyV) {
       _controller.chooseFirebarJerseySide(isHome: false);
+      _retainFirebarFocusAfterPick();
       return true;
     }
     return false;
   }
 
-  /// Global ⌘S / Ctrl+S / Shift+Enter / ⌘Enter / ⌘⇧Enter.
+  /// H/V teardown rebuilds the Firebar field — keep the cursor ready.
+  void _retainFirebarFocusAfterPick() {
+    if (!_controller.searchOpen) {
+      _controller.setSearchOpen(true);
+    }
+    final query = _controller.searchQuery;
+    _searchText.value = TextEditingValue(
+      text: query,
+      selection: TextSelection.collapsed(offset: query.length),
+    );
+    void focusIfReady() {
+      if (!mounted || !_controller.searchOpen) return;
+      _searchFocus.requestFocus();
+    }
+
+    focusIfReady();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      focusIfReady();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        focusIfReady();
+      });
+    });
+  }
+
+  /// Global ⌘S / Ctrl+S / Shift+Enter / ⌘⇧Enter.
   ///
-  /// With FTP on, Shift+Enter and ⌘Enter (Ctrl+Enter too) save and FTP. ⌘S
-  /// still saves only. Plain Enter stays insert. Flutter [Shortcuts] only
-  /// fire when focus is inside that subtree; this handler still works when
-  /// focus is in a text field, drum lane, or lost.
+  /// With FTP on, Shift+Enter and ⌘⇧Enter save and FTP. Plain ⌘Enter does
+  /// not (too close to Firebar Return). ⌘S still saves only. Plain Enter
+  /// applies the Firebar line. Flutter [Shortcuts] only fire when focus is
+  /// inside that subtree; this handler still works when focus is in a text
+  /// field, drum lane, or lost.
   bool _handleSaveShortcut(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
 
@@ -769,36 +728,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     );
     if (chord == CaptionV2SaveChord.none) return false;
 
-    final cmdShiftEnter = isEnter &&
-        keys.isShiftPressed &&
-        (keys.isMetaPressed || keys.isControlPressed);
-    if (cmdShiftEnter) {
-      if (_controller.searchOpen &&
-          (_controller.firebarCanQuickSavePlayer ||
-              _controller.firebarCanQuickSaveVerb)) {
-        _controller.commitSelectedFirebarResult();
-        _searchText.clear();
-      }
-      if (chord == CaptionV2SaveChord.transmit) {
-        unawaited(_saveTransmitAndNext());
-      } else {
-        unawaited(_saveAndNext());
-      }
-      return true;
-    }
-
-    // Firebar: Shift+Enter and ⌘Enter commit the highlighted player or verb
-    // first, or pick FTP from the destination chips (which already uploads).
-    if (isEnter && _controller.searchOpen) {
-      if (_controller.firebarShowShiftEnterSaveHint) {
-        final fullyHandled = _controller.commitFirebarForShiftEnterSave(
-          transmit: chord == CaptionV2SaveChord.transmit,
-        );
-        _searchText.clear();
-        if (fullyHandled) return true;
-      }
-    }
-
+    // ⌘⇧Enter / Shift+Enter → FTP (or save). Firebar line is applied inside
+    // _saveAndNext / _saveTransmitAndNext. Plain ⌘Enter is intentionally not FTP.
     if (chord == CaptionV2SaveChord.transmit) {
       unawaited(_saveTransmitAndNext());
     } else {
@@ -993,7 +924,26 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     }
   }
 
+  /// Apply a typed Firebar line before Save & Next. Empty line is fine.
+  /// Returns false when the line is red/ambiguous (save aborted).
+  bool _applyFirebarLineBeforeSave() {
+    if (!_controller.searchOpen) return true;
+    if (_controller.searchQuery.trim().isEmpty &&
+        _controller.firebarOptions.isEmpty) {
+      return true;
+    }
+    final ok = _controller.applyFirebarLine();
+    _searchText.value = TextEditingValue(
+      text: _controller.searchQuery,
+      selection: TextSelection.collapsed(
+        offset: _controller.searchQuery.length,
+      ),
+    );
+    return ok;
+  }
+
   Future<void> _saveAndNext() async {
+    if (!_applyFirebarLineBeforeSave()) return;
     await _saveInDirection(next: true);
   }
 
@@ -1032,7 +982,6 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       if (!mounted) return;
       _controller.setSelectedImagePaths(result.failedPaths);
       if (result.anySucceeded) {
-        _clearPendingBurst();
         _controller.advanceAfterBurstSelection(
           chain: chain,
           savedPaths: result.succeededPaths.toSet(),
@@ -1046,6 +995,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   }
 
   Future<void> _saveTransmitAndNext() async {
+    if (!_applyFirebarLineBeforeSave()) return;
     await _saveInDirection(next: true, transmit: true);
   }
 
@@ -1119,10 +1069,6 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     final selected = _controller.orderedSelectedImagePaths;
     // 2+ thumbs selected → write the same caption to every selected image.
     if (selected.length >= 2) {
-      final burstGroup = _controller.burstDetectionEnabled
-          ? _controller.burstGroupOverlapping(selected)
-          : null;
-      final alreadySaved = selected.every(_controller.savedImages.contains);
       final result = await _controller.savePaths(
         selected,
         allowIncomplete: forceIncomplete,
@@ -1130,15 +1076,6 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       if (!mounted) return;
       if (transmit) unawaited(_transmitSaved(result));
       _controller.setSelectedImagePaths(result.failedPaths);
-      if (result.anySucceeded &&
-          burstGroup != null &&
-          !alreadySaved &&
-          burstGroup.length > 1) {
-        _setPendingBurst(
-          chain: burstGroup,
-          initiallySelected: selected.toSet(),
-        );
-      }
       if (result.anySucceeded && advance && mounted) {
         if (next) {
           // Land on the frame after the last saved selection, not current+1.
@@ -1151,30 +1088,6 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         }
       }
       restoreFirebarFocus();
-      return;
-    }
-
-    final chain = _controller.burstDetectionEnabled
-        ? _controller.forwardBurstChain
-        : const <String>[];
-    final anchorAlreadySaved =
-        chain.isNotEmpty && _controller.savedImages.contains(chain.first);
-    if (chain.length > 1 && !anchorAlreadySaved) {
-      final result = await _controller.savePaths(
-        [chain.first],
-        allowIncomplete: forceIncomplete,
-      );
-      if (!mounted) return;
-      if (transmit) unawaited(_transmitSaved(result));
-      if (result.anySucceeded) {
-        _setPendingBurst(chain: chain);
-        if (advance) {
-          next
-              ? _controller.nextFrame(keepSearchOpen: keepFirebar)
-              : _controller.prevFrame(keepSearchOpen: keepFirebar);
-        }
-        restoreFirebarFocus();
-      }
       return;
     }
 
@@ -1634,18 +1547,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                         _closeSearch();
                         Navigator.of(context).maybePop();
                       },
-                      onSave: () {
-                        if (c.searchOpen &&
-                            (c.firebarCanQuickSavePlayer ||
-                                c.firebarCanQuickSaveVerb)) {
-                          c.commitSelectedFirebarResult();
-                          _searchText.clear();
-                        }
-                        unawaited(_saveAndNext());
-                      },
-                      onTransmit: () {
-                        unawaited(_saveTransmitAndNext());
-                      },
+                      onSave: () => unawaited(_saveAndNext()),
+                      onTransmit: () => unawaited(_saveTransmitAndNext()),
                     ),
                   ],
                 ),
@@ -1767,7 +1670,16 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
           NavigateFrameIntent: CaptionV2GuardedAction<NavigateFrameIntent>(
             onInvoke: (intent) {
               c.clearSelectedImagePaths();
-              intent.delta < 0 ? c.prevFrame() : c.nextFrame();
+              final keepFirebar = c.searchOpen;
+              intent.delta < 0
+                  ? c.prevFrame(keepSearchOpen: keepFirebar)
+                  : c.nextFrame(keepSearchOpen: keepFirebar);
+              if (keepFirebar) {
+                _searchText.clear();
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) _searchFocus.requestFocus();
+                });
+              }
               return null;
             },
           ),
@@ -1830,7 +1742,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                           maxWidth: constraints.maxWidth,
                           buildDesktop: (width) =>
                               _buildDesktopWorkspace(c, t, width),
-                          buildMobile: () => _buildMobileWorkspace(c, t),
+                          buildMobile: () => _buildMobileWorkspace(c),
                         ),
                         sessionActive: true,
                         // Keep desktop chrome (with the toggle) while previewing.
@@ -1880,6 +1792,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                   focused: c.columnFocus == 3,
                   onSavePrevious: _saveAndPrevious,
                   onSaveNext: _saveAndNext,
+                  onEditMissing: () =>
+                      unawaited(_openCaptionIptcEditor(force: true)),
                 ),
               ],
             ),
@@ -1895,17 +1809,6 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // One fixed banner slot — Missing fields or Burst — so Save /
-                // grids never jump when navigating photos.
-                _WorkspaceBannerSlot(
-                  tokens: t,
-                  missingLabels: c.missingCaptionIptcLabels,
-                  pendingBurstFrames: _pendingBurst?.chain.length,
-                  onEditMissing: () =>
-                      unawaited(_openCaptionIptcEditor(force: true)),
-                  onReviewBurst: () => unawaited(_reviewPendingBurst()),
-                  onDismissBurst: () => setState(_clearPendingBurst),
-                ),
                 Stack(
                   clipBehavior: Clip.none,
                   children: [
@@ -1922,13 +1825,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                       ),
                   ],
                 ),
-                // Always reserve warning height so Save / grids don't jump.
-                Visibility(
-                  visible: c.hasInlineSaveWarning,
-                  maintainSize: true,
-                  maintainAnimation: true,
-                  maintainState: true,
-                  child: _IncompleteCaptionWarning(
+                if (c.hasInlineSaveWarning)
+                  _IncompleteCaptionWarning(
                     tokens: t,
                     message: c.statusMessage ??
                         CaptionV2Controller.incompleteCaptionWarning,
@@ -1936,7 +1834,6 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                       _saveInDirection(next: true, allowIncomplete: true),
                     ),
                   ),
-                ),
                 _buildSearchBlock(c),
                 const SizedBox(height: 6),
                 Expanded(
@@ -1954,11 +1851,11 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     );
   }
 
-  Widget _buildMobileWorkspace(CaptionV2Controller c, FfTokens t) {
+  Widget _buildMobileWorkspace(CaptionV2Controller c) {
     final pageController = _pageController;
     if (pageController == null) return const SizedBox.shrink();
 
-    final body = MobileCaptionWorkspace(
+    return MobileCaptionWorkspace(
       controller: c,
       editSession: _photoEdit,
       pageController: pageController,
@@ -1982,25 +1879,6 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       showFtp: c.ftpModeEnabled,
       onEditRosters: _editRosters,
     );
-
-    if (_pendingBurst == null) return body;
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        body,
-        Positioned(
-          left: 12,
-          right: 12,
-          top: 8,
-          child: _BurstAvailableBanner(
-            frameCount: _pendingBurst!.chain.length,
-            tokens: t,
-            onReview: () => unawaited(_reviewPendingBurst()),
-            onDismiss: () => setState(_clearPendingBurst),
-          ),
-        ),
-      ],
-    );
   }
 
   Widget _buildSearchBlock(
@@ -2010,6 +1888,11 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     bool thumbsOpen = false,
     VoidCallback? onThumbs,
   }) {
+    final burstChain =
+        c.burstDetectionEnabled ? c.forwardBurstChain : const <String>[];
+    // Remaining frames after the current one (e.g. "next 2").
+    final burstApplyCount =
+        burstChain.length > 1 ? burstChain.length - 1 : 0;
     return CaptionV2ActionRow(
       onSavePrevious: _saveAndPrevious,
       onCopy: _copySelection,
@@ -2022,6 +1905,10 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       transmitEnabled: c.savedNotSentCount > 0 || c.currentPath != null,
       showTransmit: c.ftpModeEnabled && !mobileDock,
       hideOrangeActions: false,
+      burstApplyCount: burstApplyCount,
+      onApplyToBurst: burstApplyCount > 0
+          ? () => unawaited(_applyCaptionToBurst())
+          : null,
       ftpActive: c.transmitting,
       ftpProgress: c.ftpFileProgress,
       ftpThumbPath: c.ftpPreviewPath,
@@ -2095,10 +1982,6 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         c.originalCaption.trim().isNotEmpty;
     final captionText = c.displayedCaption;
     final multiWriteCount = c.orderedSelectedImagePaths.length;
-    final burstChain =
-        c.burstDetectionEnabled ? c.forwardBurstChain : const <String>[];
-    final burstApplyCount =
-        burstChain.length > 1 ? burstChain.length - 1 : 0;
     return CaptionStrip(
       leading: '',
       chips: const [],
@@ -2110,10 +1993,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       onClear: onClear,
       fullCaption: captionText,
       multiWriteCount: multiWriteCount,
-      burstApplyCount: burstApplyCount,
-      onApplyToBurst:
-          burstApplyCount > 0 ? () => unawaited(_applyCaptionToBurst()) : null,
       highlightPhrases: c.firebarInsertedHighlights,
+      verbHighlightPhrases: c.firebarInsertedVerbHighlights,
       provenanceSpans: c.captionProvenanceSpans,
       unmatchedTip: c.captionUnmatchedTip,
       captionHint: hasLiveCaption
@@ -2139,22 +2020,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
           textController: _searchText,
           onActivate: _openSearch,
           onExit: _closeSearch,
-          onSave: () {
-            if (c.searchOpen &&
-                (c.firebarCanQuickSavePlayer || c.firebarCanQuickSaveVerb)) {
-              c.commitSelectedFirebarResult();
-              _searchText.clear();
-            }
-            unawaited(_saveAndNext());
-          },
-          onTransmit: () {
-            if (c.searchOpen && c.firebarShowShiftEnterSaveHint) {
-              final handled = c.commitFirebarForShiftEnterSave(transmit: true);
-              _searchText.clear();
-              if (handled) return;
-            }
-            unawaited(_saveTransmitAndNext());
-          },
+          onSave: () => unawaited(_saveAndNext()),
+          onTransmit: () => unawaited(_saveTransmitAndNext()),
         ),
       inningLabel: c.inningLabel,
       timingUnitLabel: c.timingUnitTitle,
@@ -2333,53 +2200,6 @@ class _PlayerCodeBox extends StatelessWidget {
   }
 }
 
-/// Fixed-height workspace banner: Missing fields wins over Burst available.
-class _WorkspaceBannerSlot extends StatelessWidget {
-  const _WorkspaceBannerSlot({
-    required this.tokens,
-    required this.missingLabels,
-    required this.pendingBurstFrames,
-    required this.onEditMissing,
-    required this.onReviewBurst,
-    required this.onDismissBurst,
-  });
-
-  final FfTokens tokens;
-  final List<String> missingLabels;
-  final int? pendingBurstFrames;
-  final VoidCallback onEditMissing;
-  final VoidCallback onReviewBurst;
-  final VoidCallback onDismissBurst;
-
-  static const double height = 36;
-
-  @override
-  Widget build(BuildContext context) {
-    Widget? child;
-    if (missingLabels.isNotEmpty) {
-      child = _MissingCaptionIptcBanner(
-        labels: missingLabels,
-        tokens: tokens,
-        onEdit: onEditMissing,
-      );
-    } else if (pendingBurstFrames != null) {
-      child = _BurstAvailableBanner(
-        frameCount: pendingBurstFrames!,
-        tokens: tokens,
-        onReview: onReviewBurst,
-        onDismiss: onDismissBurst,
-      );
-    }
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: SizedBox(
-        height: height,
-        child: child,
-      ),
-    );
-  }
-}
-
 /// Inline (non-modal) prompt when Save is blocked (no action / no Creator).
 class _IncompleteCaptionWarning extends StatelessWidget {
   const _IncompleteCaptionWarning({
@@ -2445,172 +2265,6 @@ class _IncompleteCaptionWarning extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _MissingCaptionIptcBanner extends StatelessWidget {
-  const _MissingCaptionIptcBanner({
-    required this.labels,
-    required this.tokens,
-    required this.onEdit,
-  });
-
-  final List<String> labels;
-  final FfTokens tokens;
-  final VoidCallback onEdit;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: FfTokens.dangerBg,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        onTap: onEdit,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: FfTokens.dangerBorder),
-          ),
-          child: Row(
-            children: [
-              const PhosphorIcon(
-                PhosphorIconsRegular.warning,
-                size: 14,
-                color: FfTokens.danger,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Missing fields',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: FfTokens.danger,
-                  ),
-                ),
-              ),
-              Text(
-                'Open IPTC',
-                style: TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: tokens.textTertiary,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Opt-in burst review after a normal save (no auto dialog).
-class _PendingBurstOffer {
-  const _PendingBurstOffer({
-    required this.chain,
-    required this.captionValues,
-    this.initiallySelected,
-  });
-
-  final List<String> chain;
-  final Map<String, String> captionValues;
-  final Set<String>? initiallySelected;
-}
-
-class _BurstAvailableBanner extends StatelessWidget {
-  const _BurstAvailableBanner({
-    required this.frameCount,
-    required this.tokens,
-    required this.onReview,
-    required this.onDismiss,
-  });
-
-  final int frameCount;
-  final FfTokens tokens;
-  final VoidCallback onReview;
-  final VoidCallback onDismiss;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: tokens.accent.withValues(alpha: 0.55)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.28),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          PhosphorIcon(
-            PhosphorIconsRegular.stack,
-            size: 14,
-            color: tokens.accent,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Burst available · $frameCount frames',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontFamily: FfTokens.fontFamily,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: tokens.accent,
-              ),
-            ),
-          ),
-          Text(
-            'B',
-            style: TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              color: tokens.textSecondary,
-            ),
-          ),
-          const SizedBox(width: 8),
-          TextButton(
-            onPressed: onReview,
-            style: TextButton.styleFrom(
-              foregroundColor: tokens.accent,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              visualDensity: VisualDensity.compact,
-            ),
-            child: const Text('Review burst'),
-          ),
-          const SizedBox(width: 2),
-          IconButton(
-            onPressed: onDismiss,
-            tooltip: 'Dismiss',
-            icon: PhosphorIcon(
-              PhosphorIconsRegular.x,
-              size: 14,
-              color: tokens.textSecondary,
-            ),
-            visualDensity: VisualDensity.compact,
-            padding: const EdgeInsets.all(4),
-            constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
-          ),
-        ],
       ),
     );
   }
@@ -3661,7 +3315,7 @@ class _DesktopBodyState extends State<_DesktopBody> {
         ],
       );
     }
-    if (!controller.searchOpen) return laneRow;
+    // Prototype keeps the match footer always visible (idle ⌘K + active hints).
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -4109,7 +3763,92 @@ class _FirebarMatchFooter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    final active = controller.searchOpen;
+    final chips = controller.firebarCommitted;
+    final names = [
+      for (final chip in chips)
+        if (chip.kind == FirebarResultKind.player)
+          chip.player?.fullName ?? ''
+        else
+          controller.verbDefinition(chip.verbKey ?? '')?.label ??
+              chip.verbKey ??
+              '',
+    ].where((s) => s.isNotEmpty).join(' ');
     final query = controller.searchQuery.trim();
+    final matching = names.isNotEmpty
+        ? names
+        : (query.isNotEmpty ? query : '');
+
+    Widget body;
+    if (!active) {
+      body = Text.rich(
+        TextSpan(
+          style: tokens.metaStyle.copyWith(
+            color: const Color(0xFF959AA0),
+            fontSize: 12,
+          ),
+          children: const [
+            TextSpan(text: 'Press '),
+            WidgetSpan(
+              alignment: PlaceholderAlignment.middle,
+              child: _FooterKbd('⌘K'),
+            ),
+            TextSpan(text: ' to caption by typing'),
+          ],
+        ),
+      );
+    } else if (matching.isNotEmpty) {
+      body = Text.rich(
+        TextSpan(
+          style: tokens.metaStyle.copyWith(
+            color: const Color(0xFF959AA0),
+            fontSize: 12,
+          ),
+          children: [
+            const TextSpan(text: 'Matching '),
+            TextSpan(
+              text: matching,
+              style: const TextStyle(
+                color: Color(0xFFE8EEF4),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      body = Text.rich(
+        TextSpan(
+          style: tokens.metaStyle.copyWith(
+            color: const Color(0xFF959AA0),
+            fontSize: 12,
+          ),
+          children: const [
+            WidgetSpan(
+              alignment: PlaceholderAlignment.middle,
+              child: _FooterKbd('↑↓'),
+            ),
+            TextSpan(text: ' choose '),
+            WidgetSpan(
+              alignment: PlaceholderAlignment.middle,
+              child: _FooterKbd('Tab'),
+            ),
+            TextSpan(text: ' or '),
+            WidgetSpan(
+              alignment: PlaceholderAlignment.middle,
+              child: _FooterKbd('Space'),
+            ),
+            TextSpan(text: ' accept '),
+            WidgetSpan(
+              alignment: PlaceholderAlignment.middle,
+              child: _FooterKbd('⌫'),
+            ),
+            TextSpan(text: ' remove last'),
+          ],
+        ),
+      );
+    }
+
     return Container(
       height: 28,
       alignment: Alignment.centerLeft,
@@ -4118,27 +3857,39 @@ class _FirebarMatchFooter extends StatelessWidget {
         color: tokens.surface,
         border: Border(top: BorderSide(color: tokens.divider)),
       ),
-      child: query.isEmpty
-          ? const SizedBox.shrink()
-          : Text.rich(
-              TextSpan(
-                style: tokens.metaStyle.copyWith(
-                  color: tokens.textSecondary,
-                  fontSize: 12,
-                ),
-                children: [
-                  const TextSpan(text: 'Matching '),
-                  TextSpan(
-                    text: query,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  TextSpan(
-                    text:
-                        ' — ${controller.firebarMatchedCount} of ${controller.firebarTotalCount}',
-                  ),
-                ],
-              ),
-            ),
+      child: Row(
+        children: [
+          Flexible(child: body),
+          const Spacer(),
+        ],
+      ),
+    );
+  }
+}
+
+class _FooterKbd extends StatelessWidget {
+  const _FooterKbd(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: const Color(0xFF262D35),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontFamily: FfTokens.fontFamily,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF959AA0),
+        ),
+      ),
     );
   }
 }

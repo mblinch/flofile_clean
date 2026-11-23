@@ -48,6 +48,8 @@ class CaptionV2ActionRow extends StatelessWidget {
     this.transmitEnabled = true,
     this.showTransmit = true,
     this.hideOrangeActions = false,
+    this.burstApplyCount = 0,
+    this.onApplyToBurst,
     this.onFtpHistory,
     this.onFtpProgress,
     this.ftpProgress,
@@ -77,6 +79,11 @@ class CaptionV2ActionRow extends StatelessWidget {
 
   /// Firebar is open, so Save & Next and FTP stay off this row.
   final bool hideOrangeActions;
+
+  /// Remaining frames after the current one in a forward burst. When > 0 and
+  /// [onApplyToBurst] is set, shows Save & apply to next N beside Save & Next.
+  final int burstApplyCount;
+  final VoidCallback? onApplyToBurst;
   final VoidCallback? onFtpHistory;
 
   /// Opens the live list of files on the wire and waiting behind them.
@@ -125,8 +132,13 @@ class CaptionV2ActionRow extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-        final compact = singleRow || width <= 1060;
+        final showBurst = !hideOrangeActions &&
+            burstApplyCount > 0 &&
+            onApplyToBurst != null;
+        // Burst adds another chip; tighten earlier so Copy/Paste don't overflow.
+        final compact = singleRow || width <= 1060 || (showBurst && width <= 1320);
         final narrow = !singleRow && width <= 640;
+        final clipIconOnly = singleRow || (showBurst && width <= 1180);
         final pad = singleRow ? 8.0 : (compact ? 12.0 : 16.0);
         final prev = _NavButton(
           label: singleRow ? 'Prev' : 'Save & Prev',
@@ -139,27 +151,32 @@ class CaptionV2ActionRow extends StatelessWidget {
         );
         final clip = _ClipGroup(
           compact: compact,
-          iconOnly: singleRow,
+          iconOnly: clipIconOnly,
           onCopy: onCopy,
           onPaste: onPaste,
           onPasteLast: onPastePrevious,
           pasteEnabled: pasteEnabled,
-          pasteLastShortcut: singleRow ? null : _pasteLastShortcut,
+          pasteLastShortcut: null,
         );
         final next = hideOrangeActions
             ? null
             : _NavButton(
                 label: singleRow ? 'Next' : 'Save & Next',
-                tooltip: singleRow
-                    ? 'Save & Next'
-                    : 'Save & Next  ·  $_saveNextShortcut',
-                shortcut: singleRow ? null : _saveNextShortcut,
+                tooltip: 'Save & Next',
                 icon: PhosphorIconsRegular.caretRight,
                 enabled: saveNextEnabled,
                 padding: EdgeInsets.symmetric(horizontal: pad),
                 trailingPad: compact ? pad : 12,
                 onPressed: onSaveNext,
               );
+        final burst = showBurst
+            ? _BurstApplyNavButton(
+                count: burstApplyCount,
+                compact: compact || singleRow || width <= 1240,
+                onPressed: onApplyToBurst,
+                padding: EdgeInsets.symmetric(horizontal: pad),
+              )
+            : null;
         final thumbs = onThumbs == null
             ? null
             : _ThumbsButton(
@@ -173,7 +190,6 @@ class CaptionV2ActionRow extends StatelessWidget {
                 enabled: transmitEnabled,
                 onTransmit: onTransmit,
                 onHistory: ftpActive ? null : onFtpHistory,
-                shortcut: singleRow ? null : _ftpShortcut,
               )
             : null;
 
@@ -201,6 +217,7 @@ class CaptionV2ActionRow extends StatelessWidget {
                       prev,
                       clip,
                       if (next != null) next,
+                      if (burst != null) burst,
                       if (ftp != null) ftp,
                       if (ftpActive &&
                           ftpThumbPath != null &&
@@ -225,10 +242,24 @@ class CaptionV2ActionRow extends StatelessWidget {
                   ],
                   prev,
                   const SizedBox(width: 6),
-                  Flexible(child: clip),
+                  Flexible(
+                    fit: FlexFit.loose,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: clip,
+                    ),
+                  ),
                   if (next != null) ...[
                     const SizedBox(width: 6),
                     next,
+                  ],
+                  if (burst != null) ...[
+                    const SizedBox(width: 6),
+                    Flexible(
+                      fit: FlexFit.loose,
+                      child: burst,
+                    ),
                   ],
                   if (ftp != null) ...[
                     const SizedBox(width: 6),
@@ -253,7 +284,6 @@ class CaptionV2ActionRow extends StatelessWidget {
                                   enabled: transmitEnabled,
                                   onTransmit: onTransmit,
                                   onHistory: ftpActive ? null : onFtpHistory,
-                                  shortcut: singleRow ? null : _ftpShortcut,
                                 ),
                               ),
                               if (showThumb) ...[
@@ -489,6 +519,58 @@ class _MobileDockBar extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Burst save action shown beside Save & Next when a multi-frame burst is
+/// detected from the current frame forward.
+class _BurstApplyNavButton extends StatelessWidget {
+  const _BurstApplyNavButton({
+    required this.count,
+    required this.onPressed,
+    required this.padding,
+    this.compact = false,
+  });
+
+  final int count;
+  final VoidCallback? onPressed;
+  final EdgeInsets padding;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = count == 1
+        ? (compact ? 'Apply to next' : 'Save & apply to next')
+        : (compact
+            ? 'Apply to next $count'
+            : 'Save & apply to next $count');
+    return _BarTap(
+      tooltip: count == 1
+          ? 'Save this caption to the next burst frame'
+          : 'Save this caption to the next $count burst frames',
+      enabled: onPressed != null,
+      onTap: onPressed,
+      builder: (hovered, pressed) {
+        const accent = Color(0xFF2EE6C5);
+        final bg = hovered
+            ? accent.withValues(alpha: 0.28)
+            : accent.withValues(alpha: 0.16);
+        final border = accent.withValues(alpha: hovered ? 0.95 : 0.55);
+        return _BarShell(
+          height: _kActionRowHeight,
+          padding: padding,
+          background: bg,
+          pressed: pressed,
+          outline: border,
+          child: Text(
+            label,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+            style: _barLabel(accent, weight: FontWeight.w700),
+          ),
+        );
+      },
     );
   }
 }
@@ -1241,7 +1323,6 @@ class TransmitDock extends StatelessWidget {
           if (onPastePrevious != null) ...[
             _UtilityButton(
               label: 'Paste Last',
-              hint: isMobile ? null : _pasteLastShortcut,
               tokens: t,
               onPressed: onPastePrevious,
             ),
@@ -1249,7 +1330,6 @@ class TransmitDock extends StatelessWidget {
           ],
           _OutlinedActionButton(
             label: 'Save & Next',
-            hint: isMobile ? null : _saveNextShortcut,
             tokens: t,
             minHeight: btnMinH,
             enabled: saveNextEnabled,
@@ -1258,7 +1338,6 @@ class TransmitDock extends StatelessWidget {
           const SizedBox(width: 10),
           _OutlinedActionButton(
             label: 'Transmit',
-            hint: isMobile ? null : _ftpShortcut,
             tokens: t,
             minHeight: btnMinH,
             enabled: transmitEnabled,

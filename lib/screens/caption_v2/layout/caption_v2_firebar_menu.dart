@@ -96,7 +96,9 @@ class FirebarAutocompleteMenu extends StatelessWidget {
                               padding:
                                   const EdgeInsets.fromLTRB(10, 8, 10, 14),
                               child: Text(
-                                'No match for “$query”. Enter adds it as free text.',
+                                query.isEmpty
+                                    ? 'No match'
+                                    : 'No match for “$query”.',
                                 style: tokens.metaStyle.copyWith(
                                   fontSize: 13,
                                   color: FfTokens.nocturneT3,
@@ -201,14 +203,21 @@ class _FirebarMenuRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final player = result.player;
     final isPlayer = result.kind == FirebarResultKind.player && player != null;
+    final sideCode = isPlayer
+        ? '${result.isHome == true ? 'h' : 'v'}${(player.jerseyNumber ?? '').trim()}'
+        : '';
     final name = isPlayer
         ? player.fullName
         : controller.verbDefinition(result.verbKey ?? '')?.label ??
             result.verbKey ??
             '';
     final meta = isPlayer
-        ? controller.teamNameLabel(isHome: result.isHome == true)
-        : 'Verb';
+        ? controller.homeAbbr.isNotEmpty || controller.awayAbbr.isNotEmpty
+            ? (result.isHome == true
+                ? controller.homeAbbr
+                : controller.awayAbbr)
+            : controller.teamNameLabel(isHome: result.isHome == true)
+        : 'Action';
     // Jersey-only digits skip name marks. Compound `3 battles` marks the
     // verb fragment on verb rows and leaves player names unmarked.
     final markQuery = () {
@@ -238,10 +247,10 @@ class _FirebarMenuRow extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               SizedBox(
-                width: 24,
+                width: isPlayer ? 32 : 24,
                 child: isPlayer
                     ? Text(
-                        player.jerseyNumber ?? '',
+                        sideCode,
                         style: TextStyle(
                           fontFamily: FfTokens.monoFamily,
                           fontSize: 12,
@@ -296,7 +305,7 @@ class _FirebarMenuRow extends StatelessWidget {
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: const Text(
-                    '↵',
+                    '⇥',
                     style: TextStyle(
                       fontFamily: FfTokens.fontFamily,
                       fontSize: 11,

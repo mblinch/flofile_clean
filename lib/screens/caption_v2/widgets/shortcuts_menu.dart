@@ -30,19 +30,21 @@ class _CaptionV2ShortcutsMenuButtonState
   List<({String keys, String label})> _rowsFor(bool ftpMode) {
     final mod = _mod;
     return [
-      (keys: '$mod K', label: 'Open Firebar search'),
-      (keys: 'Esc', label: 'Close Firebar / clear search'),
+      (keys: '$mod K', label: 'Focus Firebar shorthand line'),
+      (keys: 'Esc', label: 'Exit Firebar (keep selection)'),
+      (keys: 'Tab', label: 'Pick Firebar dropdown row'),
+      (keys: '↵', label: 'Apply Firebar line'),
       (keys: 'Tab / ⇧Tab', label: 'Cycle Home → Verbs → Away'),
       (keys: '← →', label: 'Previous / next frame'),
+      (keys: 'I', label: 'Open IPTC (thumbnails focused)'),
       (keys: '$mod S', label: 'Save & next'),
       (
         keys: '⇧↵',
         label: ftpMode ? 'Save, FTP & next' : 'Save & next',
       ),
-      if (ftpMode) (keys: '$mod ↵', label: 'Save, FTP & next'),
+      if (ftpMode) (keys: '$mod ⇧ ↵', label: 'Save, FTP & next'),
       if (ftpMode) (keys: '⇧ F', label: 'Transmit current'),
       (keys: '$mod ⇧ V', label: 'Paste previous caption'),
-      (keys: '↵', label: 'Apply last combo & save next'),
       (keys: '$mod Z', label: 'Undo Firebar change'),
       (keys: 'Ctrl + #', label: 'Home jersey number'),
       (
@@ -50,7 +52,6 @@ class _CaptionV2ShortcutsMenuButtonState
         label: 'Away jersey number',
       ),
       (keys: '⇧ + #', label: 'Select verb by number'),
-      (keys: '1–9', label: 'Pick Firebar result'),
     ];
   }
 

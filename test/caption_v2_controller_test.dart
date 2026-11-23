@@ -2275,77 +2275,62 @@ void main() {
       ..awayRoster = [away]
       ..setSearchOpen(true);
 
+    // Unique # confirms into a chip.
     controller.setSearchQuery('4');
     expect(controller.firebarOptions, isEmpty);
-    expect(controller.firebarOptionPrompt, isNull);
     expect(controller.selectedPlayers.single.player, same(unique));
+    expect(controller.firebarCommitted, hasLength(1));
+    expect(controller.searchQuery, isEmpty);
 
+    controller.removeLastFirebarChip();
+    expect(controller.firebarCommitted, isEmpty);
+    expect(controller.selectedPlayers, isEmpty);
+
+    // Typing alone stays in the field; Space opens the H/V prompt.
     controller.setSearchQuery('9');
     expect(controller.selectedPlayers, isEmpty);
-    expect(controller.firebarJerseySideChoiceOpen, isTrue);
+    expect(controller.firebarJerseySideChoiceOpen, isFalse);
     expect(controller.searchQuery, '9');
+
+    controller.setSearchQuery('9 ');
+    expect(controller.firebarJerseySideChoiceOpen, isTrue);
+    expect(controller.firebarOptionPrompt, 'Which #9?');
     expect(
-      controller.firebarHomeResults.map((result) => result.player?.fullName),
-      ['Home Ace'],
-    );
-    expect(
-      controller.firebarAwayResults.map((result) => result.player?.fullName),
-      ['Away Ace'],
+      controller.firebarOptions.map((o) => o.label).toList(),
+      ['H - Home Ace', 'V - Away Ace'],
     );
 
-    controller.moveFirebarJerseySide(1);
-    expect(controller.firebarSelectedResult?.isHome, isFalse);
-    controller.commitSelectedFirebarResult();
-    expect(controller.firebarOptions, isEmpty);
-    expect(controller.searchQuery, isEmpty);
+    controller.chooseFirebarJerseySide(isHome: false);
+    expect(controller.firebarJerseySideChoiceOpen, isFalse);
     expect(controller.selectedPlayers.single.player, same(away));
     expect(controller.selectedPlayers.single.isHome, isFalse);
-    expect(
-      controller.firebarCommitted.map((chip) => chip.player?.fullName),
-      ['Away Ace'],
-    );
-
-    controller.setSearchQuery('9 scores');
-    expect(controller.firebarJerseySideChoiceOpen, isTrue);
-    controller.chooseFirebarJerseySide(isHome: false);
-    expect(controller.searchQuery, 'scores');
-    expect(
-      controller.selectedPlayers.map((row) => row.player.fullName),
-      contains('Away Ace'),
-    );
-    expect(
-      controller.firebarCommitted.map((chip) => chip.player?.fullName),
-      contains('Away Ace'),
-    );
-
-    controller.setSearchQuery('9');
-    controller.chooseFirebarJerseySide(isHome: true);
-    expect(
-      controller.selectedPlayers.map((row) => row.player.fullName),
-      contains('Home Ace'),
-    );
+    expect(controller.firebarCommitted.single.player, same(away));
     expect(controller.searchQuery, isEmpty);
 
-    controller.setSearchQuery('9');
-    controller.chooseFirebarJerseySide(isHome: false);
-    expect(
-      controller.selectedPlayers.map((row) => row.player.fullName),
-      contains('Away Ace'),
-    );
+    controller.removeLastFirebarChip();
 
-    controller.setSearchQuery('9 looks');
+    // Enter on a shared # also opens the prompt.
+    controller.setSearchQuery('9');
+    expect(controller.applyFirebarLine(), isFalse);
     expect(controller.firebarJerseySideChoiceOpen, isTrue);
     controller.chooseFirebarJerseySide(isHome: true);
-    expect(controller.searchQuery, 'looks');
+    expect(controller.selectedPlayers.single.player, same(home));
+    expect(controller.selectedPlayers.single.isHome, isTrue);
+    expect(controller.firebarCommitted.single.player, same(home));
+
+    controller.removeLastFirebarChip();
+
+    // Space after number + verb still prompts, then keeps the rest of the line.
+    controller.setSearchQuery('9 looks');
+    expect(controller.firebarJerseySideChoiceOpen, isFalse);
+    expect(controller.applyFirebarLine(), isFalse);
+    expect(controller.firebarJerseySideChoiceOpen, isTrue);
+    controller.chooseFirebarJerseySide(isHome: true);
     expect(
       controller.selectedPlayers.map((row) => row.player.fullName),
       contains('Home Ace'),
     );
-    expect(controller.selectedVerb, 'Looks On');
-    expect(
-      controller.firebarCommitted.map((chip) => chip.player?.fullName),
-      contains('Home Ace'),
-    );
+    expect(controller.searchQuery.toLowerCase(), contains('look'));
   });
 
   test('Firebar still asks home or visitor when a longer jersey shares the digits',
@@ -2360,24 +2345,23 @@ void main() {
 
     controller.setSearchQuery('9');
     expect(controller.selectedPlayers, isEmpty);
-    expect(controller.firebarOptionPrompt, isNull);
+    expect(controller.firebarJerseySideChoiceOpen, isFalse);
     expect(controller.searchQuery, '9');
 
+    controller.setSearchQuery('9 ');
+    expect(controller.firebarJerseySideChoiceOpen, isTrue);
     controller.chooseFirebarJerseySide(isHome: false);
     expect(controller.selectedPlayers.single.player, same(away));
     expect(controller.selectedPlayers.single.isHome, isFalse);
+    expect(controller.firebarCommitted.single.player, same(away));
     expect(controller.searchQuery, isEmpty);
-    expect(
-      controller.firebarCommitted.map((chip) => chip.player?.fullName),
-      ['Away Ace'],
-    );
 
     controller.setSearchQuery('90');
-    expect(controller.firebarOptionPrompt, isNull);
-    expect(controller.searchQuery, '90');
+    expect(controller.firebarJerseySideChoiceOpen, isFalse);
+    expect(controller.firebarCommitted, hasLength(2));
     expect(
       controller.selectedPlayers.map((row) => row.player.fullName),
-      contains('Home Long'),
+      containsAll(['Away Ace', 'Home Long']),
     );
   });
 
@@ -2529,6 +2513,36 @@ void main() {
     expect(controller.firebarSelectedResult?.player, same(other));
     controller.moveFirebarSelection(1);
     expect(controller.firebarSelectedResult?.player, same(other));
+  });
+
+  test('Firebar hides already-picked players from suggestions', () {
+    final first = player('Auston Matthews', '34');
+    final second = player('Mitch Marner', '16');
+    final controller = CaptionV2Controller()
+      ..sport = 'hockey'
+      ..homeRoster = [first, second]
+      ..setSearchOpen(true);
+
+    controller.commitFirebarResult(
+      FirebarResult.player(player: first, isHome: true),
+    );
+    expect(controller.firebarCommitted.single.player, same(first));
+
+    controller.setSearchQuery('m');
+    expect(
+      controller.firebarMenuResults.map((r) => r.player?.fullName),
+      isNot(contains('Auston Matthews')),
+    );
+    expect(
+      controller.firebarMenuResults.map((r) => r.player?.fullName),
+      contains('Mitch Marner'),
+    );
+
+    // Re-commit is a no-op — still only one Matthews chip.
+    controller.commitFirebarResult(
+      FirebarResult.player(player: first, isHome: true),
+    );
+    expect(controller.firebarCommitted, hasLength(1));
   });
 
   test('Firebar commits chips, clears query, and exits cleanly', () {

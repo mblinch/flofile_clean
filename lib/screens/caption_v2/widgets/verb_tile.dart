@@ -124,14 +124,14 @@ class _VerbTileState extends State<VerbTile> {
         ? 13.5
         : (tileHeight * 0.62).clamp(6.0, 13.0);
     final labelColor = widget.dimmed
-        ? t.text.withValues(alpha: 0.38)
+        ? t.text.withValues(alpha: 0.22)
         : t.text;
 
     Color? fill;
     if (widget.firebarSelected) {
-      fill = FfTokens.firebar.withValues(alpha: 0.16);
+      fill = const Color(0xFF262D35);
     } else if (widget.selected) {
-      fill = t.selected;
+      fill = FfTokens.firebar.withValues(alpha: 0.14);
     } else if (_hovered) {
       fill = t.hover;
     }
@@ -171,9 +171,7 @@ class _VerbTileState extends State<VerbTile> {
                 color: fill,
                 borderRadius: BorderRadius.circular(FfTokens.radiusRow),
                 border: widget.firebarSelected
-                    ? Border.all(
-                        color: FfTokens.firebar.withValues(alpha: 0.42),
-                      )
+                    ? null
                     : widget.selected
                         ? const Border(
                             left: BorderSide(

@@ -75,7 +75,7 @@ class _PlayerRowState extends State<PlayerRow> {
     final jerseyFont = (nameFont * 0.9).clamp(6.0, 14.0);
     final iconSize = veryCompact ? 15.0 : 17.0;
     final nameColor = widget.dimmed
-        ? t.text.withValues(alpha: 0.34)
+        ? t.text.withValues(alpha: 0.22)
         : t.text;
     final showActions = _hovered &&
         (widget.onPinTap != null ||
@@ -86,9 +86,11 @@ class _PlayerRowState extends State<PlayerRow> {
 
     Color? fill;
     if (widget.firebarSelected) {
-      fill = FfTokens.firebar.withValues(alpha: 0.16);
+      // Top Firebar match — #262D35 (prototype `.it.top`).
+      fill = const Color(0xFF262D35);
     } else if (widget.selected) {
-      fill = t.selected;
+      // Committed Firebar chip — prototype `.it.sel`.
+      fill = FfTokens.firebar.withValues(alpha: 0.14);
     } else if (_hovered) {
       fill = t.hover;
     }
@@ -127,9 +129,7 @@ class _PlayerRowState extends State<PlayerRow> {
                 color: fill,
                 borderRadius: BorderRadius.circular(FfTokens.radiusRow),
                 border: widget.firebarSelected
-                    ? Border.all(
-                        color: FfTokens.firebar.withValues(alpha: 0.42),
-                      )
+                    ? null
                     : widget.selected
                         ? const Border(
                             left: BorderSide(

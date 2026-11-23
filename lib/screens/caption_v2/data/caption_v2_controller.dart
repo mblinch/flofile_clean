@@ -53,6 +53,7 @@ import 'burst_groups.dart';
 import 'caption_transfer_payload.dart';
 import 'caption_v2_caption_domain.dart';
 import 'effective_verb_catalog.dart';
+import 'firebar_shorthand.dart';
 import 'ftp_history.dart';
 import 'iptc_caption_writer.dart';
 import 'team_abbrev.dart';
@@ -964,7 +965,18 @@ class CaptionV2Controller extends ChangeNotifier {
   final List<FirebarResult> _firebarCommitted = [];
   final List<_FirebarUndoSnapshot> _firebarUndoStack = [];
 
+  /// Live shorthand caption line (tokens + preview). Applied only on Return.
+  FirebarShorthandLine? _firebarLine;
+
+  /// True after Firebar completed tokens wrote the live caption selection.
+  bool _firebarOwnsSelection = false;
+
+  /// After Backspace un-completes a token, don't immediately re-complete it.
+  String? _firebarSuppressCompleteTyped;
+
   /// Player keys auto-applied while Firebar search narrows to roster match(es).
+  /// Kept for undo compatibility; shorthand mode does not mutate selection
+  /// while typing.
   final Set<String> _firebarAutoPreviewKeys = {};
 
   /// Verb key auto-applied while Firebar search narrows to a single verb match.
@@ -972,6 +984,9 @@ class CaptionV2Controller extends ChangeNotifier {
   String? _firebarVerbPreviewKey;
   String? _firebarVerbPreviewPriorSelected;
   String? firebarOptionPrompt;
+
+  /// One-line reason when Return cannot apply (red token / ambiguous).
+  String? firebarApplyError;
   FirebarOptionKind? _firebarOptionKind;
   List<FirebarOption> firebarOptions = const [];
   int firebarOptionIndex = 0;
@@ -1003,11 +1018,130 @@ class CaptionV2Controller extends ChangeNotifier {
       selectedPlayers.isNotEmpty &&
       selectedVerb == null;
 
-  List<FirebarResult> get firebarHomeResults =>
-      _firebarRosterResults(homeRoster, isHome: true);
+  /// Current shorthand line (null when Firebar is empty / closed).
+  FirebarShorthandLine? get firebarLine => _firebarLine;
 
-  List<FirebarResult> get firebarAwayResults =>
-      _firebarRosterResults(awayRoster, isHome: false);
+  FirebarShorthandPreview? get firebarLinePreview => _firebarLine?.preview;
+
+  List<FirebarShorthandToken> get firebarLineTokens =>
+      _firebarLine?.tokens ?? const [];
+
+  FirebarShorthand _firebarShorthandEngine() {
+    final verbEntries = <FirebarVerbCatalogEntry>[];
+    final seen = <String>{};
+    for (final category in verbCategories) {
+      for (final verb
+          in verbDefinitionsByCategory[category] ?? const <EffectiveVerb>[]) {
+        if (!seen.add(verb.key)) continue;
+        verbEntries.add(
+          FirebarVerbCatalogEntry(
+            key: verb.key,
+            label: verb.label,
+            matchTexts: [
+              verb.label,
+              verb.key,
+              verb.singularPhrase,
+              verb.pluralPhrase,
+              verb.ingPhrase,
+              ...verb.keywords,
+            ],
+          ),
+        );
+      }
+    }
+    return FirebarShorthand(
+      homeRoster: homeRoster,
+      awayRoster: awayRoster,
+      verbs: verbEntries,
+      homeAbbrev: homeAbbr,
+      awayAbbrev: awayAbbr,
+      playerLastName: playerLastName,
+      excludedPlayerKeys: _firebarPickedPlayerKeys(),
+    );
+  }
+
+  /// Keys for players already on the caption / Firebar chips — not re-pickable.
+  /// Live Firebar search preview is temporary and stays matchable.
+  Set<String> _firebarPickedPlayerKeys() {
+    final keys = <String>{};
+    for (final chip in _firebarCommitted) {
+      if (chip.kind == FirebarResultKind.player) keys.add(chip.key);
+    }
+    for (final row in selectedPlayers) {
+      final key =
+          FirebarResult.player(player: row.player, isHome: row.isHome).key;
+      if (_firebarAutoPreviewKeys.contains(key)) continue;
+      keys.add(key);
+    }
+    return keys;
+  }
+
+  bool _isFirebarPlayerAlreadyPicked(FirebarResult result) {
+    if (result.kind != FirebarResultKind.player) return false;
+    return _firebarPickedPlayerKeys().contains(result.key);
+  }
+
+  FirebarResult _firebarResultFromMatch(FirebarMatch match) {
+    if (match.kind == FirebarMatchKind.verb) {
+      return FirebarResult.verb(match.verbKey);
+    }
+    return FirebarResult.player(
+      player: match.player!,
+      isHome: match.isHome!,
+    );
+  }
+
+  FirebarMatch? _firebarMatchFromResult(FirebarResult result) {
+    if (result.kind == FirebarResultKind.verb) {
+      final key = result.verbKey;
+      if (key == null) return null;
+      return FirebarMatch.verb(key);
+    }
+    final player = result.player;
+    final isHome = result.isHome;
+    if (player == null || isHome == null) return null;
+    return FirebarMatch.player(player: player, isHome: isHome);
+  }
+
+  List<FirebarResult> get firebarHomeResults {
+    final line = _firebarLine;
+    if (line == null || !searchOpen) {
+      return _firebarRosterResults(homeRoster, isHome: true);
+    }
+    final active = line.activeMatches
+        .where((m) => m.kind == FirebarMatchKind.player && m.isHome == true)
+        .map(_firebarResultFromMatch)
+        .toList(growable: false);
+    if (active.isNotEmpty) return active;
+    return [
+      for (final m in [
+        ...line.preview.subjects,
+        ...line.preview.opponents,
+      ])
+        if (m.kind == FirebarMatchKind.player && m.isHome == true)
+          _firebarResultFromMatch(m),
+    ];
+  }
+
+  List<FirebarResult> get firebarAwayResults {
+    final line = _firebarLine;
+    if (line == null || !searchOpen) {
+      return _firebarRosterResults(awayRoster, isHome: false);
+    }
+    final active = line.activeMatches
+        .where((m) => m.kind == FirebarMatchKind.player && m.isHome == false)
+        .map(_firebarResultFromMatch)
+        .toList(growable: false);
+    if (active.isNotEmpty) return active;
+    return [
+      for (final m in [
+        ...line.preview.subjects,
+        ...line.preview.opponents,
+      ])
+        if (m.kind == FirebarMatchKind.player && m.isHome == false)
+          _firebarResultFromMatch(m),
+    ];
+  }
 
   List<FirebarResult> get firebarVerbResults {
     final query = _normalizedFirebarQuery;
@@ -1100,6 +1234,10 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   FirebarResult? get firebarSelectedResult {
+    // Roster/verb orange highlight follows the dropdown's highlighted row.
+    if (firebarMenuOpen) {
+      return firebarMenuSelection;
+    }
     final results = firebarOrderedResults;
     if (firebarSelectionIndex < 0 || firebarSelectionIndex >= results.length) {
       return null;
@@ -1164,14 +1302,11 @@ class CaptionV2Controller extends ChangeNotifier {
       firebarVerbResults.length +
       firebarAwayResults.length;
 
-  /// Caption text Firebar just put into the sentence. Orange in the caption
-  /// while Firebar is open; date, venue, and byline stay the normal color.
+  /// Player names Firebar put into the caption (Firebar orange while open).
   List<String> get firebarInsertedHighlights {
     if (!searchOpen) return const [];
     final caption = displayedCaption;
     if (caption.trim().isEmpty) return const [];
-    final body = buildCaptionBody().trim();
-    if (body.isNotEmpty && caption.contains(body)) return [body];
     final found = <String>[];
     void add(String phrase) {
       final text = phrase.trim();
@@ -1182,11 +1317,29 @@ class CaptionV2Controller extends ChangeNotifier {
     for (final row in selectedPlayers) {
       add(row.player.fullName);
     }
+    return found;
+  }
+
+  /// Verb / action phrases in the caption (amber orange while Firebar is open).
+  List<String> get firebarInsertedVerbHighlights {
+    if (!searchOpen) return const [];
+    final caption = displayedCaption;
+    if (caption.trim().isEmpty) return const [];
+    final found = <String>[];
+    void add(String phrase) {
+      final text = phrase.trim();
+      if (text.isEmpty || found.contains(text)) return;
+      if (caption.contains(text)) found.add(text);
+    }
+
     add(customVerbPhrase);
     final verb = selectedVerb;
     if (verb != null) {
-      add(verbDefinition(verb)?.singularPhrase ?? '');
-      add(verbDefinition(verb)?.label ?? verb);
+      final def = verbDefinition(verb);
+      add(def?.singularPhrase ?? '');
+      add(def?.pluralPhrase ?? '');
+      add(def?.ingPhrase ?? '');
+      add(def?.label ?? verb);
     }
     return found;
   }
@@ -6724,6 +6877,7 @@ class CaptionV2Controller extends ChangeNotifier {
   void setSearchQuery(String q) {
     firebarMenuIndex = 0;
     firebarChipCursor = -1;
+    firebarApplyError = null;
     final inningMatch =
         RegExp(r'^(?:i(\d{1,2})|(\d{1,2})i)$', caseSensitive: false)
             .firstMatch(q.trim());
@@ -6739,9 +6893,8 @@ class CaptionV2Controller extends ChangeNotifier {
       manualCaptionOverride = null;
       mlbTimestampMatchedPath = null;
       searchQuery = '';
+      _firebarLine = null;
       firebarSelectionIndex = -1;
-      _clearFirebarAutoPlayerPreview();
-      _clearFirebarVerbPreview();
       notifyListeners();
       return;
     }
@@ -6752,8 +6905,6 @@ class CaptionV2Controller extends ChangeNotifier {
           _applyJerseySideChoice(isHome: side);
           return;
         }
-        // The prompt clears the field, so the next digit continues a longer
-        // number (`9` then `0` is `90`) instead of answering home or visitor.
         final continued = _jerseySideDigitContinuation(q);
         if (continued != null) {
           _clearFirebarOptions();
@@ -6770,28 +6921,229 @@ class CaptionV2Controller extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    final selectedKey = firebarSelectedResult?.key;
-    searchQuery = q;
-    final results = firebarOrderedResults;
+
     if (q.trim().isEmpty) {
-      // Full roster is visible for browsing — no orange caret until typing.
+      searchQuery = '';
+      _firebarLine = null;
+      _firebarSuppressCompleteTyped = null;
       firebarSelectionIndex = -1;
-      _clearFirebarAutoPlayerPreview();
-      _clearFirebarVerbPreview();
+      // Keep chip selection; only clear caption when there are no chips.
+      if (_firebarCommitted.isEmpty) {
+        _syncCaptionFromFirebarLine(
+          const FirebarShorthandLine(
+            tokens: [],
+            displayLine: '',
+            trailingSpace: false,
+            preview: FirebarShorthandPreview(),
+            activeTokenIndex: -1,
+          ),
+        );
+      } else {
+        _syncCaptionFromFirebarChips();
+      }
       notifyListeners();
       return;
     }
-    final retained = selectedKey == null
-        ? -1
-        : results.indexWhere((r) => r.key == selectedKey);
-    firebarSelectionIndex =
-        retained >= 0 ? retained : (results.isEmpty ? -1 : 0);
-    _syncFirebarPlayerPreview();
-    _syncFirebarVerbPreview();
-    // Unique token(s) write the caption immediately; ambiguous ones keep the
-    // per-token dropdown open.
-    if (_maybeAutoCommitUniqueFirebar()) return;
+
+    // Typing past the suppressed un-complete clears the hold.
+    if (_firebarSuppressCompleteTyped != null) {
+      final parts = q.trim().split(RegExp(r' +'));
+      final last = parts.isEmpty ? '' : parts.last;
+      if (FirebarShorthand.normalize(last) !=
+          FirebarShorthand.normalize(_firebarSuppressCompleteTyped!)) {
+        _firebarSuppressCompleteTyped = null;
+      }
+    }
+
+    final engine = _firebarShorthandEngine();
+    final line = engine.parse(
+      q,
+      prior: _firebarLine?.tokens,
+      suppressAutoCompleteFor: _firebarSuppressCompleteTyped,
+    );
+    _firebarLine = line;
+    searchQuery = line.displayLine;
+    final menu = firebarMenuResults;
+    firebarSelectionIndex = menu.isEmpty ? -1 : 0;
+    // Completed players/actions write the caption as you go (same as clicking).
+    _syncCaptionFromFirebarLine(line);
+
+    // Confirmed tokens become chips; only the open token stays in the field.
+    _promoteCompletedFirebarTokens(line);
+
+    // Space after a shared jersey # → ask H or V in the Firebar box.
+    if ((_firebarLine?.trailingSpace ?? false) &&
+        beginFirebarJerseySidePromptIfNeeded()) {
+      return;
+    }
     notifyListeners();
+  }
+
+  /// Move completed shorthand tokens into [firebarCommitted] chips and leave
+  /// only incomplete text in the Firebar field.
+  void _promoteCompletedFirebarTokens(FirebarShorthandLine line) {
+    final completed = <FirebarShorthandToken>[];
+    final open = <FirebarShorthandToken>[];
+    for (final token in line.tokens) {
+      if (token.completed && token.resolved != null && !token.error) {
+        completed.add(token);
+      } else if (token.typed.trim().isNotEmpty ||
+          token.display.trim().isNotEmpty) {
+        open.add(token);
+      }
+    }
+    if (completed.isEmpty) return;
+
+    var added = false;
+    for (final token in completed) {
+      final result = _firebarResultFromMatch(token.resolved!);
+      if (_firebarCommitted.any((chip) => chip.key == result.key)) continue;
+      _firebarCommitted.add(result);
+      added = true;
+    }
+
+    // Peel completed tokens out of the typing field.
+    final remainder = open.map((t) => t.display).join(' ');
+    final nextQuery = remainder.isEmpty
+        ? ''
+        : (line.trailingSpace ? '$remainder ' : remainder);
+    if (nextQuery != searchQuery || added) {
+      if (nextQuery.isEmpty) {
+        searchQuery = '';
+        _firebarLine = null;
+      } else {
+        final peeled = _firebarShorthandEngine().parse(
+          nextQuery,
+          prior: open,
+          suppressAutoCompleteFor: _firebarSuppressCompleteTyped,
+        );
+        _firebarLine = peeled;
+        searchQuery = peeled.displayLine;
+      }
+      firebarMenuIndex = 0;
+      _syncCaptionFromFirebarChips();
+    }
+  }
+
+  /// Caption selection from confirmed Firebar chips (and any open line tokens).
+  void _syncCaptionFromFirebarChips() {
+    final matches = <FirebarMatch>[
+      for (final chip in _firebarCommitted)
+        if (_firebarMatchFromResult(chip) != null)
+          _firebarMatchFromResult(chip)!,
+      if (_firebarLine != null)
+        for (final token in _firebarLine!.tokens)
+          if (token.completed && token.resolved != null) token.resolved!,
+    ];
+    if (matches.isEmpty) {
+      if (_firebarOwnsSelection) {
+        _firebarOwnsSelection = false;
+        selectedPlayers.clear();
+        _syncPrimaryPlayer();
+        _dropTeammatesIfSubjectLeft();
+        _syncPersonality();
+        _syncKeywords();
+      }
+      return;
+    }
+    _applyFirebarMatchesToCaption(matches);
+  }
+
+  void _applyFirebarMatchesToCaption(List<FirebarMatch> matches) {
+    _firebarOwnsSelection = true;
+
+    var actionIndex = -1;
+    for (var i = 0; i < matches.length; i++) {
+      if (matches[i].kind == FirebarMatchKind.verb) actionIndex = i;
+    }
+
+    final subjects = <RosterHit>[];
+    final opponents = <RosterHit>[];
+    String? actionKey;
+    for (var i = 0; i < matches.length; i++) {
+      final match = matches[i];
+      if (match.kind == FirebarMatchKind.verb) {
+        if (i == actionIndex) actionKey = match.verbKey;
+        continue;
+      }
+      if (match.player == null || match.isHome == null) continue;
+      final hit = RosterHit(player: match.player!, isHome: match.isHome!);
+      if (actionIndex < 0 || i < actionIndex) {
+        subjects.add(hit);
+      } else {
+        opponents.add(hit);
+      }
+    }
+
+    if (subjects.isEmpty && opponents.isEmpty && actionKey == null) return;
+
+    captionSelectionStarted = true;
+    manualCaptionOverride = null;
+    selectedPlayers
+      ..clear()
+      ..addAll([...subjects, ...opponents]);
+    _syncPrimaryPlayer();
+    _dropTeammatesIfSubjectLeft();
+
+    if (actionKey != null) {
+      if (verbDefinition(actionKey) == null) {
+        setCustomVerbPhrase(actionKey);
+      } else if (selectedVerb != actionKey) {
+        selectedVerb = actionKey;
+        _stashCustomVerbIfNeeded();
+        customVerbPhrase = '';
+        celebrationType = null;
+        if (!_verbNeedsRbi(actionKey)) rbi = 0;
+        if (!_verbNeedsBase(actionKey)) selectedBase = null;
+      }
+    }
+
+    _syncPersonality();
+    _syncKeywords();
+  }
+
+  /// Backspace: drop trailing space, delete a completed entry, or un-complete.
+  /// Returns true when the key was handled (TextField should not also edit).
+  bool backspaceFirebarShorthand() {
+    final line = _firebarLine;
+    if ((line == null || line.tokens.isEmpty) && searchQuery.isEmpty) {
+      if (_firebarCommitted.isEmpty) return false;
+      removeLastFirebarChip();
+      return true;
+    }
+
+    // Trailing space after a dropdown pick — remove it first.
+    if (line != null && line.trailingSpace) {
+      _firebarSuppressCompleteTyped = null;
+      setSearchQuery(searchQuery.trimRight());
+      return true;
+    }
+
+    if (line == null || line.tokens.isEmpty) return false;
+    final last = line.tokens.last;
+
+    // Completed entry → remove it entirely (and sync caption).
+    if (last.completed && !last.error) {
+      final remaining = line.tokens.sublist(0, line.tokens.length - 1);
+      _firebarSuppressCompleteTyped = null;
+      if (remaining.isEmpty) {
+        setSearchQuery('');
+      } else {
+        final rebuilt = remaining.map((t) => t.display).join(' ');
+        _firebarLine = _firebarShorthandEngine().parse(
+          '$rebuilt ',
+          prior: remaining,
+        );
+        searchQuery = _firebarLine!.displayLine;
+        _syncCaptionFromFirebarLine(_firebarLine!);
+        firebarMenuIndex = 0;
+        notifyListeners();
+      }
+      return true;
+    }
+
+    // Un-complete path is unused when we delete completed tokens wholesale.
+    return false;
   }
 
   /// True when every typed Firebar token has exactly one match.
@@ -6906,44 +7258,55 @@ class CaptionV2Controller extends ChangeNotifier {
     if (open && hideFirebar) return;
     if (open && !searchOpen) {
       searchQuery = '';
+      _firebarLine = null;
+      _firebarOwnsSelection = false;
+      _firebarSuppressCompleteTyped = null;
+      firebarApplyError = null;
       guidedSearchPrompt = null;
       _guidedSearchHits = const [];
       _pendingCommandInning = null;
       _clearFirebarOptions();
-      _firebarAutoPreviewKeys.clear();
-      _discardFirebarVerbPreview(keepSelection: true);
-      _firebarCommitted
-        ..clear()
-        ..addAll(
-          selectedPlayers.map(
-            (row) => FirebarResult.player(
-              player: row.player,
-              isHome: row.isHome,
-            ),
-          ),
-        );
-      if (customVerbPhrase.trim().isNotEmpty) {
-        _firebarCommitted.add(FirebarResult.verb(customVerbPhrase.trim()));
-      } else if (selectedVerb != null) {
-        _firebarCommitted.add(FirebarResult.verb(selectedVerb));
-      }
-    }
-    searchOpen = open;
-    // Empty Firebar lists the full roster for browsing, but don't orange-
-    // highlight the first player until the user types or presses ↑↓.
-    firebarSelectionIndex = -1;
-    if (!open) {
-      searchQuery = '';
-      guidedSearchPrompt = null;
-      _guidedSearchHits = const [];
-      _pendingCommandInning = null;
-      // Keep any match preview as a real selection when Firebar closes.
       _firebarAutoPreviewKeys.clear();
       _discardFirebarVerbPreview(keepSelection: true);
       _firebarCommitted.clear();
-      _clearFirebarOptions();
+    }
+    searchOpen = open;
+    firebarSelectionIndex = -1;
+    if (!open) {
+      // Esc exits and keeps the current selection — line was never applied.
+      searchQuery = '';
+      _firebarLine = null;
+      _firebarOwnsSelection = false;
+      _firebarSuppressCompleteTyped = null;
+      firebarApplyError = null;
+      guidedSearchPrompt = null;
+      _guidedSearchHits = const [];
+      _pendingCommandInning = null;
+      _firebarAutoPreviewKeys.clear();
+      _discardFirebarVerbPreview(keepSelection: true);
+      _firebarCommitted.clear();
+      // Keep follow-up option chips (RBI etc.) only if a verb was applied.
+      if (_firebarOptionKind != FirebarOptionKind.rbi &&
+          _firebarOptionKind != FirebarOptionKind.base &&
+          _firebarOptionKind != FirebarOptionKind.celebration &&
+          _firebarOptionKind != FirebarOptionKind.homeRun) {
+        _clearFirebarOptions();
+      }
     }
     notifyListeners();
+  }
+
+  /// Clear the shorthand line after a photo change; keep Firebar armed.
+  void clearFirebarLineKeepOpen() {
+    searchQuery = '';
+    _firebarLine = null;
+    _firebarOwnsSelection = false;
+    _firebarSuppressCompleteTyped = null;
+    firebarApplyError = null;
+    firebarSelectionIndex = -1;
+    firebarMenuIndex = 0;
+    firebarChipCursor = -1;
+    _clearFirebarOptions();
   }
 
   /// Clicking a name or verb in Firebar commits it and leaves Firebar, unless
@@ -6992,17 +7355,21 @@ class CaptionV2Controller extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Same jersey on both teams, so the two player chips are a home/visitor choice.
+  /// True once Space/Enter opened the in-Firebar H / V prompt.
   bool get firebarJerseySideChoiceOpen {
-    if (!searchOpen || firebarOptions.isNotEmpty) return false;
-    return _pendingJerseySideFor(_normalizedFirebarQuery) != null;
+    return searchOpen &&
+        _firebarOptionKind == FirebarOptionKind.jerseySide &&
+        _pendingJerseySide != null &&
+        firebarOptions.isNotEmpty;
   }
 
   /// Pick the home or visitor chip for the number just typed.
   void chooseFirebarJerseySide({required bool isHome}) {
-    final pending = _pendingJerseySideFor(_normalizedFirebarQuery);
-    if (pending == null) return;
-    _pendingJerseySide = pending;
+    if (_pendingJerseySide == null) {
+      final pending = _pendingJerseySideFor(_normalizedFirebarQuery);
+      if (pending == null) return;
+      _pendingJerseySide = pending;
+    }
     _applyJerseySideChoice(isHome: isHome);
   }
 
@@ -7022,151 +7389,39 @@ class CaptionV2Controller extends ChangeNotifier {
     return 'Matches';
   }
 
-  /// Dropdown opens once a number or verb text is typed. An empty field stays closed.
+  /// Dropdown opens while the active token still has choices to pick from.
   bool get firebarMenuOpen {
     if (!searchOpen || firebarOptions.isNotEmpty) return false;
-    return _normalizeFirebarText(searchQuery).isNotEmpty;
+    final line = _firebarLine;
+    if (line == null) return false;
+    final token = line.activeToken;
+    if (token == null) return false;
+    if (token.completed && !token.error && token.matches.length <= 1) {
+      return false;
+    }
+    return token.matches.isNotEmpty;
   }
 
-  /// Per-token blocks for the autocomplete menu (`#41`, then `skates`, …).
+  /// Lookup helper for the active shorthand token (never applies the line).
   List<FirebarMenuSection> get firebarMenuSections {
     if (!firebarMenuOpen) return const [];
-    final preferVerbs = firebarMenuPrefersVerbs;
-    final normalized = _normalizedFirebarQuery;
-    final compound = _parseFirebarJerseyVerbCompound(normalized);
-    final jerseyTokens =
-        compound?.jerseys ?? _parseFirebarJerseyTokens(normalized);
-
-    if (jerseyTokens != null) {
-      final sections = <FirebarMenuSection>[];
-      for (final token in jerseyTokens) {
-        final hits = <_FirebarMenuHit>[];
-        for (final result in [...firebarHomeResults, ...firebarAwayResults]) {
-          final jersey = (result.player?.jerseyNumber ?? '').trim();
-          if (jersey != token.jersey) continue;
-          if (token.side == 'h' && result.isHome != true) continue;
-          if (token.side == 'v' && result.isHome != false) continue;
-          hits.add(
-            _FirebarMenuHit(
-              result: result,
-              score: 100 + (preferVerbs ? 0 : 15),
-              name: result.player?.fullName ?? '',
-            ),
-          );
-        }
-        hits.sort((a, b) {
-          final byScore = b.score.compareTo(a.score);
-          if (byScore != 0) return byScore;
-          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-        });
-        final title = token.side == null
-            ? '#${token.jersey}'
-            : '${token.side}${token.jersey}';
-        sections.add(
-          FirebarMenuSection(
-            title: title,
-            results: [for (final hit in hits.take(8)) hit.result],
-          ),
-        );
-      }
-      if (compound != null) {
-        final verbHits = <_FirebarMenuHit>[];
-        for (final result in firebarVerbResults) {
-          final definition = verbDefinition(result.verbKey ?? '');
-          final label = definition?.label ?? result.verbKey ?? '';
-          var score = _firebarVerbMenuScore(definition, label, compound.verbQuery);
-          // Already filtered by [_firebarVerbMatches]; keep keyword/phrase hits.
-          if (score < 0) score = 70;
-          verbHits.add(
-            _FirebarMenuHit(
-              result: result,
-              score: score + (preferVerbs ? 15 : 0),
-              name: label,
-            ),
-          );
-        }
-        verbHits.sort((a, b) {
-          final byScore = b.score.compareTo(a.score);
-          if (byScore != 0) return byScore;
-          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-        });
-        sections.add(
-          FirebarMenuSection(
-            title: compound.verbQuery,
-            results: [for (final hit in verbHits.take(8)) hit.result],
-          ),
-        );
-      }
-      return sections;
+    final token = _firebarLine?.activeToken;
+    if (token == null) return const [];
+    final results = <FirebarResult>[];
+    for (final match in token.matches) {
+      final result = _firebarResultFromMatch(match);
+      if (_isFirebarPlayerAlreadyPicked(result)) continue;
+      results.add(result);
     }
-
-    final query = _firebarFocusedQuery;
-    final sideMatch = RegExp(r'^([hv])(\d+)$').firstMatch(query);
-    final digitQuery = sideMatch?.group(2) ??
-        (RegExp(r'^\d+$').hasMatch(query) ? query : null);
-    final hits = <_FirebarMenuHit>[];
-    if (digitQuery != null) {
-      final side = sideMatch?.group(1);
-      for (final result in _firebarCatalogPlayers()) {
-        if (side == 'h' && result.isHome != true) continue;
-        if (side == 'v' && result.isHome != false) continue;
-        final jersey = (result.player?.jerseyNumber ?? '').trim();
-        final score = jersey == digitQuery
-            ? 100
-            : jersey.startsWith(digitQuery)
-                ? 60
-                : -1;
-        if (score < 0) continue;
-        hits.add(
-          _FirebarMenuHit(
-            result: result,
-            score: score + (preferVerbs ? 0 : 15),
-            name: result.player?.fullName ?? '',
-          ),
-        );
-      }
-    } else {
-      for (final result in _firebarCatalogPlayers()) {
-        final player = result.player;
-        if (player == null) continue;
-        final nameScore = _firebarMenuTextScore(player.fullName, query);
-        final teamScore = _firebarMenuTextScore(
-          teamNameLabel(isHome: result.isHome == true),
-          query,
-        );
-        final score = nameScore > teamScore ? nameScore : teamScore;
-        if (score < 0) continue;
-        hits.add(
-          _FirebarMenuHit(
-            result: result,
-            score: score + (preferVerbs ? 0 : 15),
-            name: player.fullName,
-          ),
-        );
-      }
-      for (final result in _firebarCatalogVerbs()) {
-        final definition = verbDefinition(result.verbKey ?? '');
-        final label = definition?.label ?? result.verbKey ?? '';
-        final score = _firebarVerbMenuScore(definition, label, query);
-        if (score < 0) continue;
-        hits.add(
-          _FirebarMenuHit(
-            result: result,
-            score: score + (preferVerbs ? 15 : 0),
-            name: label,
-          ),
-        );
-      }
-    }
-    hits.sort((a, b) {
-      final byScore = b.score.compareTo(a.score);
-      if (byScore != 0) return byScore;
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-    });
+    final title = token.error
+        ? (token.errorReason ?? 'No match')
+        : (RegExp(r'^\d+$').hasMatch(token.typed)
+            ? 'Jersey #${token.typed}'
+            : firebarMenuLabel);
     return [
       FirebarMenuSection(
-        title: firebarMenuLabel,
-        results: [for (final hit in hits.take(12)) hit.result],
+        title: title,
+        results: results,
       ),
     ];
   }
@@ -7262,48 +7517,137 @@ class CaptionV2Controller extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Enter or a menu click. Tab and Space leave the query as typed.
+  /// Menu click / Tab: replace the active token in the line, then mirror
+  /// completed players into the caption (same as a roster click).
   void commitFirebarMenu() {
-    final compound = _parseFirebarJerseyVerbCompound(_normalizedFirebarQuery);
     final menuSel = firebarMenuSelection;
-    if (compound != null && menuSel != null) {
-      // Player row under `#41`: chip that player only, keep the verb text so
-      // its dropdown stays open. Verb row: write the full caption.
-      if (menuSel.kind == FirebarResultKind.player) {
-        final verbLeft = compound.verbQuery;
-        commitFirebarResult(menuSel);
-        firebarMenuIndex = 0;
-        firebarChipCursor = -1;
-        if (verbLeft.isNotEmpty) {
-          setSearchQuery(verbLeft);
-        }
-        return;
-      }
-      final index = firebarOrderedResults
-          .indexWhere((result) => result.key == menuSel.key);
-      if (index >= 0) firebarSelectionIndex = index;
-      _commitFirebarJerseyVerbCompound(compound);
-      firebarMenuIndex = 0;
-      firebarChipCursor = -1;
-      return;
-    }
-    if (compound != null) {
-      _commitFirebarJerseyVerbCompound(compound);
-      firebarMenuIndex = 0;
-      firebarChipCursor = -1;
-      return;
-    }
-    if (menuSel != null) {
-      commitFirebarResult(menuSel);
-      firebarMenuIndex = 0;
-      firebarChipCursor = -1;
-      return;
-    }
-    final typed = searchQuery.trim();
-    if (typed.isEmpty) return;
-    commitFirebarResult(FirebarResult.verb(typed));
+    final line = _firebarLine;
+    if (menuSel == null || line == null) return;
+    if (_isFirebarPlayerAlreadyPicked(menuSel)) return;
+    final match = _firebarMatchFromResult(menuSel);
+    if (match == null) return;
+    final engine = _firebarShorthandEngine();
+    final next = engine.pickMatch(line, match);
+    _firebarLine = next;
+    searchQuery = next.displayLine;
     firebarMenuIndex = 0;
     firebarChipCursor = -1;
+    firebarApplyError = null;
+    _syncCaptionFromFirebarLine(next);
+    _promoteCompletedFirebarTokens(next);
+    notifyListeners();
+  }
+
+  /// Mirror completed Firebar tokens onto the live caption selection so the
+  /// first picked/typed player starts writing the caption like a roster click.
+  void _syncCaptionFromFirebarLine(FirebarShorthandLine line) {
+    // Only fully completed tokens — never a unique-but-still-open prefix.
+    final completed = [
+      for (final chip in _firebarCommitted)
+        if (_firebarMatchFromResult(chip) != null)
+          _firebarMatchFromResult(chip)!,
+      for (final token in line.tokens)
+        if (token.completed && token.resolved != null) token.resolved!,
+    ];
+    if (completed.isEmpty) {
+      if (_firebarOwnsSelection) {
+        _firebarOwnsSelection = false;
+        selectedPlayers.clear();
+        _syncPrimaryPlayer();
+        _dropTeammatesIfSubjectLeft();
+        _syncPersonality();
+        _syncKeywords();
+      }
+      return;
+    }
+    _applyFirebarMatchesToCaption(completed);
+  }
+
+  /// Return: apply the whole shorthand line (replaces this photo's selection).
+  /// Returns false when any token is red/ambiguous — nothing is applied.
+  bool applyFirebarLine() {
+    if (firebarOptions.isNotEmpty) {
+      commitSelectedFirebarResult();
+      return firebarOptions.isEmpty;
+    }
+    final raw = searchQuery;
+    if (raw.trim().isEmpty) return false;
+
+    final engine = _firebarShorthandEngine();
+    final line = engine.parse(
+      raw,
+      prior: _firebarLine?.tokens,
+      finalizeOpenNumber: true,
+    );
+    _firebarLine = line;
+    searchQuery = line.displayLine;
+
+    if (!line.preview.canApply) {
+      // Shared jersey # → ask H / V in the Firebar instead of lecturing.
+      if (beginFirebarJerseySidePromptIfNeeded()) return false;
+      final reason = line.preview.errorReason;
+      firebarApplyError =
+          (reason != null && reason.isNotEmpty) ? reason : null;
+      firebarMenuIndex = 0;
+      notifyListeners();
+      return false;
+    }
+
+    firebarApplyError = null;
+    _pushFirebarUndoSnapshot();
+    captionSelectionStarted = true;
+    manualCaptionOverride = null;
+
+    selectedPlayers
+      ..clear()
+      ..addAll([
+        for (final match in line.preview.subjects)
+          if (match.player != null && match.isHome != null)
+            RosterHit(player: match.player!, isHome: match.isHome!),
+        for (final match in line.preview.opponents)
+          if (match.player != null && match.isHome != null)
+            RosterHit(player: match.player!, isHome: match.isHome!),
+      ]);
+    _syncPrimaryPlayer();
+    _dropTeammatesIfSubjectLeft();
+
+    final actionKey = line.preview.action?.verbKey;
+    if (actionKey != null) {
+      if (verbDefinition(actionKey) == null) {
+        setCustomVerbPhrase(actionKey);
+      } else {
+        selectedVerb = actionKey;
+        _stashCustomVerbIfNeeded();
+        customVerbPhrase = '';
+        celebrationType = null;
+        if (!_verbNeedsRbi(actionKey)) rbi = 0;
+        if (!_verbNeedsBase(actionKey)) selectedBase = null;
+        _prepareFirebarOptions(actionKey);
+      }
+    }
+
+    _firebarCommitted
+      ..clear()
+      ..addAll([
+        for (final match in [
+          ...line.preview.subjects,
+          if (line.preview.action != null) line.preview.action!,
+          ...line.preview.opponents,
+        ])
+          _firebarResultFromMatch(match),
+      ]);
+
+    _syncPersonality();
+    _syncKeywords();
+    if (firebarOptions.isEmpty) {
+      searchQuery = '';
+      _firebarLine = null;
+    }
+    firebarSelectionIndex = -1;
+    firebarMenuIndex = 0;
+    firebarChipCursor = -1;
+    notifyListeners();
+    return true;
   }
 
   /// First Backspace on an empty field outlines the last chip. The next one
@@ -7318,6 +7662,13 @@ class CaptionV2Controller extends ChangeNotifier {
       return;
     }
     firebarChipCursor = _firebarCommitted.length - 1;
+    notifyListeners();
+  }
+
+  /// Highlight a committed chip (click).
+  void selectFirebarChip(int index) {
+    if (index < 0 || index >= _firebarCommitted.length) return;
+    firebarChipCursor = index;
     notifyListeners();
   }
 
@@ -7442,14 +7793,6 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   void commitSelectedFirebarResult() {
-    if (firebarJerseySideChoiceOpen) {
-      final selected = firebarSelectedResult;
-      if (selected?.kind == FirebarResultKind.player &&
-          selected?.isHome != null) {
-        chooseFirebarJerseySide(isHome: selected!.isHome!);
-        return;
-      }
-    }
     if (firebarOptions.isNotEmpty) {
       if (_firebarOptionKind == FirebarOptionKind.jerseySide) {
         _commitJerseySideAnswer();
@@ -7462,14 +7805,7 @@ class CaptionV2Controller extends ChangeNotifier {
       );
       return;
     }
-    if (_beginJerseySidePrompt(searchQuery)) return;
-    final compound = _parseFirebarJerseyVerbCompound(_normalizedFirebarQuery);
-    if (compound != null) {
-      _commitFirebarJerseyVerbCompound(compound);
-      return;
-    }
-    final result = firebarSelectedResult;
-    if (result != null) commitFirebarResult(result);
+    applyFirebarLine();
   }
 
   /// Applies `88 looks` / `88 92 look` as player(s) + matching verb in one Enter.
@@ -7586,6 +7922,8 @@ class CaptionV2Controller extends ChangeNotifier {
     FirebarResult result, {
     bool recordUndo = true,
   }) {
+    // Don't re-add a player who's already on the caption / chips.
+    if (_isFirebarPlayerAlreadyPicked(result)) return;
     if (recordUndo) _pushFirebarUndoSnapshot();
     captionSelectionStarted = true;
     manualCaptionOverride = null;
@@ -8159,23 +8497,98 @@ class CaptionV2Controller extends ChangeNotifier {
   /// Shows Home / Visitor chips and clears the field so the next key is the answer.
   bool _beginJerseySidePrompt(String raw) {
     if (!searchOpen) return false;
-    final pending = _pendingJerseySideFor(raw);
+    final pending = _pendingJerseySideFor(raw) ??
+        _pendingJerseySideFromShorthandLine();
     if (pending == null) return false;
+    _showJerseySidePrompt(pending);
+    return true;
+  }
+
+  /// Ambiguous bare number in the shorthand line (e.g. `34` on both teams).
+  _PendingJerseySideQuery? _pendingJerseySideFromShorthandLine() {
+    final line = _firebarLine;
+    if (line == null) return null;
+    for (var i = 0; i < line.tokens.length; i++) {
+      final token = line.tokens[i];
+      final typed = token.typed.trim();
+      if (!RegExp(r'^\d+$').hasMatch(typed)) continue;
+      if (token.completed) continue;
+      final exact = [
+        for (final match in token.matches)
+          if (match.kind == FirebarMatchKind.player &&
+              (match.player?.jerseyNumber ?? '').trim() == typed)
+            match,
+      ];
+      final hasHome = exact.any((m) => m.isHome == true);
+      final hasAway = exact.any((m) => m.isHome == false);
+      if (!hasHome || !hasAway) continue;
+      return _PendingJerseySideQuery(
+        prefix: [
+          for (final t in line.tokens.take(i)) t.display,
+        ].join(' '),
+        jersey: typed,
+        suffix: [
+          for (final t in line.tokens.skip(i + 1)) t.display,
+        ].join(' '),
+      );
+    }
+    return null;
+  }
+
+  void _showJerseySidePrompt(_PendingJerseySideQuery pending) {
     _clearFirebarAutoPlayerPreview();
     _clearFirebarVerbPreview();
     _pendingJerseySide = pending;
-    firebarOptionPrompt = 'Which team for #${pending.jersey}?';
+    firebarOptionPrompt = 'Which #${pending.jersey}?';
     _firebarOptionKind = FirebarOptionKind.jerseySide;
-    firebarOptions = const [
-      FirebarOption('h', jerseyIsHome: true),
-      FirebarOption('v', jerseyIsHome: false),
+    final homeName = _playerNameForJersey(pending.jersey, isHome: true);
+    final awayName = _playerNameForJersey(pending.jersey, isHome: false);
+    firebarOptions = [
+      FirebarOption(
+        homeName == null ? 'H' : 'H - $homeName',
+        jerseyIsHome: true,
+      ),
+      FirebarOption(
+        awayName == null ? 'V' : 'V - $awayName',
+        jerseyIsHome: false,
+      ),
     ];
     firebarOptionIndex = 0;
     _jerseySideChoiceArmed = false;
     searchQuery = '';
+    _firebarLine = null;
     firebarSelectionIndex = -1;
+    firebarApplyError = null;
     notifyListeners();
+  }
+
+  String? _playerNameForJersey(String jersey, {required bool isHome}) {
+    final roster = isHome ? homeRoster : awayRoster;
+    for (final player in roster) {
+      if ((player.jerseyNumber ?? '').trim() == jersey) {
+        final name = player.fullName.trim();
+        if (name.isNotEmpty) return name;
+      }
+    }
+    return null;
+  }
+
+  /// Space / Enter on a shared jersey number → ask H or V in the Firebar.
+  bool beginFirebarJerseySidePromptIfNeeded() {
+    if (!searchOpen || firebarOptions.isNotEmpty) return false;
+    final pending = _pendingJerseySideFromShorthandLine() ??
+        _pendingJerseySideFor(_normalizedFirebarQuery);
+    if (pending == null) return false;
+    _showJerseySidePrompt(pending);
     return true;
+  }
+
+  /// True when Space should open the H/V chooser instead of committing the menu
+  /// (bare number that exists on both home and visitor).
+  bool get firebarSpaceOpensJerseySide {
+    if (!searchOpen || firebarOptions.isNotEmpty) return false;
+    return _pendingJerseySideFromShorthandLine() != null ||
+        _pendingJerseySideFor(_normalizedFirebarQuery) != null;
   }
 
   /// `h` / `home` pick home. `v` / `visitor` / `away` pick the visitor.
@@ -8213,31 +8626,20 @@ class CaptionV2Controller extends ChangeNotifier {
   void _applyJerseySideChoice({required bool isHome}) {
     final pending = _pendingJerseySide;
     _clearFirebarOptions();
+    _pendingJerseySide = null;
     if (pending == null) {
       searchQuery = '';
       notifyListeners();
       return;
     }
-    final roster = isHome ? homeRoster : awayRoster;
-    Player? found;
-    for (final player in roster) {
-      if ((player.jerseyNumber ?? '').trim() == pending.jersey) {
-        found = player;
-        break;
-      }
-    }
-    if (found != null) {
-      // Enter (or h/v) commits the player so the chip stays after the field clears.
-      commitFirebarResult(
-        FirebarResult.player(player: found, isHome: isHome),
-      );
-    }
-    final rest = [
+    final code = '${isHome ? 'h' : 'v'}${pending.jersey}';
+    final line = [
       if (pending.prefix.trim().isNotEmpty) pending.prefix.trim(),
+      code,
       if (pending.suffix.trim().isNotEmpty) pending.suffix.trim(),
     ].join(' ');
-    if (rest.isEmpty) return;
-    setSearchQuery(rest);
+    // Trailing space so the next token is ready after H/V.
+    setSearchQuery('$line ');
   }
 
   void toggleSort() {
@@ -8367,12 +8769,10 @@ class CaptionV2Controller extends ChangeNotifier {
     // Each new photo opens on the Home players page (phone TOR tab).
     // Player tap still auto-advances to Actions via [selectPlayer].
     columnFocus = 0;
-    searchQuery = '';
-    // Stay in Firebar after Save → next so the user can keep typing.
-    // Manual navigation (arrows / thumbnails) still closes it.
-    if (!keepSearchOpen) {
-      searchOpen = false;
-    }
+    // On photo change the Firebar clears and stays focused for the next line.
+    final wasSearchOpen = searchOpen || keepSearchOpen;
+    clearFirebarLineKeepOpen();
+    searchOpen = wasSearchOpen;
     guidedSearchPrompt = null;
     _guidedSearchHits = const [];
     _pendingCommandInning = null;
@@ -10636,8 +11036,8 @@ class CaptionV2Controller extends ChangeNotifier {
 
   /// Write a previously captured caption [values] map to [paths].
   ///
-  /// Used when applying a saved caption to the rest of a burst after the
-  /// user opts in via Review burst (caption selection may already be cleared).
+  /// Used when applying a saved caption to the rest of a burst via the
+  /// Apply to burst button (caption selection may already be cleared).
   Future<CaptionSaveResult> savePathsWithFixedValues(
     List<String> paths,
     Map<String, String> values,

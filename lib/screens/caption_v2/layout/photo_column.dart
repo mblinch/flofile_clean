@@ -73,6 +73,7 @@ class PhotoColumn extends StatefulWidget {
     required this.onSavePrevious,
     required this.onSaveNext,
     required this.editSession,
+    this.onEditMissing,
   });
 
   final CaptionV2Controller controller;
@@ -80,6 +81,7 @@ class PhotoColumn extends StatefulWidget {
   final bool focused;
   final VoidCallback onSavePrevious;
   final VoidCallback onSaveNext;
+  final VoidCallback? onEditMissing;
 
   @override
   State<PhotoColumn> createState() => _PhotoColumnState();
@@ -165,6 +167,7 @@ class _PhotoColumnState extends State<PhotoColumn> {
                 onSavePrevious: widget.onSavePrevious,
                 onSaveNext: widget.onSaveNext,
                 editSession: widget.editSession,
+                onEditMissing: widget.onEditMissing,
               ),
             ),
             _PhotoThumbnailResizeHandle(
@@ -322,16 +325,6 @@ class _PhotoInfoHeader extends StatelessWidget {
   }
 }
 
-String? _playerTag(CaptionV2Controller controller) {
-  if (controller.selectedPlayers.isEmpty) return null;
-  final player = controller.selectedPlayers.first.player;
-  final jersey = player.jerseyNumber?.trim();
-  final name = player.fullName.trim();
-  if (name.isEmpty && (jersey == null || jersey.isEmpty)) return null;
-  if (jersey != null && jersey.isNotEmpty) return '#$jersey $name'.trim();
-  return name;
-}
-
 class _LowResolutionWarning extends StatelessWidget {
   const _LowResolutionWarning({
     required this.threshold,
@@ -388,6 +381,7 @@ class _PhotoCard extends StatelessWidget {
     required this.onSavePrevious,
     required this.onSaveNext,
     required this.editSession,
+    this.onEditMissing,
   });
 
   static const double metaBarHeight = 30;
@@ -400,6 +394,7 @@ class _PhotoCard extends StatelessWidget {
   final VoidCallback onSavePrevious;
   final VoidCallback onSaveNext;
   final PhotoEditSession editSession;
+  final VoidCallback? onEditMissing;
 
   String _meta(List<String> keys) {
     for (final key in keys) {
@@ -516,30 +511,30 @@ class _PhotoCard extends StatelessWidget {
                           ),
                   ),
                   if (shown != null) ...[
-                    if (_playerTag(controller) != null)
-                      Positioned(
-                        top: 10,
-                        left: 10,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: tokens.bg.withValues(alpha: 0.7),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            _playerTag(controller)!,
-                            style: TextStyle(
-                              fontFamily: FfTokens.fontFamily,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: tokens.text,
-                            ),
-                          ),
+                    Positioned(
+                      left: 12,
+                      top: 0,
+                      bottom: 0,
+                      child: Center(
+                        child: PhotoSaveArrow(
+                          direction: AxisDirection.left,
+                          onPressed: onSavePrevious,
                         ),
                       ),
+                    ),
+                    Positioned(
+                      right: 12,
+                      top: 0,
+                      bottom: 0,
+                      child: Center(
+                        child: PhotoSaveArrow(
+                          direction: AxisDirection.right,
+                          onPressed: onSaveNext,
+                        ),
+                      ),
+                    ),
+                    // Above save arrows so the missing-fields chip stays
+                    // clickable in the top-right corner.
                     Positioned(
                       top: 10,
                       right: 12,
@@ -547,13 +542,26 @@ class _PhotoCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          _PhotoFrameCounter(
-                            index: (shownIndex < 0
-                                    ? controller.currentIndex
-                                    : shownIndex) +
-                                1,
-                            total: controller.imagePaths.length,
-                            tokens: tokens,
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (controller
+                                      .missingCaptionIptcLabels.isNotEmpty &&
+                                  onEditMissing != null) ...[
+                                _PhotoMissingFieldsChip(
+                                  onTap: onEditMissing!,
+                                ),
+                                const SizedBox(width: 6),
+                              ],
+                              _PhotoFrameCounter(
+                                index: (shownIndex < 0
+                                        ? controller.currentIndex
+                                        : shownIndex) +
+                                    1,
+                                total: controller.imagePaths.length,
+                                tokens: tokens,
+                              ),
+                            ],
                           ),
                           if (controller.jerseyOcrEnabled) ...[
                             const SizedBox(height: 8),
@@ -577,28 +585,6 @@ class _PhotoCard extends StatelessWidget {
                             ],
                           ],
                         ],
-                      ),
-                    ),
-                    Positioned(
-                      left: 12,
-                      top: 0,
-                      bottom: 0,
-                      child: Center(
-                        child: PhotoSaveArrow(
-                          direction: AxisDirection.left,
-                          onPressed: onSavePrevious,
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      right: 12,
-                      top: 0,
-                      bottom: 0,
-                      child: Center(
-                        child: PhotoSaveArrow(
-                          direction: AxisDirection.right,
-                          onPressed: onSaveNext,
-                        ),
                       ),
                     ),
                   ],
@@ -3743,6 +3729,58 @@ class _PhotoFrameCounter extends StatelessWidget {
             fontWeight: FfTokens.weightMedium,
             color: tokens.text,
             height: 1,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// IPTC gap warning parked beside the frame counter on the photo.
+class _PhotoMissingFieldsChip extends StatelessWidget {
+  const _PhotoMissingFieldsChip({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Open IPTC to fill missing caption fields',
+      waitDuration: const Duration(milliseconds: 400),
+      child: Material(
+        color: FfTokens.dangerBg,
+        borderRadius: BorderRadius.circular(999),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(999),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: FfTokens.dangerBorder),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                PhosphorIcon(
+                  PhosphorIconsRegular.warning,
+                  size: 12,
+                  color: FfTokens.danger,
+                ),
+                SizedBox(width: 5),
+                Text(
+                  'Missing fields',
+                  softWrap: false,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: FfTokens.danger,
+                    height: 1,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

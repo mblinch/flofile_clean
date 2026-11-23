@@ -36,6 +36,7 @@ class CaptionStrip extends StatelessWidget {
     required this.trailing,
     this.fullCaption,
     this.highlightPhrases = const [],
+    this.verbHighlightPhrases = const [],
     this.provenanceSpans = const [],
     this.unmatchedTip,
     this.onChipTap,
@@ -84,8 +85,6 @@ class CaptionStrip extends StatelessWidget {
     this.footer,
     this.fillHeight = false,
     this.multiWriteCount = 0,
-    this.burstApplyCount = 0,
-    this.onApplyToBurst,
     this.compact = false,
     this.collapsedLines = 3,
     this.captionExpanded = false,
@@ -106,8 +105,11 @@ class CaptionStrip extends StatelessWidget {
   /// caption instead of the chip sentence.
   final String? fullCaption;
 
-  /// Phrases within [fullCaption] drawn in Firebar orange.
+  /// Phrases within [fullCaption] drawn in Firebar orange (players).
   final List<String> highlightPhrases;
+
+  /// Verb / action phrases drawn in a warmer amber orange.
+  final List<String> verbHighlightPhrases;
 
   /// Phrases with hover tips explaining where caption pieces came from.
   final List<CaptionProvenanceSpan> provenanceSpans;
@@ -190,11 +192,6 @@ class CaptionStrip extends StatelessWidget {
   /// When ≥ 2, the caption panel alerts that Save writes to this many photos.
   final int multiWriteCount;
 
-  /// Remaining frames after the current one in a detected burst (burst mode).
-  /// When > 0, the panel uses a teal alert and shows [onApplyToBurst].
-  final int burstApplyCount;
-  final VoidCallback? onApplyToBurst;
-
   /// Mobile stack: personality + Clear, caption clamped to [collapsedLines],
   /// tap/caret expands. Same caption/period controls as desktop.
   final bool compact;
@@ -222,8 +219,6 @@ class CaptionStrip extends StatelessWidget {
                 onTap: onEditTap,
                 fillHeight: true,
                 multiWriteCount: multiWriteCount,
-                burstApplyCount: burstApplyCount,
-                onApplyToBurst: onApplyToBurst,
                 headerTrailing: onPersonalityChanged == null
                     ? null
                     : _PersonalityBar(
@@ -243,8 +238,6 @@ class CaptionStrip extends StatelessWidget {
               tokens: t,
               onTap: onEditTap,
               multiWriteCount: multiWriteCount,
-              burstApplyCount: burstApplyCount,
-              onApplyToBurst: onApplyToBurst,
               headerTrailing: onPersonalityChanged == null
                   ? null
                   : _PersonalityBar(
@@ -303,6 +296,7 @@ class CaptionStrip extends StatelessWidget {
             tokens: t,
             fontSize: captionSize,
             highlightPhrases: highlightPhrases,
+            verbHighlightPhrases: verbHighlightPhrases,
             provenanceSpans: provenanceSpans,
             unmatchedTip: unmatchedTip,
             onChanged: onCaptionChanged!,
@@ -312,9 +306,11 @@ class CaptionStrip extends StatelessWidget {
                 _captionAnnotatedSpan(
                   fullCaption!,
                   firebarPhrases: highlightPhrases,
+                  verbPhrases: verbHighlightPhrases,
                   provenance: provenanceSpans,
                   base: captionStyle,
                   firebarColor: FfTokens.firebar,
+                  verbColor: FfTokens.captionVerb,
                   provenanceColor: t.accent,
                   tokens: t,
                   interactiveTips: true,
@@ -517,6 +513,7 @@ class _CompactCaptionStrip extends StatelessWidget {
                             tokens: tokens,
                             fontSize: 13,
                             highlightPhrases: strip.highlightPhrases,
+                            verbHighlightPhrases: strip.verbHighlightPhrases,
                             provenanceSpans: strip.provenanceSpans,
                             unmatchedTip: strip.unmatchedTip,
                             onChanged: strip.onCaptionChanged!,
@@ -599,6 +596,7 @@ class _CaptionEditor extends StatefulWidget {
     required this.onChanged,
     this.fontSize = 17,
     this.highlightPhrases = const [],
+    this.verbHighlightPhrases = const [],
     this.provenanceSpans = const [],
     this.unmatchedTip,
   });
@@ -609,6 +607,7 @@ class _CaptionEditor extends StatefulWidget {
   final double fontSize;
   final ValueChanged<String> onChanged;
   final List<String> highlightPhrases;
+  final List<String> verbHighlightPhrases;
   final List<CaptionProvenanceSpan> provenanceSpans;
   final String? unmatchedTip;
 
@@ -651,7 +650,9 @@ class _CaptionEditorState extends State<_CaptionEditor> {
   }
 
   bool get _hasAnnotations =>
-      widget.highlightPhrases.isNotEmpty || widget.provenanceSpans.isNotEmpty;
+      widget.highlightPhrases.isNotEmpty ||
+      widget.verbHighlightPhrases.isNotEmpty ||
+      widget.provenanceSpans.isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -681,9 +682,11 @@ class _CaptionEditorState extends State<_CaptionEditor> {
             _captionAnnotatedSpan(
               text,
               firebarPhrases: widget.highlightPhrases,
+              verbPhrases: widget.verbHighlightPhrases,
               provenance: widget.provenanceSpans,
               base: baseStyle,
               firebarColor: FfTokens.firebar,
+              verbColor: FfTokens.captionVerb,
               provenanceColor: t.accent,
               tokens: t,
               interactiveTips: true,
@@ -706,8 +709,10 @@ class _CaptionEditorState extends State<_CaptionEditor> {
       keyboardType: TextInputType.multiline,
       textAlignVertical: TextAlignVertical.top,
       style: baseStyle,
-      cursorColor:
-          widget.highlightPhrases.isNotEmpty ? FfTokens.firebar : t.accent,
+      cursorColor: widget.highlightPhrases.isNotEmpty ||
+              widget.verbHighlightPhrases.isNotEmpty
+          ? FfTokens.firebar
+          : t.accent,
       mouseCursor: SystemMouseCursors.text,
       spellCheckConfiguration: floSpellCheckConfiguration(),
       contextMenuBuilder: floSpellCheckContextMenuBuilder,
@@ -730,6 +735,7 @@ class _CaptionAnnoRange {
     required this.start,
     required this.end,
     this.firebar = false,
+    this.verb = false,
     this.tip,
     this.fill,
   });
@@ -737,6 +743,7 @@ class _CaptionAnnoRange {
   final int start;
   final int end;
   final bool firebar;
+  final bool verb;
   final String? tip;
   final Color? fill;
 }
@@ -756,6 +763,7 @@ _CaptionAnnoRange _mergeCaptionAnno(
     start: prev.start < range.start ? prev.start : range.start,
     end: prev.end > range.end ? prev.end : range.end,
     firebar: prev.firebar || range.firebar,
+    verb: prev.verb || range.verb,
     tip: tip.isEmpty ? null : tip,
     fill: prev.fill ?? range.fill,
   );
@@ -764,9 +772,11 @@ _CaptionAnnoRange _mergeCaptionAnno(
 TextSpan _captionAnnotatedSpan(
   String text, {
   required List<String> firebarPhrases,
+  List<String> verbPhrases = const [],
   required List<CaptionProvenanceSpan> provenance,
   required TextStyle base,
   required Color firebarColor,
+  Color verbColor = FfTokens.captionVerb,
   required Color provenanceColor,
   required FfTokens tokens,
   required bool interactiveTips,
@@ -783,6 +793,20 @@ TextSpan _captionAnnotatedSpan(
         start: index,
         end: index + phrase.length,
         firebar: true,
+      ));
+      from = index + phrase.length;
+    }
+  }
+  for (final phrase in verbPhrases) {
+    if (phrase.isEmpty) continue;
+    var from = 0;
+    while (from < text.length) {
+      final index = text.indexOf(phrase, from);
+      if (index < 0) break;
+      ranges.add(_CaptionAnnoRange(
+        start: index,
+        end: index + phrase.length,
+        verb: true,
       ));
       from = index + phrase.length;
     }
@@ -847,6 +871,8 @@ TextSpan _captionAnnotatedSpan(
     final prev = glued.last;
     final canBridge = !prev.firebar &&
         !range.firebar &&
+        !prev.verb &&
+        !range.verb &&
         prev.fill != null &&
         prev.fill == range.fill &&
         range.start >= prev.end;
@@ -892,7 +918,9 @@ TextSpan _captionAnnotatedSpan(
     }
     final phrase = text.substring(range.start, range.end);
     final TextStyle style;
-    if (range.firebar) {
+    if (range.verb) {
+      style = base.copyWith(color: verbColor);
+    } else if (range.firebar) {
       style = base.copyWith(color: firebarColor);
     } else if (range.fill != null) {
       style = base.copyWith(
@@ -1111,8 +1139,6 @@ class _CaptionPanel extends StatefulWidget {
     this.onTap,
     this.fillHeight = false,
     this.multiWriteCount = 0,
-    this.burstApplyCount = 0,
-    this.onApplyToBurst,
   });
 
   final FfTokens tokens;
@@ -1121,8 +1147,6 @@ class _CaptionPanel extends StatefulWidget {
   final VoidCallback? onTap;
   final bool fillHeight;
   final int multiWriteCount;
-  final int burstApplyCount;
-  final VoidCallback? onApplyToBurst;
 
   @override
   State<_CaptionPanel> createState() => _CaptionPanelState();
@@ -1164,13 +1188,10 @@ class _CaptionPanelState extends State<_CaptionPanel> {
   @override
   Widget build(BuildContext context) {
     final t = widget.tokens;
-    // Multi-select (after Apply to these photos) wins over burst teal.
+    // Multi-select (after Apply to these photos) → yellow alert.
     final multi = widget.multiWriteCount >= 2;
-    final burst = !multi && widget.burstApplyCount > 0;
-    // Burst → bright cyan. Multi-select → yellow (not Firebar).
-    const burstAlert = Color(0xFF2EE6C5);
     const multiAlert = Color(0xFFF5D000);
-    final Color? alert = multi ? multiAlert : (burst ? burstAlert : null);
+    final Color? alert = multi ? multiAlert : null;
     final sizeStepper = _CaptionSizeStepper(
       tokens: t,
       canDecrease: _captionSize > PreferencesService.captionTextSizeMin,
@@ -1178,19 +1199,12 @@ class _CaptionPanelState extends State<_CaptionPanel> {
       onDecrease: () => _stepCaptionSize(-1),
       onIncrease: () => _stepCaptionSize(1),
     );
-    final applyBurst = burst && widget.onApplyToBurst != null
-        ? _BurstApplyButton(
-            count: widget.burstApplyCount,
-            color: burstAlert,
-            onPressed: widget.onApplyToBurst!,
-          )
-        : null;
     final n = widget.multiWriteCount;
     final multiLabel = n == 1
         ? 'Applying to this photo'
         : 'Applying to these $n photos';
-    // Always paint a 1.5px border so Burst / multi alerts don't grow the
-    // caption card and shove Save / grids down when navigating frames.
+    // Always paint a 1.5px border so multi alerts don't grow the caption
+    // card and shove Save / grids down when navigating frames.
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
       decoration: BoxDecoration(
@@ -1212,11 +1226,7 @@ class _CaptionPanelState extends State<_CaptionPanel> {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Text(
-                  multi
-                      ? multiLabel
-                      : burst
-                          ? 'Burst Mode Detected'
-                          : 'CAPTION',
+                  multi ? multiLabel : 'CAPTION',
                   maxLines: 1,
                   softWrap: false,
                   overflow: TextOverflow.ellipsis,
@@ -1224,10 +1234,6 @@ class _CaptionPanelState extends State<_CaptionPanel> {
                     color: alert ?? t.text,
                   ).copyWith(fontSize: 15, letterSpacing: 1.2, height: 1),
                 ),
-                if (applyBurst != null) ...[
-                  const SizedBox(width: 8),
-                  Flexible(fit: FlexFit.loose, child: applyBurst),
-                ],
                 // Personality fills the middle; +/- and edit stay pinned right.
                 Expanded(
                   child: widget.headerTrailing == null
@@ -1278,52 +1284,6 @@ class _CaptionPanelState extends State<_CaptionPanel> {
           else
             widget.childBuilder(_captionSize),
         ],
-      ),
-    );
-  }
-}
-
-class _BurstApplyButton extends StatelessWidget {
-  const _BurstApplyButton({
-    required this.count,
-    required this.color,
-    required this.onPressed,
-  });
-
-  final int count;
-  final Color color;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = count == 1
-        ? 'Apply to next image'
-        : 'Apply to next $count images';
-    return Tooltip(
-      message: 'Write this caption to chosen burst frames now',
-      child: TextButton(
-        onPressed: onPressed,
-        style: TextButton.styleFrom(
-          foregroundColor: color,
-          backgroundColor: color.withValues(alpha: 0.16),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          minimumSize: Size.zero,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          visualDensity: VisualDensity.compact,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(6),
-            side: BorderSide(color: color.withValues(alpha: 0.55)),
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontFamily: FfTokens.fontFamily,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: color,
-          ),
-        ),
       ),
     );
   }
@@ -1588,10 +1548,10 @@ class _InningCardState extends State<_InningCard> {
 
     return Container(
       height: 32,
-      padding: const EdgeInsets.fromLTRB(2, 4, 2, 4),
+      padding: const EdgeInsets.fromLTRB(2, 0, 2, 0),
       decoration: BoxDecoration(
-        color: t.bg,
-        borderRadius: BorderRadius.circular(9),
+        color: const Color(0xFF1E242A),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         children: [
@@ -1614,10 +1574,15 @@ class _InningCardState extends State<_InningCard> {
                     maxLines: 1,
                     softWrap: false,
                     overflow: TextOverflow.ellipsis,
-                    style: FfTokens.panelLabel(
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.8,
+                      height: 1,
                       color: timingOn
-                          ? t.textSecondary
-                          : t.textSecondary.withValues(alpha: 0.45),
+                          ? const Color(0xFF6A6E73)
+                          : const Color(0xFF6A6E73).withValues(alpha: 0.45),
                     ),
                   ),
                 ),
@@ -2116,7 +2081,6 @@ class _InningSquareState extends State<_InningSquare> {
 
   @override
   Widget build(BuildContext context) {
-    final t = widget.tokens;
     return Semantics(
       button: true,
       selected: widget.selected,
@@ -2130,15 +2094,19 @@ class _InningSquareState extends State<_InningSquare> {
           onTap: widget.onTap,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 120),
-            height: 24,
+            height: 32,
             width: double.infinity,
             alignment: Alignment.center,
             clipBehavior: Clip.none,
             decoration: BoxDecoration(
-              color: widget.selected ? t.hover : Colors.transparent,
+              color: widget.selected
+                  ? const Color(0xFF2A3035)
+                  : (_hovered
+                      ? const Color(0xFFE8EEF4).withValues(alpha: 0.06)
+                      : Colors.transparent),
               borderRadius: BorderRadius.circular(7),
               border: widget.selected
-                  ? Border.all(color: t.inputBorder)
+                  ? Border.all(color: const Color(0x2EE8EEF4))
                   : null,
               boxShadow: null,
             ),
@@ -2149,7 +2117,11 @@ class _InningSquareState extends State<_InningSquare> {
                 fontSize: widget.label.length > 2 ? 11 : 13,
                 fontWeight: widget.selected ? FontWeight.w600 : FontWeight.w400,
                 letterSpacing: 0,
-                color: widget.selected ? t.text : t.textSecondary,
+                color: widget.selected
+                    ? const Color(0xFFE8EEF4)
+                    : (_hovered
+                        ? const Color(0xFFE8EEF4)
+                        : const Color(0xFF959AA0)),
               ),
             ),
           ),

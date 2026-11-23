@@ -194,7 +194,7 @@ class _LegendFocusHostState extends State<_LegendFocusHost> {
     _tabFields.add(field);
     final target = widget.initialFocusField?.trim();
     if (!_didInitialFocus && target != null && target.isNotEmpty) {
-      if (field.id == target) {
+      if (field.id.toLowerCase() == target.toLowerCase()) {
         _didInitialFocus = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
@@ -916,10 +916,14 @@ class IptcTemplateEditor extends StatelessWidget {
                 ],
               );
             } else {
+              // Credit has 6 rows vs 4 elsewhere — bias height to the top row
+              // so New Session's stretched 2×2 cards don't overflow by a
+              // fractional pixel when the pane is tight.
               cards = Column(
                 children: [
                   if (embedded)
                     Expanded(
+                      flex: 3,
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -941,6 +945,7 @@ class IptcTemplateEditor extends StatelessWidget {
                   SizedBox(height: gap),
                   if (embedded)
                     Expanded(
+                      flex: 2,
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -2566,8 +2571,11 @@ class _FieldSlot extends StatelessWidget {
         ),
       );
     } else {
+      // Embedded New Session uses height 22; 2px gaps × 6 Credit rows was
+      // enough to overflow the stretched card by 0.5px on some window sizes.
+      final gapBelow = height <= 22 ? 1.0 : 2.0;
       slot = Padding(
-        padding: const EdgeInsets.only(bottom: 2),
+        padding: EdgeInsets.only(bottom: gapBelow),
         child: SizedBox(
           height: height,
           child: Row(

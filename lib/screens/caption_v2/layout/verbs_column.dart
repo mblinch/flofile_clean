@@ -392,7 +392,16 @@ class _FirebarVerbReferenceState extends State<_FirebarVerbReference> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             for (final group in filled[i]) ...[
-                              _categoryLabel(group.category, tokens, rowHeight),
+                              _categoryLabel(
+                                group.category,
+                                tokens,
+                                rowHeight,
+                                dimmed: dimUnmatched &&
+                                    !group.verbs.any(
+                                      (verb) =>
+                                          matchByKey.containsKey(verb.key),
+                                    ),
+                              ),
                               for (final verb in group.verbs)
                                 _verbRow(
                                   verb,
@@ -413,23 +422,31 @@ class _FirebarVerbReferenceState extends State<_FirebarVerbReference> {
     );
   }
 
-  Widget _categoryLabel(String category, FfTokens tokens, double rowHeight) {
+  Widget _categoryLabel(
+    String category,
+    FfTokens tokens,
+    double rowHeight, {
+    bool dimmed = false,
+  }) {
     final label =
         category == 'Non Game-Action' ? 'NON GAME-ACTION' : category.toUpperCase();
     return SizedBox(
       height: rowHeight,
       child: Align(
         alignment: Alignment.centerLeft,
-        child: Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: tokens.microStyle.copyWith(
-            color: FfTokens.firebar,
-            fontSize: (rowHeight * 0.5).clamp(6.0, 10.0),
-            height: 1,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.3,
+        child: Opacity(
+          opacity: dimmed ? 0.3 : 1,
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: tokens.microStyle.copyWith(
+              color: const Color(0xFFE8763A),
+              fontSize: (rowHeight * 0.5).clamp(6.0, 10.0),
+              height: 1,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.3,
+            ),
           ),
         ),
       ),
@@ -444,18 +461,29 @@ class _FirebarVerbReferenceState extends State<_FirebarVerbReference> {
     required double rowHeight,
   }) {
     final controller = widget.controller;
+    final committed = controller.firebarCommitted.any(
+      (chip) =>
+          chip.kind == FirebarResultKind.verb &&
+          chip.verbKey == verb.key,
+    );
     return VerbTile(
       code: '',
       label: verb.label,
-      selected: false,
-      firebarSelected: match != null && match.key == selectedKey,
+      selected: committed,
+      firebarSelected:
+          !committed && match != null && match.key == selectedKey,
       highlightQuery: controller.firebarVerbHighlightQuery,
       pinned: false,
-      dimmed: dimUnmatched && match == null,
+      dimmed: dimUnmatched && match == null && !committed,
       height: rowHeight,
       onTap: match == null
           ? null
-          : () => controller.commitFirebarResultAndClose(match),
+          : () {
+              final index = controller.firebarMenuResults
+                  .indexWhere((row) => row.key == match.key);
+              if (index >= 0) controller.hoverFirebarMenu(index);
+              controller.commitFirebarMenu();
+            },
     );
   }
 }
