@@ -5496,6 +5496,22 @@ class CaptionV2Controller extends ChangeNotifier {
     return _clicksByPath[path];
   }
 
+  /// Clipboard payload for the open picture — same text the caption strip shows.
+  ///
+  /// Dock Copy and right-click Copy Caption both use this so an unsaved burst
+  /// frame still copies the live caption instead of empty file IPTC.
+  CaptionTransferPayload captionTransferPayloadForCurrent() {
+    final path = currentPath;
+    return CaptionTransferPayload(
+      caption: displayedCaption,
+      personality: personality,
+      headline: headline,
+      keywords: keywords,
+      photographerName: photographerName,
+      clicks: path == null ? null : clicksForTransfer(path),
+    );
+  }
+
   /// Remember [clicks] on each pasted picture. A null snapshot clears them so
   /// a text-only paste does not resurrect old buttons.
   void rememberClicks(Iterable<String> paths, CaptionClickSnapshot? clicks) {
@@ -11056,7 +11072,13 @@ class CaptionV2Controller extends ChangeNotifier {
         succeededPaths: [],
       );
     }
-    if (values.isEmpty) {
+    final captionText = (values['IPTC:Caption-Abstract'] ??
+            values['Caption-Abstract'] ??
+            values['IPTC:Description'] ??
+            values['Description'] ??
+            '')
+        .trim();
+    if (values.isEmpty || captionText.isEmpty) {
       statusMessage = 'No caption to apply';
       notifyListeners();
       return CaptionSaveResult(

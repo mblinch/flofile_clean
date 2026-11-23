@@ -259,7 +259,10 @@ class CaptionTransferPayload {
       'XMP:Description',
       'ImageDescription',
     ]);
-    if (caption.isEmpty) return null;
+    final clicks = CaptionClickSnapshot.fromJson(map['clicks']);
+    // Clicks alone are enough — paste can rebuild the sentence from buttons
+    // after an unsaved burst-frame copy that never wrote IPTC yet.
+    if (caption.isEmpty && clicks == null) return null;
 
     return CaptionTransferPayload(
       caption: caption,
@@ -283,7 +286,7 @@ class CaptionTransferPayload {
         'By-line',
         'Byline',
       ]),
-      clicks: CaptionClickSnapshot.fromJson(map['clicks']),
+      clicks: clicks,
     );
   }
 }

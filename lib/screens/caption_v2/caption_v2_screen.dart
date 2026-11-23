@@ -216,12 +216,16 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     final previous = _controller.previousCaption;
     // Prefer the live caption when the user is actively captioning so
     // "Apply to next N" stamps what they see, not a stale previous save.
+    // Fall back to the strip text (including embedded IPTC) before the last
+    // saved caption — otherwise burst copy can stamp the wrong/empty text.
     final live = _controller.hasCaptionSubject ||
         _controller.manualCaptionOverride != null ||
         (_controller.hasVerbSelection &&
             !_controller.pinDefersCaptionUntilPlayer);
     final liveValues = live ? _controller.captionValues() : null;
+    final stripCaption = _controller.displayedCaption.trim();
     final caption = (liveValues?['IPTC:Caption-Abstract'] ??
+            (stripCaption.isNotEmpty ? stripCaption : null) ??
             previous?.caption ??
             '')
         .trim();
@@ -882,16 +886,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   }
 
   Future<void> _copySelection() async {
-    final payload = CaptionTransferPayload(
-      caption: _controller.displayedCaption,
-      personality: _controller.personality,
-      headline: _controller.headline,
-      keywords: _controller.keywords,
-      photographerName: _controller.photographerName,
-      clicks: _controller.currentPath == null
-          ? null
-          : _controller.clicksForTransfer(_controller.currentPath!),
-    );
+    final payload = _controller.captionTransferPayloadForCurrent();
     await Clipboard.setData(ClipboardData(text: payload.encode()));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
