@@ -2,6 +2,11 @@
 
 Copy relevant bullets into Sparkle / GitHub release notes for each beta build.
 
+## 2.0.53
+
+- **Firebar shorthand:** Type names, jersey codes (`h34` / `v88`), and verbs in one line; suggestions overlay under the field with a dimmed board behind them.
+- **Firebar picks:** Already-selected players are hidden from suggestions so you can’t pick them twice.
+
 ## 2.0.51
 
 - **Google Sign-In:** If macOS Keychain leftovers break sign-in, FloFile clears them and retries automatically — no Keychain Access steps for users.
