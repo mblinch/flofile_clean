@@ -1000,6 +1000,16 @@ class CaptionV2Controller extends ChangeNotifier {
   Future<bool> Function(List<String> alreadySent)? confirmRetransmit;
   bool _retransmitPromptOpen = false;
 
+  /// Screen asks once per caption session before the first FTP, so the user
+  /// can confirm the active profile / host. Return true to send.
+  Future<bool> Function({
+    required String profileName,
+    required String host,
+    required String remoteDir,
+  })? confirmFtpDestination;
+  bool _ftpDestinationConfirmedThisSession = false;
+  bool _ftpDestinationPromptOpen = false;
+
   /// Screen-provided save path so verb-menu / Firebar Save/FTP can show burst alerts.
   Future<void> Function({required bool transmit})? onSaveTransmit;
 
@@ -1246,7 +1256,7 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   /// True when Firebar has a highlighted player match (name or jersey), so
-  /// Shift+Enter can commit that match and FTP without pressing Enter first.
+  /// Shift+Enter can commit that match and save without pressing Enter first.
   bool get firebarCanQuickSavePlayer {
     if (!searchOpen || firebarOptions.isNotEmpty) return false;
     if (searchQuery.trim().isEmpty) return false;
@@ -1264,7 +1274,7 @@ class CaptionV2Controller extends ChangeNotifier {
   bool get firebarShowingDestinationOptions =>
       searchOpen && _firebarOptionKind == FirebarOptionKind.destination;
 
-  /// Show the Shift+Enter FTP hint in the Firebar chrome.
+  /// Show the Shift+Enter save hint in the Firebar chrome.
   bool get firebarShowShiftEnterSaveHint =>
       firebarCanQuickSavePlayer ||
       firebarCanQuickSaveVerb ||
@@ -1274,6 +1284,10 @@ class CaptionV2Controller extends ChangeNotifier {
       List.unmodifiable(_firebarCommitted);
 
   List<FirebarOption> get filteredFirebarOptions {
+    // H/V keeps the typed # in the field — don't filter those chips by it.
+    if (_firebarOptionKind == FirebarOptionKind.jerseySide) {
+      return firebarOptions;
+    }
     final query = _normalizeFirebarText(searchQuery);
     if (query.isEmpty) return firebarOptions;
     return firebarOptions
@@ -1992,11 +2006,30 @@ class CaptionV2Controller extends ChangeNotifier {
   List<String> get orderedSelectedImagePaths =>
       imagePaths.where(selectedImagePaths.contains).toList(growable: false);
 
+  /// Coherent burst containing the current frame (earlier + later neighbors
+  /// within [kCaptionV2BurstGap]). Same membership as [currentBurst].
+  ///
+  /// Name kept for call sites; membership is no longer forward-only.
   List<String> get forwardBurstChain {
     final path = currentPath;
     if (path == null) return const [];
     return burstChainFromAnchor(imagePaths, path, captureByPath);
   }
+
+  /// [forwardBurstChain] with the current frame first so Save-to-Burst can
+  /// treat `paths[0]` as the non-optional Original thumb. Pre-current frames
+  /// stay in the list (they are not dropped by the reorder).
+  List<String> get forwardBurstChainForSaveDock {
+    final path = currentPath;
+    if (path == null) return const [];
+    return burstChainForSaveDock(forwardBurstChain, path);
+  }
+
+  /// Paths Save-to-Burst writes when every non-Original thumb stays checked.
+  /// Includes the chronological first frame even when the current selection
+  /// is in the middle of the burst.
+  List<String> get defaultBurstSaveTargets =>
+      defaultBurstSaveTargetsFromDock(forwardBurstChainForSaveDock);
 
   /// Returns the multi-frame burst that overlaps [paths] with 2+ frames, if any.
   List<String>? burstGroupOverlapping(Iterable<String> paths) {
@@ -3294,6 +3327,7 @@ class CaptionV2Controller extends ChangeNotifier {
     sessionGeneration++;
     ftpSessionId = '${DateTime.now().microsecondsSinceEpoch}';
     ftpSessionStartedAt = DateTime.now();
+    _ftpDestinationConfirmedThisSession = false;
     unawaited(NumberSequenceService.instance.resetForNewSession());
     _jerseyOcrPrescanStop = false;
     _serialBylinesHandled.clear();
@@ -3633,6 +3667,7 @@ class CaptionV2Controller extends ChangeNotifier {
     _folderWatchGeneration++;
     ftpSessionId = null;
     ftpSessionStartedAt = null;
+    _ftpDestinationConfirmedThisSession = false;
     _stopFolderWatch();
     unawaited(NumberSequenceService.instance.resetForNewSession());
     _scanSerialsOnArrival = false;
@@ -4776,6 +4811,7 @@ class CaptionV2Controller extends ChangeNotifier {
   Future<void> _refreshFtpDestination() async {
     final prefs = _prefs;
     if (prefs == null) return;
+    final previous = ftpProfileName;
     final current = await prefs.getCurrentFtpProfile();
     if (current != null && current.isNotEmpty) {
       ftpProfileName = current;
@@ -4783,6 +4819,10 @@ class CaptionV2Controller extends ChangeNotifier {
     } else {
       ftpProfileName = null;
       destinationLabel = 'Photoshelter · FTP';
+    }
+    // Profile switched mid-session — ask again on the next send.
+    if (ftpProfileName != previous) {
+      _ftpDestinationConfirmedThisSession = false;
     }
   }
 
@@ -6905,16 +6945,8 @@ class CaptionV2Controller extends ChangeNotifier {
           _applyJerseySideChoice(isHome: side);
           return;
         }
-        final continued = _jerseySideDigitContinuation(q);
-        if (continued != null) {
-          _clearFirebarOptions();
-          setSearchQuery(continued);
-          return;
-        }
-        if (RegExp(r'^\d+$').hasMatch(q.trim())) {
-          notifyListeners();
-          return;
-        }
+        // Waiting on H/V — ignore every other edit so the typed # stays put.
+        return;
       }
       searchQuery = q;
       firebarOptionIndex = 0;
@@ -6981,11 +7013,28 @@ class CaptionV2Controller extends ChangeNotifier {
 
   /// Move completed shorthand tokens into [firebarCommitted] chips and leave
   /// only incomplete text in the Firebar field.
+  ///
+  /// The last completed verb/name stays in the field until Space (or a menu
+  /// pick that already inserts a trailing space). Otherwise finishing the word
+  /// after auto-select (`fa` → Faceoff + `c`) leaks into the next token.
+  /// Unique jersey codes still chip immediately.
   void _promoteCompletedFirebarTokens(FirebarShorthandLine line) {
     final completed = <FirebarShorthandToken>[];
     final open = <FirebarShorthandToken>[];
-    for (final token in line.tokens) {
+    final lastIndex = line.tokens.length - 1;
+    final alone = line.tokens.length == 1;
+    for (var i = 0; i < line.tokens.length; i++) {
+      final token = line.tokens[i];
       if (token.completed && token.resolved != null && !token.error) {
+        if (_holdCompletedFirebarTokenInField(
+          token,
+          isLast: i == lastIndex,
+          trailingSpace: line.trailingSpace,
+          alone: alone,
+        )) {
+          open.add(token);
+          continue;
+        }
         completed.add(token);
       } else if (token.typed.trim().isNotEmpty ||
           token.display.trim().isNotEmpty) {
@@ -7023,6 +7072,25 @@ class CaptionV2Controller extends ChangeNotifier {
       firebarMenuIndex = 0;
       _syncCaptionFromFirebarChips();
     }
+  }
+
+  /// Keep a just-completed verb/name visible so further letters absorb into it.
+  bool _holdCompletedFirebarTokenInField(
+    FirebarShorthandToken token, {
+    required bool isLast,
+    required bool trailingSpace,
+    required bool alone,
+  }) {
+    // Only when this token is the whole field — compound lines (jersey + verb)
+    // still peel confirmed prefixes immediately.
+    if (!alone || !isLast || trailingSpace) return false;
+    // Unique jersey codes chip immediately (Photo Mechanic feel).
+    if (token.isPlayer &&
+        FirebarShorthand.jerseyToken
+            .hasMatch(FirebarShorthand.normalize(token.typed))) {
+      return false;
+    }
+    return token.isVerb || token.isPlayer;
   }
 
   /// Caption selection from confirmed Firebar chips (and any open line tokens).
@@ -7273,7 +7341,7 @@ class CaptionV2Controller extends ChangeNotifier {
     searchOpen = open;
     firebarSelectionIndex = -1;
     if (!open) {
-      // Esc exits and keeps the current selection — line was never applied.
+      // Esc exits and keeps the board selection — line / chips / prompts go.
       searchQuery = '';
       _firebarLine = null;
       _firebarOwnsSelection = false;
@@ -7285,13 +7353,7 @@ class CaptionV2Controller extends ChangeNotifier {
       _firebarAutoPreviewKeys.clear();
       _discardFirebarVerbPreview(keepSelection: true);
       _firebarCommitted.clear();
-      // Keep follow-up option chips (RBI etc.) only if a verb was applied.
-      if (_firebarOptionKind != FirebarOptionKind.rbi &&
-          _firebarOptionKind != FirebarOptionKind.base &&
-          _firebarOptionKind != FirebarOptionKind.celebration &&
-          _firebarOptionKind != FirebarOptionKind.homeRun) {
-        _clearFirebarOptions();
-      }
+      _clearFirebarOptions();
     }
     notifyListeners();
   }
@@ -7879,10 +7941,10 @@ class CaptionV2Controller extends ChangeNotifier {
     commitFirebarResult(verbResult, recordUndo: false);
   }
 
-  /// Shift+Enter from Firebar: commit the highlighted player/verb match, or pick
-  /// FTP (or Save when [transmit] is false) from the destination prompt.
-  /// Returns true if save or FTP was already kicked off, or follow-up chips
-  /// need a choice; false if the caller should still save or FTP.
+  /// Shift+Enter / ⌘⇧Enter from Firebar: commit the highlighted player/verb
+  /// match, or pick FTP (or Save when [transmit] is false) from the destination
+  /// prompt. Returns true if save or FTP was already kicked off, or follow-up
+  /// chips need a choice; false if the caller should still save or FTP.
   bool commitFirebarForShiftEnterSave({bool transmit = false}) {
     if (firebarShowingDestinationOptions) {
       final options = filteredFirebarOptions.isNotEmpty
@@ -8321,7 +8383,7 @@ class CaptionV2Controller extends ChangeNotifier {
       _prepareFirebarCelebrationOptions(verb);
     } else {
       // Leave the field open so another jersey can be added after the verb.
-      // Save and FTP stay on ⌘S and ⌘↵.
+      // Save stays on ⌘S / Shift+Enter; FTP on ⌘⇧Enter.
       _clearFirebarOptions();
       return;
     }
@@ -8428,10 +8490,14 @@ class CaptionV2Controller extends ChangeNotifier {
     _jerseySideChoiceArmed = false;
   }
 
+  /// Esc on RBI / base / celebration / destination — drop the prompt only.
+  void dismissFirebarChoicePrompt() {
+    if (firebarOptions.isEmpty) return;
+    _clearFirebarOptions();
+    notifyListeners();
+  }
+
   /// Exact jersey on one home player and one visitor.
-  ///
-  /// A longer number that starts with the same digits (`9` and `90`) does not
-  /// skip the question. The next digit continues that longer number.
   bool _jerseyNumberIsOnlySideAmbiguous(String jersey) {
     var homeExact = 0;
     var awayExact = 0;
@@ -8442,34 +8508,6 @@ class CaptionV2Controller extends ChangeNotifier {
       if ((player.jerseyNumber ?? '').trim() == jersey) awayExact++;
     }
     return homeExact == 1 && awayExact == 1;
-  }
-
-  bool _rosterHasJerseyPrefix(String prefix) {
-    bool hit(List<Player> roster) {
-      for (final player in roster) {
-        final number = (player.jerseyNumber ?? '').trim();
-        if (number.startsWith(prefix)) return true;
-      }
-      return false;
-    }
-
-    return hit(homeRoster) || hit(awayRoster);
-  }
-
-  /// Digits typed while Home / Visitor is showing, appended to the number
-  /// that opened the prompt.
-  String? _jerseySideDigitContinuation(String raw) {
-    final pending = _pendingJerseySide;
-    if (pending == null) return null;
-    final extra = raw.trim();
-    if (!RegExp(r'^\d+$').hasMatch(extra)) return null;
-    final next = '${pending.jersey}$extra';
-    if (!_rosterHasJerseyPrefix(next)) return null;
-    return [
-      if (pending.prefix.isNotEmpty) pending.prefix,
-      next,
-      if (pending.suffix.isNotEmpty) pending.suffix,
-    ].join(' ');
   }
 
   _PendingJerseySideQuery? _pendingJerseySideFor(String raw) {
@@ -8492,16 +8530,6 @@ class CaptionV2Controller extends ChangeNotifier {
       prior.add(parts[i]);
     }
     return null;
-  }
-
-  /// Shows Home / Visitor chips and clears the field so the next key is the answer.
-  bool _beginJerseySidePrompt(String raw) {
-    if (!searchOpen) return false;
-    final pending = _pendingJerseySideFor(raw) ??
-        _pendingJerseySideFromShorthandLine();
-    if (pending == null) return false;
-    _showJerseySidePrompt(pending);
-    return true;
   }
 
   /// Ambiguous bare number in the shorthand line (e.g. `34` on both teams).
@@ -8555,8 +8583,38 @@ class CaptionV2Controller extends ChangeNotifier {
     ];
     firebarOptionIndex = 0;
     _jerseySideChoiceArmed = false;
-    searchQuery = '';
+    // Keep the typed number in the field while H/V is open.
+    searchQuery = [
+      if (pending.prefix.trim().isNotEmpty) pending.prefix.trim(),
+      pending.jersey,
+    ].join(' ');
     _firebarLine = null;
+    firebarSelectionIndex = -1;
+    firebarApplyError = null;
+    notifyListeners();
+  }
+
+  /// Esc while H/V is open: dismiss the prompt, keep the typed #, stay in Firebar.
+  void cancelFirebarJerseySidePrompt() {
+    if (!firebarJerseySideChoiceOpen && _pendingJerseySide == null) return;
+    final pending = _pendingJerseySide;
+    final keep = pending == null
+        ? searchQuery.trim()
+        : [
+            if (pending.prefix.trim().isNotEmpty) pending.prefix.trim(),
+            pending.jersey,
+          ].join(' ');
+    _clearFirebarOptions();
+    _pendingJerseySide = null;
+    // No trailing space — otherwise Space/setSearchQuery would reopen H/V.
+    if (keep.isEmpty) {
+      searchQuery = '';
+      _firebarLine = null;
+    } else {
+      final line = _firebarShorthandEngine().parse(keep);
+      _firebarLine = line;
+      searchQuery = line.displayLine;
+    }
     firebarSelectionIndex = -1;
     firebarApplyError = null;
     notifyListeners();
@@ -8566,7 +8624,7 @@ class CaptionV2Controller extends ChangeNotifier {
     final roster = isHome ? homeRoster : awayRoster;
     for (final player in roster) {
       if ((player.jerseyNumber ?? '').trim() == jersey) {
-        final name = player.fullName.trim();
+        final name = _shortName(player.fullName);
         if (name.isNotEmpty) return name;
       }
     }
@@ -11283,7 +11341,7 @@ class CaptionV2Controller extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    if (_retransmitPromptOpen) {
+    if (_retransmitPromptOpen || _ftpDestinationPromptOpen) {
       statusMessage = 'FTP already in progress';
       notifyListeners();
       return;
@@ -11358,6 +11416,27 @@ class CaptionV2Controller extends ChangeNotifier {
         notifyListeners();
       }
       return;
+    }
+
+    if (!_ftpDestinationConfirmedThisSession) {
+      _ftpDestinationPromptOpen = true;
+      bool allow = false;
+      try {
+        allow = await confirmFtpDestination?.call(
+              profileName: profileName ?? 'FTP',
+              host: host,
+              remoteDir: remoteDir,
+            ) ??
+            true;
+      } finally {
+        _ftpDestinationPromptOpen = false;
+      }
+      if (!allow) {
+        statusMessage = 'FTP cancelled';
+        notifyListeners();
+        return;
+      }
+      _ftpDestinationConfirmedThisSession = true;
     }
 
     final jobs = [

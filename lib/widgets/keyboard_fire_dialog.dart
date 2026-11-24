@@ -4001,9 +4001,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     'Cycle Home → Verbs → Visiting (highlight only; click bar to type)'),
                 _shortcutHelpRow('Esc',
                     'Leave the current typing box / clear column highlight'),
-                _shortcutHelpRow('⇧⏎',
-                    'Save, FTP upload, next image (also ⇧⌘⏎). Uses active FTP profile.'),
+                _shortcutHelpRow('⇧⏎', 'Save caption & next image (same as ⌘S)'),
                 _shortcutHelpRow('⌘S', 'Save caption & next image'),
+                _shortcutHelpRow('⇧⌘⏎',
+                    'Save, FTP upload, next image. Uses active FTP profile.'),
                 _shortcutHelpRow(
                     '⌘⇧V', 'Paste previous caption (Ctrl+Shift+V)'),
                 _shortcutHelpRow('Ctrl+#',

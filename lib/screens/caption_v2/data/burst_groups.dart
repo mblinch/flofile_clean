@@ -33,7 +33,10 @@ List<List<String>> groupFramesIntoBursts(
   return groups;
 }
 
-/// Burst chain from [anchorPath] using the V2 gap (wraps existing helper).
+/// Full coherent burst containing [anchorPath] using the V2 gap.
+///
+/// Same membership as [groupFramesIntoBursts] for that frame: walks both
+/// earlier and later neighbors while adjacent capture gaps stay ≤ [maxGap].
 List<String> burstChainFromAnchor(
   List<String> orderedPaths,
   String anchorPath,
@@ -45,5 +48,51 @@ List<String> burstChainFromAnchor(
     anchorPath,
     captureByPath,
     maxGap: maxGap,
+  );
+}
+
+/// Save-to-Burst popover order: [currentPath] first (Original), then every
+/// other frame in [chain] order — including frames before current in capture
+/// time. Does not drop pre-current members.
+List<String> burstChainForSaveDock(List<String> chain, String currentPath) {
+  if (chain.isEmpty) return const [];
+  if (chain.length == 1 || chain.first == currentPath) {
+    return List<String>.from(chain);
+  }
+  return <String>[
+    currentPath,
+    for (final path in chain)
+      if (path != currentPath) path,
+  ];
+}
+
+/// Non-Original thumbs that start checked in the Save-to-Burst popover.
+///
+/// [dockPaths] must already be [burstChainForSaveDock] order (index 0 =
+/// current). Includes every remaining frame — earlier and later.
+Set<String> defaultCheckedBurstExtras(List<String> dockPaths) {
+  if (dockPaths.length <= 1) return <String>{};
+  return dockPaths.skip(1).toSet();
+}
+
+/// Paths written by Save-to-Burst: Original ([dockPaths].first) plus each
+/// extra that remains in [checkedExtras], preserving dock order.
+List<String> resolveBurstSaveTargets({
+  required List<String> dockPaths,
+  required Set<String> checkedExtras,
+}) {
+  if (dockPaths.isEmpty) return const [];
+  return <String>[
+    dockPaths.first,
+    for (final path in dockPaths.skip(1))
+      if (checkedExtras.contains(path)) path,
+  ];
+}
+
+/// Default write set: Original + every other coherent-burst frame.
+List<String> defaultBurstSaveTargetsFromDock(List<String> dockPaths) {
+  return resolveBurstSaveTargets(
+    dockPaths: dockPaths,
+    checkedExtras: defaultCheckedBurstExtras(dockPaths),
   );
 }

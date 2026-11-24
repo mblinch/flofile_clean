@@ -6,6 +6,10 @@ import '../data/caption_v2_controller.dart';
 import '../data/firebar_shorthand.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
+/// Shared by the Firebar shell (period + bar), suggestions overlay, and
+/// period controls so a tap on any of them stays inside Firebar.
+const Object kFirebarTapGroup = Object();
+
 /// Inline Firebar. Roster / verb columns remain the board reference list.
 class CaptionV2SearchBar extends StatefulWidget {
   const CaptionV2SearchBar({
@@ -17,6 +21,8 @@ class CaptionV2SearchBar extends StatefulWidget {
     required this.onExit,
     this.onSave,
     this.onTransmit,
+    this.embedded = false,
+    this.spotlightKey,
   });
 
   final CaptionV2Controller controller;
@@ -26,6 +32,13 @@ class CaptionV2SearchBar extends StatefulWidget {
   final VoidCallback onExit;
   final VoidCallback? onSave;
   final VoidCallback? onTransmit;
+
+  /// When true, the parent draws the active orange border around Firebar +
+  /// period — this bar stays borderless so the shell reads as one unit.
+  final bool embedded;
+
+  /// Optional outer shell key (period + Firebar) used to cut the dim hole.
+  final GlobalKey? spotlightKey;
 
   @override
   State<CaptionV2SearchBar> createState() => _CaptionV2SearchBarState();
@@ -39,6 +52,7 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar>
   /// Keeps the EditableText element alive across the amb ↔ typing layout swap
   /// so the caret is not dropped when H/V closes.
   final GlobalKey _firebarInputKey = GlobalKey();
+  final GlobalKey _firebarBarKey = GlobalKey();
   final LayerLink _menuLink = LayerLink();
   final OverlayPortalController _menuPortal = OverlayPortalController();
 
@@ -105,13 +119,35 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar>
         controller.firebarMenuResults.isNotEmpty;
   }
 
+  /// Dim the board while suggestions or the H/V question are open.
+  bool get _showDimOverlay {
+    final controller = widget.controller;
+    return controller.searchOpen &&
+        (controller.firebarJerseySideChoiceOpen || _showSuggestions);
+  }
+
   void _syncMenuPortal() {
-    final show = _showSuggestions;
+    final show = _showDimOverlay;
     if (show && !_menuPortal.isShowing) {
       _menuPortal.show();
     } else if (!show && _menuPortal.isShowing) {
       _menuPortal.hide();
     }
+  }
+
+  void _cancelJerseySideFromOverlay() {
+    final controller = widget.controller;
+    if (!controller.firebarJerseySideChoiceOpen) return;
+    controller.cancelFirebarJerseySidePrompt();
+    _syncFieldFromController();
+    _retainFirebarFocus();
+  }
+
+  Rect? _firebarBarGlobalRect() {
+    final key = widget.spotlightKey ?? _firebarBarKey;
+    final box = key.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return null;
+    return box.localToGlobal(Offset.zero) & box.size;
   }
 
   void _syncText() {
@@ -185,7 +221,7 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar>
     final keys = HardwareKeyboard.instance;
     final amb = controller.firebarJerseySideChoiceOpen;
 
-    // While H/V is open: only h/v (or click). Space/Tab/Enter/arrows nudge.
+    // While H/V is open: only h/v (or click). Esc cancels; block all else.
     if (amb) {
       if (event.logicalKey == LogicalKeyboardKey.keyH) {
         controller.chooseFirebarJerseySide(isHome: true);
@@ -197,20 +233,29 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar>
         _retainFirebarFocus();
         return KeyEventResult.handled;
       }
-      if (event.logicalKey == LogicalKeyboardKey.space ||
-          event.logicalKey == LogicalKeyboardKey.tab ||
-          event.logicalKey == LogicalKeyboardKey.enter ||
-          event.logicalKey == LogicalKeyboardKey.numpadEnter ||
-          event.logicalKey == LogicalKeyboardKey.arrowUp ||
+      if (event.logicalKey == LogicalKeyboardKey.escape) {
+        controller.cancelFirebarJerseySidePrompt();
+        _syncFieldFromController();
+        _retainFirebarFocus();
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.arrowUp ||
           event.logicalKey == LogicalKeyboardKey.arrowDown) {
+        controller.moveFirebarSelection(
+          event.logicalKey == LogicalKeyboardKey.arrowUp ? -1 : 1,
+        );
         _nudgeAmbiguous();
         return KeyEventResult.handled;
       }
-      if (event.logicalKey == LogicalKeyboardKey.escape) {
-        widget.onExit();
+      if (event.logicalKey == LogicalKeyboardKey.space ||
+          event.logicalKey == LogicalKeyboardKey.tab ||
+          event.logicalKey == LogicalKeyboardKey.enter ||
+          event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+        _nudgeAmbiguous();
         return KeyEventResult.handled;
       }
-      return KeyEventResult.ignored;
+      // Digits, letters, backspace — stay locked until H or V.
+      return KeyEventResult.handled;
     }
 
     // ⌘1–⌘4 pick a suggestion directly.
@@ -311,14 +356,19 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar>
     final tokens = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final active = controller.searchOpen;
     final amb = controller.firebarJerseySideChoiceOpen;
-    final labelColor = active ? FfTokens.firebar : const Color(0xFF959AA0);
-    final borderColor = active
-        ? FfTokens.firebar.withValues(alpha: 0.7)
-        : const Color(0x1EE8EEF4);
+    // While H/V is open, mute the title/chips so the Which? choices own the focus.
+    final labelColor = amb
+        ? const Color(0xFF6A6E73)
+        : (active ? FfTokens.firebar : const Color(0xFF959AA0));
+    final borderColor = widget.embedded
+        ? Colors.transparent
+        : (active
+            ? FfTokens.firebar.withValues(alpha: 0.7)
+            : const Color(0x1EE8EEF4));
 
     // Keep portal visibility in sync even when rebuilds arrive without a
     // controller listener tick (e.g. focus-only paint paths).
-    if (_showSuggestions != _menuPortal.isShowing) {
+    if (_showDimOverlay != _menuPortal.isShowing) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _syncMenuPortal();
@@ -332,100 +382,124 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar>
         OverlayPortal(
           controller: _menuPortal,
           overlayChildBuilder: (context) {
+            final showSuggestions = _showSuggestions;
             final width = _menuLink.leaderSize?.width;
-            if (width == null || width <= 0) {
-              return const SizedBox.shrink();
-            }
+            // Cut a hole over the Firebar so the H/V question stays bright.
+            final hole = amb ? _firebarBarGlobalRect() : null;
+            final dim = GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: amb ? _cancelJerseySideFromOverlay : widget.onExit,
+              child: const ColoredBox(color: Color(0x99000000)),
+            );
             return Stack(
               children: [
                 Positioned.fill(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _retainFirebarFocus,
-                    child: const ColoredBox(
-                      color: Color(0x99000000),
-                    ),
-                  ),
+                  child: hole == null
+                      ? dim
+                      : ClipPath(
+                          clipper: _FirebarSpotlightClipper(hole: hole),
+                          child: dim,
+                        ),
                 ),
-                CompositedTransformFollower(
-                  link: _menuLink,
-                  showWhenUnlinked: false,
-                  targetAnchor: Alignment.bottomLeft,
-                  followerAnchor: Alignment.topLeft,
-                  offset: const Offset(0, 6),
-                  child: Align(
-                    alignment: Alignment.topLeft,
-                    // At least as wide as the typing field; grow for long
-                    // names so rows don't overflow.
-                    child: SizedBox(
-                      width: width.clamp(280.0, 420.0),
-                      child: Material(
-                        type: MaterialType.transparency,
-                        child: _FirebarInlineSuggestions(
-                          key: const Key('firebar_suggestions_overlay'),
-                          controller: controller,
-                          tokens: tokens,
-                          onCommit: (index) {
-                            controller.hoverFirebarMenu(index);
-                            controller.commitFirebarMenu();
-                            _retainFirebarFocus();
-                          },
+                if (showSuggestions && width != null && width > 0)
+                  CompositedTransformFollower(
+                    link: _menuLink,
+                    showWhenUnlinked: false,
+                    targetAnchor: Alignment.bottomLeft,
+                    followerAnchor: Alignment.topLeft,
+                    offset: const Offset(0, 6),
+                    child: Align(
+                      alignment: Alignment.topLeft,
+                      // At least as wide as the typing field; grow for long
+                      // names so rows don't overflow.
+                      child: SizedBox(
+                        width: width.clamp(280.0, 420.0),
+                        child: TapRegion(
+                          groupId: kFirebarTapGroup,
+                          child: Material(
+                            type: MaterialType.transparency,
+                            child: _FirebarInlineSuggestions(
+                              key: const Key('firebar_suggestions_overlay'),
+                              controller: controller,
+                              tokens: tokens,
+                              onCommit: (index) {
+                                controller.hoverFirebarMenu(index);
+                                controller.commitFirebarMenu();
+                                _retainFirebarFocus();
+                              },
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
               ],
             );
           },
-          child: GestureDetector(
+          child: TapRegion(
+            groupId: kFirebarTapGroup,
+            onTapOutside: !active
+                ? null
+                : (_) {
+                    if (amb) {
+                      _cancelJerseySideFromOverlay();
+                    } else {
+                      widget.onExit();
+                    }
+                  },
+            child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () {
                 if (!active) widget.onActivate();
                 widget.focusNode.requestFocus();
               },
               child: AnimatedContainer(
+                key: _firebarBarKey,
                 duration: const Duration(milliseconds: 150),
-                constraints: const BoxConstraints(minHeight: 48),
-                padding: const EdgeInsets.fromLTRB(14, 6, 8, 6),
+                constraints: const BoxConstraints(minHeight: 34),
+                padding: const EdgeInsets.fromLTRB(10, 2, 6, 2),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E242A),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: borderColor),
+                  color: widget.embedded
+                      ? Colors.transparent
+                      : const Color(0xFF1E242A),
+                  borderRadius: BorderRadius.circular(8),
+                  border: widget.embedded
+                      ? null
+                      : Border.all(color: borderColor),
                 ),
                 child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 PhosphorIcon(
                   PhosphorIconsFill.fire,
-                  size: 16,
+                  size: 13,
                   color: labelColor,
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 5),
                 Text(
                   'Firebar',
                   maxLines: 1,
                   softWrap: false,
                   style: TextStyle(
                     fontFamily: FfTokens.fontFamily,
-                    fontSize: 14,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                     height: 1,
                     color: labelColor,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 Container(
                   width: 1,
-                  height: 22,
+                  height: 16,
                   color: const Color(0x1EE8EEF4),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 Expanded(
                   child: Row(
                     children: [
-                      if (!amb &&
-                          controller.firebarCommitted.isNotEmpty) ...[
+                      // Keep prior chips visible while H/V (or other) choices show.
+                      if (controller.firebarCommitted.isNotEmpty) ...[
                         Flexible(
                           flex: 3,
                           child: SingleChildScrollView(
@@ -445,6 +519,7 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar>
                                     tokens: tokens,
                                     selected: index ==
                                         controller.firebarChipCursor,
+                                    dimmed: amb,
                                     onSelect: () => controller
                                         .selectFirebarChip(index),
                                   ),
@@ -486,25 +561,34 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar>
                           ),
                         ),
                       if (amb) ...[
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 4),
+                        Container(
+                          width: 1,
+                          height: 16,
+                          color: const Color(0x1EE8EEF4),
+                        ),
+                        const SizedBox(width: 4),
                         Expanded(
-                          child: AnimatedBuilder(
-                            animation: _ambNudge,
-                            builder: (context, child) {
-                              final t = _ambNudge.value;
-                              final dx = t == 0
-                                  ? 0.0
-                                  : (t < 0.5 ? -3.0 : 3.0) *
-                                      (1 - (t - 0.5).abs() * 2);
-                              return Transform.translate(
-                                offset: Offset(dx, 0),
-                                child: child,
-                              );
-                            },
-                            child: _FirebarJerseySideChoices(
-                              controller: controller,
-                              tokens: tokens,
-                              onPicked: _retainFirebarFocus,
+                          flex: 5,
+                          child: ClipRect(
+                            child: AnimatedBuilder(
+                              animation: _ambNudge,
+                              builder: (context, child) {
+                                final t = _ambNudge.value;
+                                final dx = t == 0
+                                    ? 0.0
+                                    : (t < 0.5 ? -2.0 : 2.0) *
+                                        (1 - (t - 0.5).abs() * 2);
+                                return Transform.translate(
+                                  offset: Offset(dx, 0),
+                                  child: child,
+                                );
+                              },
+                              child: _FirebarJerseySideChoices(
+                                controller: controller,
+                                tokens: tokens,
+                                onPicked: _retainFirebarFocus,
+                              ),
                             ),
                           ),
                         ),
@@ -565,6 +649,7 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar>
                 ),
               ),
             ),
+          ),
         ),
         if (_writtenToast) ...[
           const SizedBox(height: 6),
@@ -591,10 +676,10 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar>
     );
   }
 
-  /// Prototype `inw.sh` width while the H/V chooser owns the bar.
+  /// Tight width for the typed # while the H/V chooser owns the bar.
   double _shrunkInputWidth(String text) {
     final chars = text.isEmpty ? 1 : text.length;
-    return (chars * 9.5) + 6;
+    return (chars * 9.0) + 2;
   }
 
   Widget _buildTypingField({
@@ -606,6 +691,7 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar>
     return _FirebarTypingField(
       inputKey: _firebarInputKey,
       active: active,
+      readOnly: amb,
       focusNode: widget.focusNode,
       textController: widget.textController,
       tokens: tokens,
@@ -618,13 +704,9 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar>
           _syncFieldFromController();
         }
       },
-      // H/V chips and suggestions sit outside the TextField; unfocusing on
-      // tap-outside races with pick handlers and drops the caret.
-      onTapOutside: active
-          ? null
-          : (_) {
-              widget.focusNode.unfocus();
-            },
+      // Outside taps are handled by the Firebar TapRegion (keeps H/V chips
+      // and the suggestions menu inside the same group).
+      onTapOutside: null,
       onSubmitted: amb
           ? () {}
           : () {
@@ -680,17 +762,18 @@ class _FirebarKbd extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(
         color: const Color(0xFF262D35),
-        borderRadius: BorderRadius.circular(5),
+        borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
         label,
         style: const TextStyle(
           fontFamily: FfTokens.fontFamily,
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: FontWeight.w600,
+          height: 1.1,
           color: Color(0xFF959AA0),
         ),
       ),
@@ -709,12 +792,14 @@ class _FirebarTypingField extends StatelessWidget {
     required this.onKey,
     required this.onChanged,
     required this.onSubmitted,
+    this.readOnly = false,
     this.onTapOutside,
     this.ghostCompletion,
   });
 
   final GlobalKey inputKey;
   final bool active;
+  final bool readOnly;
   final FocusNode focusNode;
   final TextEditingController textController;
   final FfTokens tokens;
@@ -730,9 +815,9 @@ class _FirebarTypingField extends StatelessWidget {
     final baseStyle = TextStyle(
       fontFamily: FfTokens.fontFamily,
       color: tokens.text,
-      fontSize: 15,
+      fontSize: 13,
       fontWeight: FontWeight.w500,
-      height: 1.2,
+      height: 1.15,
     );
     final typed = textController.text;
     final errorStyle = baseStyle.copyWith(color: const Color(0xFFFF5A5A));
@@ -745,8 +830,9 @@ class _FirebarTypingField extends StatelessWidget {
           key: inputKey,
           // Keep enabled while Firebar is open so focus/caret survive rebuilds.
           enabled: active,
-          readOnly: false,
-          showCursor: active,
+          // H/V prompt: show the typed # but block edits until H or V.
+          readOnly: readOnly,
+          showCursor: active && !readOnly,
           focusNode: focusNode,
           controller: textController,
           maxLines: 1,
@@ -756,7 +842,7 @@ class _FirebarTypingField extends StatelessWidget {
           decoration: const InputDecoration(
             border: InputBorder.none,
             isDense: true,
-            contentPadding: EdgeInsets.symmetric(vertical: 6),
+            contentPadding: EdgeInsets.symmetric(vertical: 2),
           ),
           onChanged: onChanged,
           onSubmitted: (_) => onSubmitted(),
@@ -801,7 +887,7 @@ class _FirebarTypingField extends StatelessWidget {
     }
 
     return SizedBox(
-      height: 30,
+      height: 24,
       child: Stack(
         alignment: Alignment.centerLeft,
         children: [
@@ -826,6 +912,7 @@ class _FirebarChip extends StatelessWidget {
     required this.controller,
     required this.tokens,
     this.selected = false,
+    this.dimmed = false,
     this.onSelect,
   });
 
@@ -833,6 +920,7 @@ class _FirebarChip extends StatelessWidget {
   final CaptionV2Controller controller;
   final FfTokens tokens;
   final bool selected;
+  final bool dimmed;
   final VoidCallback? onSelect;
 
   @override
@@ -848,22 +936,28 @@ class _FirebarChip extends StatelessWidget {
         ? (controller.verbDefinition(result.verbKey ?? '')?.label ??
             result.verbKey ??
             '')
-        : (player?.fullName ?? '');
+        : _firebarLastName(player?.fullName ?? '');
 
-    final fill = isVerb
-        ? FfTokens.firebar.withValues(alpha: 0.14)
-        : const Color(0xFF262D35);
-    final textColor = isVerb ? const Color(0xFFFFB08F) : tokens.text;
-    final border = selected
+    const muted = Color(0xFF6A6E73);
+    final fill = dimmed
+        ? const Color(0xFF1A1F24)
+        : (isVerb
+            ? FfTokens.firebar.withValues(alpha: 0.14)
+            : const Color(0xFF262D35));
+    final textColor = dimmed
+        ? muted
+        : (isVerb ? const Color(0xFFFFB08F) : tokens.text);
+    final jerseyColor = dimmed ? muted : FfTokens.firebar;
+    final border = selected && !dimmed
         ? FfTokens.firebar
         : Colors.transparent;
 
     return Container(
-      height: 28,
-      padding: const EdgeInsets.fromLTRB(9, 0, 4, 0),
+      height: 22,
+      padding: const EdgeInsets.fromLTRB(7, 0, 2, 0),
       decoration: BoxDecoration(
         color: fill,
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: BorderRadius.circular(5),
         border: Border.all(color: border),
       ),
       child: Row(
@@ -878,53 +972,56 @@ class _FirebarChip extends StatelessWidget {
                 if (!isVerb && jersey.isNotEmpty) ...[
                   Text(
                     jersey,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: FfTokens.fontFamily,
-                      fontSize: 13,
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: FfTokens.firebar,
-                      fontFeatures: [FontFeature.tabularFigures()],
+                      height: 1,
+                      color: jerseyColor,
+                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 5),
                 ],
                 Text(
                   name,
                   maxLines: 1,
                   style: TextStyle(
                     fontFamily: FfTokens.fontFamily,
-                    fontSize: 13,
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
+                    height: 1,
                     color: textColor,
                   ),
                 ),
                 if (!isVerb && abbr.isNotEmpty) ...[
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 5),
                   Text(
                     abbr,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: FfTokens.fontFamily,
-                      fontSize: 11,
+                      fontSize: 10,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF6A6E73),
+                      height: 1,
+                      color: muted.withValues(alpha: dimmed ? 0.7 : 1),
                     ),
                   ),
                 ],
               ],
             ),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 2),
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTapDown: (_) => controller.removeFirebarChip(result),
-            child: const SizedBox(
-              width: 20,
-              height: 20,
+            child: SizedBox(
+              width: 16,
+              height: 16,
               child: Center(
                 child: PhosphorIcon(
                   PhosphorIconsBold.x,
-                  size: 11,
-                  color: Color(0xFF6A6E73),
+                  size: 10,
+                  color: muted.withValues(alpha: dimmed ? 0.7 : 1),
                 ),
               ),
             ),
@@ -935,7 +1032,36 @@ class _FirebarChip extends StatelessWidget {
   }
 }
 
-/// Prototype H/V chooser: "Which #22?" + [H] #22 Name TOR · [V] #22 Name OTT.
+/// Last token of a full name ("Auston Matthews" → "Matthews").
+String _firebarLastName(String full) {
+  final parts = full.trim().split(RegExp(r'\s+'));
+  if (parts.length <= 1) return full.trim();
+  return parts.sublist(1).join(' ');
+}
+
+/// Dim everything except the Firebar bar (H/V question stays interactive).
+class _FirebarSpotlightClipper extends CustomClipper<Path> {
+  const _FirebarSpotlightClipper({required this.hole});
+
+  final Rect hole;
+
+  @override
+  Path getClip(Size size) {
+    final path = Path()..addRect(Offset.zero & size);
+    if (!hole.isEmpty) {
+      path.addRRect(
+        RRect.fromRectAndRadius(hole.inflate(2), const Radius.circular(10)),
+      );
+    }
+    return path..fillType = PathFillType.evenOdd;
+  }
+
+  @override
+  bool shouldReclip(covariant _FirebarSpotlightClipper oldClipper) =>
+      oldClipper.hole != hole;
+}
+
+/// Prototype H/V chooser: "Which #22?" + [H] Name TOR · [V] Name OTT.
 class _FirebarJerseySideChoices extends StatelessWidget {
   const _FirebarJerseySideChoices({
     required this.controller,
@@ -951,12 +1077,11 @@ class _FirebarJerseySideChoices extends StatelessWidget {
   Widget build(BuildContext context) {
     final options = controller.filteredFirebarOptions;
     final prompt = controller.firebarOptionPrompt ?? 'Which player?';
-    final jersey = RegExp(r'#(\d+)').firstMatch(prompt)?.group(1) ?? '';
     String nameOf(FirebarOption o) {
       final label = o.label;
       final dash = label.indexOf('-');
-      if (dash < 0) return label;
-      return label.substring(dash + 1).trim();
+      final raw = dash < 0 ? label : label.substring(dash + 1).trim();
+      return _firebarLastName(raw);
     }
 
     FirebarOption? home;
@@ -971,36 +1096,45 @@ class _FirebarJerseySideChoices extends StatelessWidget {
       onPicked();
     }
 
-    return Wrap(
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: 6,
-      runSpacing: 6,
+    // Option A — keycap inside the chip: [H] last-name TOR
+    return Row(
       children: [
         Text(
           prompt,
+          maxLines: 1,
+          softWrap: false,
           style: const TextStyle(
             fontFamily: FfTokens.fontFamily,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            height: 1,
             color: Color(0xFF959AA0),
           ),
         ),
-        if (home != null)
-          _AmbiguousPickButton(
-            sideKey: 'H',
-            jersey: jersey,
-            name: nameOf(home),
-            abbr: controller.homeAbbr.toUpperCase(),
-            onTap: () => pick(home!),
+        if (home != null) ...[
+          const SizedBox(width: 8),
+          Flexible(
+            fit: FlexFit.loose,
+            child: _AmbiguousPickButton(
+              sideKey: 'H',
+              name: nameOf(home),
+              abbr: controller.homeAbbr.toUpperCase(),
+              onTap: () => pick(home!),
+            ),
           ),
-        if (away != null)
-          _AmbiguousPickButton(
-            sideKey: 'V',
-            jersey: jersey,
-            name: nameOf(away),
-            abbr: controller.awayAbbr.toUpperCase(),
-            onTap: () => pick(away!),
+        ],
+        if (away != null) ...[
+          const SizedBox(width: 8),
+          Flexible(
+            fit: FlexFit.loose,
+            child: _AmbiguousPickButton(
+              sideKey: 'V',
+              name: nameOf(away),
+              abbr: controller.awayAbbr.toUpperCase(),
+              onTap: () => pick(away!),
+            ),
           ),
+        ],
       ],
     );
   }
@@ -1009,14 +1143,12 @@ class _FirebarJerseySideChoices extends StatelessWidget {
 class _AmbiguousPickButton extends StatefulWidget {
   const _AmbiguousPickButton({
     required this.sideKey,
-    required this.jersey,
     required this.name,
     required this.abbr,
     required this.onTap,
   });
 
   final String sideKey;
-  final String jersey;
   final String name;
   final String abbr;
   final VoidCallback onTap;
@@ -1028,85 +1160,98 @@ class _AmbiguousPickButton extends StatefulWidget {
 class _AmbiguousPickButtonState extends State<_AmbiguousPickButton> {
   bool _hovered = false;
 
+  static const _chipBg = Color(0xFF262D35);
+  static const _chipBgHover = Color(0xFF2A3035);
+  static const _hairline = Color(0x1EE8EEF4); // rgba(232,238,244,.12)
+  static const _hairlineHover = Color(0x99FF5A1F); // rgba(255,90,31,.6)
+  static const _keycapBg = Color(0xFFFF5A1F);
+  static const _keycapFg = Color(0xFF1A0A03);
+
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          height: 28,
-          padding: const EdgeInsets.fromLTRB(4, 0, 10, 0),
-          decoration: BoxDecoration(
-            color: _hovered ? const Color(0xFF2A3035) : const Color(0xFF262D35),
-            borderRadius: BorderRadius.circular(7),
-            border: Border.all(
-              color: _hovered
-                  ? FfTokens.firebar.withValues(alpha: 0.6)
-                  : const Color(0x1EE8EEF4),
+    return Tooltip(
+      message: [
+        widget.sideKey,
+        if (widget.name.isNotEmpty) widget.name,
+        if (widget.abbr.isNotEmpty) widget.abbr,
+      ].join(' · '),
+      waitDuration: const Duration(milliseconds: 400),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            height: 22,
+            padding: const EdgeInsets.fromLTRB(3, 0, 7, 0),
+            decoration: BoxDecoration(
+              color: _hovered ? _chipBgHover : _chipBg,
+              borderRadius: BorderRadius.circular(5),
+              border: Border.all(
+                color: _hovered ? _hairlineHover : _hairline,
+              ),
             ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                constraints: const BoxConstraints(minWidth: 20),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: FfTokens.firebar,
-                  borderRadius: BorderRadius.circular(5),
-                ),
-                child: Text(
-                  widget.sideKey,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF1A0A03),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  width: 16,
+                  height: 16,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _keycapBg,
+                    borderRadius: BorderRadius.circular(4),
                   ),
-                ),
-              ),
-              const SizedBox(width: 7),
-              if (widget.jersey.isNotEmpty) ...[
-                Text(
-                  widget.jersey,
-                  style: const TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: FfTokens.firebar,
-                    fontFeatures: [FontFeature.tabularFigures()],
+                  child: Text(
+                    widget.sideKey,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      height: 1,
+                      color: _keycapFg,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 6),
-              ],
-              Text(
-                widget.name,
-                style: const TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFFE8EEF4),
-                ),
-              ),
-              if (widget.abbr.isNotEmpty) ...[
-                const SizedBox(width: 6),
-                Text(
-                  widget.abbr,
-                  style: const TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF6A6E73),
+                Flexible(
+                  child: Text(
+                    widget.name,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      height: 1,
+                      color: Color(0xFFE8EEF4),
+                    ),
                   ),
                 ),
+                if (widget.abbr.isNotEmpty) ...[
+                  const SizedBox(width: 5),
+                  Text(
+                    widget.abbr,
+                    maxLines: 1,
+                    softWrap: false,
+                    style: const TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      height: 1,
+                      letterSpacing: 0.4,
+                      color: Color(0xFF6A6E73),
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -1329,12 +1474,12 @@ class _FirebarOptionButton extends StatelessWidget {
       },
       borderRadius: BorderRadius.circular(6),
       child: Container(
-        height: 26,
+        height: 22,
         alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
           color: fill,
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(5),
           border: Border.all(color: border),
         ),
         child: Text(
@@ -1344,7 +1489,8 @@ class _FirebarOptionButton extends StatelessWidget {
           softWrap: false,
           style: tokens.metaStyle.copyWith(
             color: textColor,
-            fontSize: 12,
+            fontSize: 11,
+            height: 1,
             fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
           ),
         ),

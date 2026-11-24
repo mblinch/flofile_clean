@@ -7,6 +7,7 @@ import '../../../services/preferences_service.dart';
 import '../../../theme/ff_tokens.dart';
 import '../../../widgets/ff_menu.dart';
 import '../data/caption_v2_controller.dart' show CaptionProvenanceSpan;
+import '../layout/caption_v2_search.dart' show kFirebarTapGroup;
 
 /// One editable value chip inside [CaptionStrip].
 class CaptionChipData {
@@ -83,6 +84,8 @@ class CaptionStrip extends StatelessWidget {
         'Caption will appear here as you add players and a verb.',
     this.onEditTap,
     this.footer,
+    this.firebarActive = false,
+    this.firebarShellKey,
     this.fillHeight = false,
     this.multiWriteCount = 0,
     this.compact = false,
@@ -184,6 +187,12 @@ class CaptionStrip extends StatelessWidget {
   final ValueChanged<String>? onKeywordsChanged;
   final VoidCallback? onEditTap;
   final Widget? footer;
+
+  /// When true, period + Firebar share one orange shell border.
+  final bool firebarActive;
+
+  /// Optional key on that shared shell (dim overlay hole while Firebar is open).
+  final GlobalKey? firebarShellKey;
 
   /// Stretch the caption area to the parent's height. The text scrolls when
   /// it is taller than the box.
@@ -357,51 +366,109 @@ class CaptionStrip extends StatelessWidget {
         if (inningLabel != null ||
             onPreTap != null ||
             onPostTap != null ||
-            showGettyEditorsNotes) ...[
+            showGettyEditorsNotes ||
+            footer != null) ...[
           const SizedBox(height: 8),
-          _InningCard(
-            inningLabel: inningLabel,
-            timingUnitLabel: timingUnitLabel,
-            inning: inning,
-            regulationCount: regulationCount,
-            extraLabel: extraLabel,
-            maxInning: maxInning,
-            segmentPrefix: segmentPrefix,
-            selectedHalf: selectedHalf,
-            quarterMode: quarterMode,
-            onQuarterModeChanged:
-                inningStepperOnly ? null : onQuarterModeChanged,
-            onHalfSelected: inningStepperOnly ? null : onHalfSelected,
-            onInningSelected: onInningSelected,
-            onInningDecrement: onInningDecrement,
-            onInningIncrement: onInningIncrement,
-            inningDisabled: inningDisabled,
-            onInningActivate: onInningActivate,
-            timingPhraseEnabled: timingPhraseEnabled,
-            onTimingPhraseEnabledChanged: onTimingPhraseEnabledChanged,
-            preSelected: preSelected,
-            postSelected: postSelected,
-            onPreTap: inningStepperOnly ? null : onPreTap,
-            onPostTap: inningStepperOnly ? null : onPostTap,
-            mlbTimestampVisible:
-                inningStepperOnly ? false : mlbTimestampVisible,
-            mlbTimestampEnabled: mlbTimestampEnabled,
-            mlbTimestampLoading: mlbTimestampLoading,
-            mlbTimestampMatched: mlbTimestampMatched,
-            onMlbTimestampTap: onMlbTimestampTap,
-            showGettyEditorsNotes: showGettyEditorsNotes,
-            selectedGettyEditorsNote: selectedGettyEditorsNote,
-            gettyEditorsNoteCustomText: gettyEditorsNoteCustomText,
-            onGettyEditorsNoteChanged: onGettyEditorsNoteChanged,
-            stepperOnly: inningStepperOnly,
-            tokens: t,
+          _FirebarPeriodShell(
+            active: firebarActive && footer != null,
+            shellKey: firebarShellKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (inningLabel != null ||
+                    onPreTap != null ||
+                    onPostTap != null ||
+                    showGettyEditorsNotes)
+                  _InningCard(
+                    inningLabel: inningLabel,
+                    timingUnitLabel: timingUnitLabel,
+                    inning: inning,
+                    regulationCount: regulationCount,
+                    extraLabel: extraLabel,
+                    maxInning: maxInning,
+                    segmentPrefix: segmentPrefix,
+                    selectedHalf: selectedHalf,
+                    quarterMode: quarterMode,
+                    onQuarterModeChanged:
+                        inningStepperOnly ? null : onQuarterModeChanged,
+                    onHalfSelected: inningStepperOnly ? null : onHalfSelected,
+                    onInningSelected: onInningSelected,
+                    onInningDecrement: onInningDecrement,
+                    onInningIncrement: onInningIncrement,
+                    inningDisabled: inningDisabled,
+                    onInningActivate: onInningActivate,
+                    timingPhraseEnabled: timingPhraseEnabled,
+                    onTimingPhraseEnabledChanged:
+                        onTimingPhraseEnabledChanged,
+                    preSelected: preSelected,
+                    postSelected: postSelected,
+                    onPreTap: inningStepperOnly ? null : onPreTap,
+                    onPostTap: inningStepperOnly ? null : onPostTap,
+                    mlbTimestampVisible:
+                        inningStepperOnly ? false : mlbTimestampVisible,
+                    mlbTimestampEnabled: mlbTimestampEnabled,
+                    mlbTimestampLoading: mlbTimestampLoading,
+                    mlbTimestampMatched: mlbTimestampMatched,
+                    onMlbTimestampTap: onMlbTimestampTap,
+                    showGettyEditorsNotes: showGettyEditorsNotes,
+                    selectedGettyEditorsNote: selectedGettyEditorsNote,
+                    gettyEditorsNoteCustomText: gettyEditorsNoteCustomText,
+                    onGettyEditorsNoteChanged: onGettyEditorsNoteChanged,
+                    stepperOnly: inningStepperOnly,
+                    tokens: t,
+                    flat: firebarActive && footer != null,
+                  ),
+                if ((inningLabel != null ||
+                        onPreTap != null ||
+                        onPostTap != null ||
+                        showGettyEditorsNotes) &&
+                    footer != null)
+                  const SizedBox(height: 4),
+                if (footer != null) footer!,
+              ],
+            ),
           ),
         ],
-        if (footer != null) ...[
-          const SizedBox(height: 4),
-          footer!,
-        ],
       ],
+    );
+  }
+}
+
+/// Orange outline around period + Firebar while Firebar is active.
+class _FirebarPeriodShell extends StatelessWidget {
+  const _FirebarPeriodShell({
+    required this.active,
+    required this.child,
+    this.shellKey,
+  });
+
+  final bool active;
+  final Widget child;
+  final GlobalKey? shellKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final shell = AnimatedContainer(
+      key: shellKey,
+      duration: const Duration(milliseconds: 150),
+      padding: active ? const EdgeInsets.fromLTRB(4, 4, 4, 4) : EdgeInsets.zero,
+      decoration: BoxDecoration(
+        color: active ? const Color(0xFF1E242A) : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: active
+              ? FfTokens.firebar.withValues(alpha: 0.7)
+              : Colors.transparent,
+          width: active ? 1 : 0,
+        ),
+      ),
+      child: child,
+    );
+    if (!active) return shell;
+    return TapRegion(
+      groupId: kFirebarTapGroup,
+      child: shell,
     );
   }
 }
@@ -1392,6 +1459,7 @@ class _InningCard extends StatefulWidget {
     this.gettyEditorsNoteCustomText = '',
     this.onGettyEditorsNoteChanged,
     this.stepperOnly = false,
+    this.flat = false,
     required this.tokens,
   });
 
@@ -1428,6 +1496,9 @@ class _InningCard extends StatefulWidget {
   final void Function(GettyEditorsNote? note, {String? customText})?
       onGettyEditorsNoteChanged;
   final bool stepperOnly;
+
+  /// Inside the active Firebar shell — drop the inner card fill.
+  final bool flat;
   final FfTokens tokens;
 
   @override
@@ -1550,7 +1621,7 @@ class _InningCardState extends State<_InningCard> {
       height: 32,
       padding: const EdgeInsets.fromLTRB(2, 0, 2, 0),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E242A),
+        color: widget.flat ? Colors.transparent : const Color(0xFF1E242A),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(

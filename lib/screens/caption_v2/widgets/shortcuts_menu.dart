@@ -38,10 +38,7 @@ class _CaptionV2ShortcutsMenuButtonState
       (keys: '← →', label: 'Previous / next frame'),
       (keys: 'I', label: 'Open IPTC (thumbnails focused)'),
       (keys: '$mod S', label: 'Save & next'),
-      (
-        keys: '⇧↵',
-        label: ftpMode ? 'Save, FTP & next' : 'Save & next',
-      ),
+      (keys: '⇧↵', label: 'Save & next'),
       if (ftpMode) (keys: '$mod ⇧ ↵', label: 'Save, FTP & next'),
       if (ftpMode) (keys: '⇧ F', label: 'Transmit current'),
       (keys: '$mod ⇧ V', label: 'Paste previous caption'),

@@ -1505,17 +1505,20 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     return true; // consume event to prevent system beep
   }
 
-  /// Cmd/Ctrl+S: save caption IPTC, then advance to the next image.
-  /// Shift+Enter is handled by [_handleSaveFtpNextShortcut].
+  /// Cmd/Ctrl+S or Shift+Enter: save caption IPTC, then advance.
+  /// FTP is ⌘⇧Enter / Ctrl⇧Enter via [_handleSaveFtpNextShortcut].
   bool _handleSaveAndNextShortcut(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
     final k = HardwareKeyboard.instance;
     final isS = event.logicalKey == LogicalKeyboardKey.keyS;
+    final isEnter = event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter;
+    final metaOrControl = k.isMetaPressed || k.isControlPressed;
 
-    final cmdS = isS &&
-        (k.isMetaPressed || k.isControlPressed) &&
-        !k.isShiftPressed;
-    if (!cmdS) return false;
+    final cmdS = isS && metaOrControl && !k.isAltPressed;
+    final shiftEnter =
+        isEnter && k.isShiftPressed && !metaOrControl && !k.isAltPressed;
+    if (!cmdS && !shiftEnter) return false;
 
     _saveIptcMetadataInternal().then((r) {
       if (r.cancelled || !mounted) return;
@@ -1539,13 +1542,14 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     return true;
   }
 
-  /// Shift+Enter (and Shift+Cmd/Ctrl+Enter): save, FTP, then advance.
+  /// ⌘⇧Enter / Ctrl⇧Enter: save, FTP, then advance.
   bool _handleSaveFtpNextShortcut(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
     if (event.logicalKey != LogicalKeyboardKey.enter &&
         event.logicalKey != LogicalKeyboardKey.numpadEnter) return false;
     final k = HardwareKeyboard.instance;
     if (!k.isShiftPressed || k.isAltPressed) return false;
+    if (!(k.isMetaPressed || k.isControlPressed)) return false;
     _saveFtpAndNext();
     return true;
   }
@@ -5076,7 +5080,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   children: [
                     _shortcutDialogRow('⌘S', 'Save & next image'),
                     const SizedBox(height: 10),
-                    _shortcutDialogRow('⇧↵', 'Save, FTP & next image'),
+                    _shortcutDialogRow('⇧↵', 'Save & next image'),
+                    const SizedBox(height: 10),
+                    _shortcutDialogRow('⌘⇧↵', 'Save, FTP & next image'),
                     const SizedBox(height: 10),
                     _shortcutDialogRow('⌘⇧V', 'Paste previous caption'),
                     const SizedBox(height: 10),

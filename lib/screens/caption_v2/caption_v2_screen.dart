@@ -70,6 +70,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   );
   final _searchFocus = FocusNode();
   final _searchText = TextEditingController();
+  final _firebarShellKey = GlobalKey();
   final _rootFocus = FocusNode();
   static const _jerseyShortcutChannel =
       MethodChannel('caption_writer/jersey_shortcuts');
@@ -131,6 +132,22 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
             : '${alreadySent.length} of these were already FTP’d. Send them again?',
         cancelLabel: 'Cancel',
         confirmLabel: 'Upload again',
+      );
+      return ok == true;
+    };
+    _controller.confirmFtpDestination = ({
+      required String profileName,
+      required String host,
+      required String remoteDir,
+    }) async {
+      if (!mounted) return false;
+      final folder = remoteDir.trim().isEmpty ? '/' : remoteDir.trim();
+      final ok = await showAppConfirmDialog(
+        context: context,
+        title: 'Confirm FTP',
+        message: 'Send to “$profileName”?\n\n$host\n$folder',
+        cancelLabel: 'Cancel',
+        confirmLabel: 'FTP',
       );
       return ok == true;
     };
@@ -415,6 +432,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     unawaited(_setNativeJerseyShortcutsEnabled(true));
     _controller.onSaveTransmit = null;
     _controller.confirmRetransmit = null;
+    _controller.confirmFtpDestination = null;
     _controller.removeListener(_onController);
     _controller.dispose();
     _photoEdit.dispose();
@@ -463,6 +481,9 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     if (_handleIptcShortcut(event)) return true;
     if (_handleFirebarUndoShortcut(event)) return true;
     if (_handleFirebarFocusShortcut(event)) return true;
+    // Escape before other Firebar keys so one press always exits and the
+    // key is consumed (avoids macOS beeps when focus is mid-rebuild).
+    if (_handleFirebarEscape(event)) return true;
     if (_searchFocus.hasFocus && _handleFirebarMenuKey(event)) return true;
     if (_handleJerseySideChoiceKey(event)) return true;
     if (_handlePlayerCodeKey(event)) return true;
@@ -592,6 +613,38 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     return _controller.undoFirebar();
   }
 
+  /// Esc: dismiss an open choice first (keep chips); otherwise leave Firebar.
+  bool _handleFirebarEscape(KeyEvent event) {
+    final pressed = event is KeyDownEvent || event is KeyRepeatEvent;
+    if (!pressed || event.logicalKey != LogicalKeyboardKey.escape) {
+      return false;
+    }
+    final keys = HardwareKeyboard.instance;
+    if (keys.isMetaPressed || keys.isControlPressed || keys.isAltPressed) {
+      return false;
+    }
+    if (_controller.firebarJerseySideChoiceOpen) {
+      _controller.cancelFirebarJerseySidePrompt();
+      final query = _controller.searchQuery;
+      _searchText.value = TextEditingValue(
+        text: query,
+        selection: TextSelection.collapsed(offset: query.length),
+      );
+      _retainFirebarFocusAfterPick();
+      return true;
+    }
+    // RBI / base / celebration / Save-or-FTP — leave Firebar open with chips.
+    if (_controller.firebarOptions.isNotEmpty) {
+      _controller.dismissFirebarChoicePrompt();
+      _retainFirebarFocusAfterPick();
+      return true;
+    }
+    final active = _controller.searchOpen || _searchFocus.hasFocus;
+    if (!active) return false;
+    _closeSearch();
+    return true;
+  }
+
   /// Menu keys run before the text field so arrows move the menu instead of
   /// editing the query. A chip is committed only with Enter.
   bool _handleFirebarMenuKey(KeyEvent event) {
@@ -627,17 +680,13 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       _controller.backspaceFirebarChip();
       return true;
     }
-    if (key == LogicalKeyboardKey.escape) {
-      _closeSearch();
-      return true;
-    }
     return false;
   }
 
-  /// While two players share the typed number, h/v picks a side before the
-  /// letter can land in the text field. Arrows move the menu instead.
+  /// While H/V is open: only h/v (or click). Every other key is blocked.
   bool _handleJerseySideChoiceKey(KeyEvent event) {
-    if (event is! KeyDownEvent || !_controller.firebarJerseySideChoiceOpen) {
+    final pressed = event is KeyDownEvent || event is KeyRepeatEvent;
+    if (!pressed || !_controller.firebarJerseySideChoiceOpen) {
       return false;
     }
     final keys = HardwareKeyboard.instance;
@@ -656,7 +705,15 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       _retainFirebarFocusAfterPick();
       return true;
     }
-    return false;
+    if (key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.arrowDown) {
+      _controller.moveFirebarSelection(
+        key == LogicalKeyboardKey.arrowUp ? -1 : 1,
+      );
+      return true;
+    }
+    // Swallow digits, letters, space, etc. until H or V is chosen.
+    return true;
   }
 
   /// H/V teardown rebuilds the Firebar field — keep the cursor ready.
@@ -685,8 +742,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
 
   /// Global ⌘S / Ctrl+S / Shift+Enter / ⌘⇧Enter.
   ///
-  /// With FTP on, Shift+Enter and ⌘⇧Enter save and FTP. Plain ⌘Enter does
-  /// not (too close to Firebar Return). ⌘S still saves only. Plain Enter
+  /// ⌘S and Shift+Enter save only. With FTP on, ⌘⇧Enter saves and FTPs.
+  /// Plain ⌘Enter does not (too close to Firebar Return). Plain Enter
   /// applies the Firebar line. Flutter [Shortcuts] only fire when focus is
   /// inside that subtree; this handler still works when focus is in a text
   /// field, drum lane, or lost.
@@ -728,13 +785,25 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     );
     if (chord == CaptionV2SaveChord.none) return false;
 
-    // ⌘⇧Enter / Shift+Enter → FTP (or save). Firebar line is applied inside
-    // _saveAndNext / _saveTransmitAndNext. Plain ⌘Enter is intentionally not FTP.
+    // ⌘⇧Enter → FTP; Shift+Enter / ⌘S → save; ⌘B → Save to Burst.
+    // Firebar line is applied inside the save paths. Plain ⌘Enter is not FTP.
     if (chord == CaptionV2SaveChord.transmit) {
       unawaited(_saveTransmitAndNext());
+    } else if (chord == CaptionV2SaveChord.burst) {
+      return _saveToBurstFromShortcut();
     } else {
       unawaited(_saveAndNext());
     }
+    return true;
+  }
+
+  /// ⌘B / Ctrl+B — same as clicking Save to Burst with the default selection
+  /// (current frame + all other frames in the forward burst).
+  bool _saveToBurstFromShortcut() {
+    if (!_controller.burstDetectionEnabled) return false;
+    final chain = _controller.forwardBurstChain;
+    if (chain.length <= 1) return false;
+    unawaited(_applyCaptionToBurst(List<String>.from(chain), chain: chain));
     return true;
   }
 
@@ -840,8 +909,12 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     _searchText.clear();
     _controller.setSearchQuery('');
     _controller.setSearchOpen(false);
+    // Drop focus immediately so Escape isn't delivered again into the
+    // TextField (macOS beeps on unhandled Esc in an editable).
     _searchFocus.unfocus();
-    _rootFocus.requestFocus();
+    if (!_rootFocus.hasFocus) {
+      _rootFocus.requestFocus();
+    }
   }
 
   void _handleDigit(int digit) {
@@ -951,27 +1024,25 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     await _saveInDirection(next: false);
   }
 
-  /// Open the burst picker and write the current caption to the chosen frames.
-  Future<void> _applyCaptionToBurst() async {
+  /// Write the current caption to [paths] (current + checked burst frames).
+  ///
+  /// Same landing rule as hold-burst: after a successful write, go to the
+  /// first frame in [chain] that was not saved (e.g. a deselected thumb).
+  /// If every frame was saved, advance past the burst.
+  Future<void> _applyCaptionToBurst(
+    List<String> paths, {
+    List<String>? chain,
+  }) async {
     if (_burstSaveDialogOpen || _saveInFlight) return;
-    final chain = _controller.forwardBurstChain;
-    if (chain.length < 2) return;
+    if (!_applyFirebarLineBeforeSave()) return;
+    final advanceChain = (chain != null && chain.length >= 2)
+        ? chain
+        : _controller.forwardBurstChain;
+    if (advanceChain.length < 2 || paths.isEmpty) return;
 
-    // Snapshot before the dialog so frames stay marked saved/captioned even
-    // if selection is cleared while the picker is open.
+    // Snapshot before save so frames stay marked saved/captioned even if
+    // selection is cleared while the write is in flight.
     final captionValues = _snapshotSavedCaptionValues();
-    final decision = await _showBurstSaveDialog(
-      chain,
-      selectionOnly: true,
-    );
-    if (!mounted || decision == null) return;
-
-    final paths = decision.currentOnly
-        ? [
-            if (_controller.currentPath != null) _controller.currentPath!,
-          ]
-        : decision.paths;
-    if (paths.isEmpty) return;
 
     _saveInFlight = true;
     try {
@@ -983,7 +1054,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       _controller.setSelectedImagePaths(result.failedPaths);
       if (result.anySucceeded) {
         _controller.advanceAfterBurstSelection(
-          chain: chain,
+          chain: advanceChain,
           savedPaths: result.succeededPaths.toSet(),
           keepSearchOpen: _controller.searchOpen,
         );
@@ -1621,7 +1692,24 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
           ),
           CloseSearchIntent: CallbackAction<CloseSearchIntent>(
             onInvoke: (_) {
-              if (c.searchOpen || c.searchQuery.isNotEmpty) _closeSearch();
+              if (c.firebarJerseySideChoiceOpen) {
+                c.cancelFirebarJerseySidePrompt();
+                final query = c.searchQuery;
+                _searchText.value = TextEditingValue(
+                  text: query,
+                  selection: TextSelection.collapsed(offset: query.length),
+                );
+                return null;
+              }
+              if (c.firebarOptions.isNotEmpty) {
+                c.dismissFirebarChoicePrompt();
+                return null;
+              }
+              if (c.searchOpen ||
+                  c.searchQuery.isNotEmpty ||
+                  _searchFocus.hasFocus) {
+                _closeSearch();
+              }
               return null;
             },
           ),
@@ -1888,11 +1976,12 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     bool thumbsOpen = false,
     VoidCallback? onThumbs,
   }) {
+    // Natural capture order for advance; dock list puts current first.
     final burstChain =
         c.burstDetectionEnabled ? c.forwardBurstChain : const <String>[];
-    // Remaining frames after the current one (e.g. "next 2").
-    final burstApplyCount =
-        burstChain.length > 1 ? burstChain.length - 1 : 0;
+    final burstDockPaths = c.burstDetectionEnabled
+        ? c.forwardBurstChainForSaveDock
+        : const <String>[];
     return CaptionV2ActionRow(
       onSavePrevious: _saveAndPrevious,
       onCopy: _copySelection,
@@ -1905,9 +1994,10 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       transmitEnabled: c.savedNotSentCount > 0 || c.currentPath != null,
       showTransmit: c.ftpModeEnabled && !mobileDock,
       hideOrangeActions: false,
-      burstApplyCount: burstApplyCount,
-      onApplyToBurst: burstApplyCount > 0
-          ? () => unawaited(_applyCaptionToBurst())
+      burstPaths: burstDockPaths.length > 1 ? burstDockPaths : const [],
+      onSaveToBurst: burstChain.length > 1
+          ? (selected, _) =>
+              unawaited(_applyCaptionToBurst(selected, chain: burstChain))
           : null,
       ftpActive: c.transmitting,
       ftpProgress: c.ftpFileProgress,
@@ -2012,6 +2102,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       onKeywordsChanged:
           compact || !c.showKeywordsField ? null : c.setKeywords,
       onEditTap: () => _openCaptionStyleEditor(c),
+      firebarActive: c.searchOpen && !hideFirebarFooter && !c.hideFirebar,
+      firebarShellKey: _firebarShellKey,
       footer: hideFirebarFooter || c.hideFirebar
           ? null
           : CaptionV2SearchBar(
@@ -2022,6 +2114,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
           onExit: _closeSearch,
           onSave: () => unawaited(_saveAndNext()),
           onTransmit: () => unawaited(_saveTransmitAndNext()),
+          embedded: c.searchOpen,
+          spotlightKey: _firebarShellKey,
         ),
       inningLabel: c.inningLabel,
       timingUnitLabel: c.timingUnitTitle,
@@ -2411,28 +2505,10 @@ class _TopChrome extends StatelessWidget {
           final compact = constraints.maxWidth < 420;
           return Row(
             children: [
-              if (c != null) ...[
+              if (c != null)
                 _GameChip(
                   controller: c,
                   tokens: t,
-                ),
-                if (onResetSession != null) const SizedBox(width: 8),
-              ],
-              if (onResetSession != null)
-                _NewSessionButton(
-                  tokens: t,
-                  compact: compact,
-                  onTap: () async {
-                    final startNew = await showAppConfirmDialog(
-                      context: context,
-                      title: 'New session',
-                      message:
-                          'Leave this caption session and start a new one?',
-                      cancelLabel: 'Cancel',
-                      confirmLabel: 'New session',
-                    );
-                    if (startNew == true) onResetSession!();
-                  },
                 )
               else if (headerTitle != null && headerTitle.isNotEmpty)
                 Padding(
@@ -2478,6 +2554,24 @@ class _TopChrome extends StatelessWidget {
               ],
               if (AdminService.isActuallyAdminSync())
                 AdminModeToggle(compact: compact),
+              if (onResetSession != null) ...[
+                _NewSessionButton(
+                  tokens: t,
+                  compact: compact,
+                  onTap: () async {
+                    final startNew = await showAppConfirmDialog(
+                      context: context,
+                      title: 'New session',
+                      message:
+                          'Leave this caption session and start a new one?',
+                      cancelLabel: 'Cancel',
+                      confirmLabel: 'New session',
+                    );
+                    if (startNew == true) onResetSession!();
+                  },
+                ),
+                const SizedBox(width: 8),
+              ],
               if (AuthService.instance.isSignedIn)
                 _SessionAvatar(
                   tokens: t,

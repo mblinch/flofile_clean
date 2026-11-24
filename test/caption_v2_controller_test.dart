@@ -1290,7 +1290,7 @@ void main() {
     );
   });
 
-  test('forward burst and handled-chain advance exclude earlier frames', () {
+  test('forward burst includes earlier frames; dock list puts current first', () {
     final start = DateTime(2026, 9, 7, 12);
     final controller = CaptionV2Controller()
       ..imagePaths = [
@@ -1308,10 +1308,73 @@ void main() {
       });
 
     final chain = controller.forwardBurstChain;
-    expect(chain, ['/anchor.jpg', '/burst.jpg']);
+    expect(chain, ['/before.jpg', '/anchor.jpg', '/burst.jpg']);
+    expect(
+      controller.forwardBurstChainForSaveDock,
+      ['/anchor.jpg', '/before.jpg', '/burst.jpg'],
+    );
 
     controller.advancePastHandledChain(chain);
     expect(controller.currentPath, '/after.jpg');
+  });
+
+  test('equal-timestamp burst count matches from first and middle frame', () {
+    final captured = DateTime(2026, 7, 22, 19, 16, 43);
+    final paths = [
+      '/73292.jpg',
+      '/73293.jpg',
+      '/73297.jpg',
+      '/73299.jpg',
+      '/73300.jpg',
+    ];
+    final controller = CaptionV2Controller()
+      ..imagePaths = List<String>.from(paths)
+      ..captureByPath.addAll({for (final path in paths) path: captured});
+
+    controller.currentIndex = 0;
+    expect(controller.forwardBurstChain, paths);
+    expect(controller.forwardBurstChainForSaveDock, paths);
+
+    controller.currentIndex = 1;
+    expect(controller.forwardBurstChain, paths);
+    expect(
+      controller.forwardBurstChainForSaveDock,
+      [
+        '/73293.jpg',
+        '/73292.jpg',
+        '/73297.jpg',
+        '/73299.jpg',
+        '/73300.jpg',
+      ],
+    );
+  });
+
+  test(
+      'save-to-burst defaults from middle frame write chronological first + current',
+      () {
+    final captured = DateTime(2026, 7, 22, 19, 16, 43);
+    final paths = [
+      '/73292.jpg',
+      '/73293.jpg',
+      '/73297.jpg',
+      '/73299.jpg',
+      '/73300.jpg',
+    ];
+    final controller = CaptionV2Controller()
+      ..imagePaths = List<String>.from(paths)
+      ..captureByPath.addAll({for (final path in paths) path: captured})
+      ..currentIndex = 2; // middle frame
+
+    final current = paths[2];
+    final earliest = paths.first;
+    final dock = controller.forwardBurstChainForSaveDock;
+    expect(dock.first, current); // Original
+    expect(dock, contains(earliest));
+
+    final targets = controller.defaultBurstSaveTargets;
+    expect(targets.first, current);
+    expect(targets, contains(earliest));
+    expect(targets.toSet(), paths.toSet());
   });
 
   test('partial burst save advances to first unselected frame', () {
@@ -2140,7 +2203,7 @@ void main() {
     expect(controller.searchQuery, isEmpty);
   });
 
-  test('Firebar jersey+verb query activates player and Looks On', () {
+  test('Firebar jersey+verb query activates player and verb', () {
     final nylander = player('William Nylander', '88');
     final controller = CaptionV2Controller()
       ..sport = 'Hockey'
@@ -2148,20 +2211,11 @@ void main() {
       ..awayRoster = [player('Away Skater', '12')]
       ..setSearchOpen(true);
 
-    controller.setSearchQuery('88 looks');
+    // Unique jersey + unique verb both complete and chip in one line.
+    controller.setSearchQuery('88 sing');
 
-    expect(controller.firebarHomeResults.single.player, same(nylander));
-    expect(controller.firebarAwayResults, isEmpty);
-    expect(
-      controller.firebarVerbResults.map((result) => result.verbKey),
-      contains('Looks On'),
-    );
     expect(controller.selectedPlayers.single.player, same(nylander));
-    expect(controller.selectedVerb, 'Looks On');
-
-    controller.commitSelectedFirebarResult();
-    expect(controller.selectedPlayers.single.player, same(nylander));
-    expect(controller.selectedVerb, 'Looks On');
+    expect(controller.selectedVerb, 'Single');
     expect(controller.searchQuery, isEmpty);
     expect(
       controller.firebarCommitted.map((chip) => chip.kind),
@@ -2295,10 +2349,16 @@ void main() {
     controller.setSearchQuery('9 ');
     expect(controller.firebarJerseySideChoiceOpen, isTrue);
     expect(controller.firebarOptionPrompt, 'Which #9?');
+    expect(controller.searchQuery, '9');
     expect(
       controller.firebarOptions.map((o) => o.label).toList(),
-      ['H - Home Ace', 'V - Away Ace'],
+      ['H - Ace', 'V - Ace'],
     );
+
+    // Extra typing is ignored until H/V is chosen.
+    controller.setSearchQuery('99');
+    expect(controller.searchQuery, '9');
+    expect(controller.firebarJerseySideChoiceOpen, isTrue);
 
     controller.chooseFirebarJerseySide(isHome: false);
     expect(controller.firebarJerseySideChoiceOpen, isFalse);
@@ -2350,6 +2410,7 @@ void main() {
 
     controller.setSearchQuery('9 ');
     expect(controller.firebarJerseySideChoiceOpen, isTrue);
+    expect(controller.searchQuery, '9');
     controller.chooseFirebarJerseySide(isHome: false);
     expect(controller.selectedPlayers.single.player, same(away));
     expect(controller.selectedPlayers.single.isHome, isFalse);
@@ -2362,6 +2423,62 @@ void main() {
     expect(
       controller.selectedPlayers.map((row) => row.player.fullName),
       containsAll(['Away Ace', 'Home Long']),
+    );
+  });
+
+  test('Esc cancels H/V prompt and keeps the typed jersey number', () {
+    final home = player('Home Ace', '9');
+    final away = player('Away Ace', '9');
+    final unique = player('Solo Star', '4');
+    final controller = CaptionV2Controller()
+      ..homeRoster = [home, unique]
+      ..awayRoster = [away]
+      ..setSearchOpen(true);
+    addTearDown(controller.dispose);
+
+    controller.setSearchQuery('4');
+    expect(controller.firebarCommitted, hasLength(1));
+    expect(controller.firebarCommitted.single.player, same(unique));
+
+    controller.setSearchQuery('9 ');
+    expect(controller.firebarJerseySideChoiceOpen, isTrue);
+    expect(controller.searchQuery, '9');
+    expect(controller.firebarCommitted, hasLength(1));
+
+    controller.cancelFirebarJerseySidePrompt();
+    expect(controller.firebarJerseySideChoiceOpen, isFalse);
+    expect(controller.firebarOptions, isEmpty);
+    expect(controller.searchQuery, '9');
+    expect(controller.searchOpen, isTrue);
+    expect(controller.firebarCommitted, hasLength(1));
+    expect(controller.firebarCommitted.single.player, same(unique));
+  });
+
+  test('Esc dismisses verb follow-up chips without clearing prior Firebar chips',
+      () {
+    final unique = player('Solo Star', '4');
+    final controller = CaptionV2Controller()
+      ..homeRoster = [unique]
+      ..setSearchOpen(true);
+    addTearDown(controller.dispose);
+
+    controller.setSearchQuery('4');
+    expect(controller.firebarCommitted, hasLength(1));
+
+    controller.setSearchQuery('hr');
+    final homeRun = controller.firebarVerbResults.singleWhere(
+      (result) => result.verbKey == 'Home Run',
+    );
+    controller.commitFirebarResult(homeRun);
+    expect(controller.firebarOptions, isNotEmpty);
+    expect(controller.firebarCommitted, isNotEmpty);
+
+    controller.dismissFirebarChoicePrompt();
+    expect(controller.firebarOptions, isEmpty);
+    expect(controller.searchOpen, isTrue);
+    expect(
+      controller.firebarCommitted.any((chip) => chip.player == unique),
+      isTrue,
     );
   });
 
@@ -2515,6 +2632,36 @@ void main() {
     expect(controller.firebarSelectedResult?.player, same(other));
   });
 
+  test('Firebar holds completed verb until Space so finishing letters absorb',
+      () {
+    final controller = CaptionV2Controller()
+      ..sport = 'hockey'
+      ..homeRoster = [player('Auston Matthews', '34')]
+      ..setSearchOpen(true);
+
+    // "sing" uniquely resolves Single in the default verb catalog.
+    controller.setSearchQuery('sing');
+    expect(controller.selectedVerb, 'Single');
+    // Still in the field — not chipped yet — so extra letters can absorb.
+    expect(controller.firebarCommitted, isEmpty);
+    expect(
+      controller.searchQuery.replaceAll('\u00A0', ' '),
+      'Single',
+    );
+
+    controller.setSearchQuery('${controller.searchQuery}lex');
+    expect(controller.selectedVerb, 'Single');
+    expect(controller.firebarCommitted, isEmpty);
+    expect(
+      controller.searchQuery.replaceAll('\u00A0', ' '),
+      'Single',
+    );
+
+    controller.setSearchQuery('${controller.searchQuery} ');
+    expect(controller.firebarCommitted.single.verbKey, 'Single');
+    expect(controller.searchQuery, isEmpty);
+  });
+
   test('Firebar hides already-picked players from suggestions', () {
     final first = player('Auston Matthews', '34');
     final second = player('Mitch Marner', '16');
@@ -2626,6 +2773,24 @@ void main() {
     controller.commitSelectedFirebarResult();
     expect(controller.rbi, 2);
     expect(controller.searchQuery, isEmpty);
+  });
+
+  test('Esc closes Firebar and clears follow-up option chips', () {
+    final controller = CaptionV2Controller()
+      ..setSearchOpen(true)
+      ..setSearchQuery('hr');
+    addTearDown(controller.dispose);
+    final homeRun = controller.firebarVerbResults.singleWhere(
+      (result) => result.verbKey == 'Home Run',
+    );
+
+    controller.commitFirebarResult(homeRun);
+    expect(controller.firebarOptions, isNotEmpty);
+
+    controller.setSearchOpen(false);
+    expect(controller.searchOpen, isFalse);
+    expect(controller.firebarOptions, isEmpty);
+    expect(controller.selectedVerb, 'Home Run');
   });
 
   test('Firebar finds verbs by phrase, keywords, and modifier labels', () {

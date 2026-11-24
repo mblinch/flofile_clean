@@ -125,7 +125,8 @@ void main() {
       CaptionV2SaveChord.none,
     );
     expect(chord(control: true), CaptionV2SaveChord.none);
-    expect(chord(shift: true), CaptionV2SaveChord.transmit);
+    // Shift+Enter always saves; FTP is ⌘⇧Enter only.
+    expect(chord(shift: true), CaptionV2SaveChord.save);
     expect(chord(shift: true, meta: true), CaptionV2SaveChord.transmit);
     expect(
       chord(key: LogicalKeyboardKey.keyS, meta: true),
@@ -139,9 +140,25 @@ void main() {
       chord(key: LogicalKeyboardKey.keyS, control: true, ftpMode: false),
       CaptionV2SaveChord.save,
     );
+    expect(
+      chord(key: LogicalKeyboardKey.keyB, meta: true),
+      CaptionV2SaveChord.burst,
+    );
+    expect(
+      chord(key: LogicalKeyboardKey.keyB, control: true),
+      CaptionV2SaveChord.burst,
+    );
+    expect(
+      chord(key: LogicalKeyboardKey.keyB, meta: true, shift: true),
+      CaptionV2SaveChord.none,
+    );
     expect(chord(), CaptionV2SaveChord.none);
     expect(chord(meta: true, ftpMode: false), CaptionV2SaveChord.none);
     expect(chord(shift: true, ftpMode: false), CaptionV2SaveChord.save);
+    expect(
+      chord(shift: true, meta: true, ftpMode: false),
+      CaptionV2SaveChord.save,
+    );
     expect(chord(meta: true, alt: true), CaptionV2SaveChord.none);
   });
 

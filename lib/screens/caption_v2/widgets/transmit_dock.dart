@@ -1,34 +1,66 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../theme/ff_tokens.dart';
 import '../../../widgets/oriented_file_preview.dart';
+import '../data/burst_groups.dart';
 import 'frame_status_dot.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
-/// Dark teal fill for caption action chips (Save / Copy / Paste / FTP).
+/// Primary Save & next fill (Nocturne action bar).
 const LinearGradient _kActionTealGradient = LinearGradient(
   begin: Alignment.topCenter,
   end: Alignment.bottomCenter,
   colors: [
-    Color(0xFF243848), // top highlight
-    Color(0xFF15242E), // mid
-    Color(0xFF0E181F), // bottom shade
+    Color(0xFF243848),
+    Color(0xFF15242E),
+    Color(0xFF0E181F),
   ],
-  stops: [0.0, 0.45, 1.0],
+  stops: [0.0, 0.55, 1.0],
 );
 
-/// Outer height of Save / Copy / FTP. Inner chips sit inside a 2px shell.
-const double _kActionRowHeight = 38;
-const double _kActionChipHeight = 34;
+const LinearGradient _kActionTealGradientHover = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [
+    Color(0xFF2E4658),
+    Color(0xFF1A2E3A),
+    Color(0xFF121F28),
+  ],
+  stops: [0.0, 0.55, 1.0],
+);
 
-/// FTP stays content-sized up to this width as the window grows.
-const double _kFtpButtonMaxWidth = 280;
+const LinearGradient _kActionTealGradientPressed = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [
+    Color(0xFF1A2A36),
+    Color(0xFF0C141A),
+    Color(0xFF080E12),
+  ],
+  stops: [0.0, 0.55, 1.0],
+);
+
+/// Match Firebar outer bar (minHeight 34 in caption_v2_search.dart).
+/// Grouped clip chips sit inside a 2px shell → 30 so the group is also 34.
+const double _kActionRowHeight = 34;
+const double _kActionChipHeight = 30;
+
+const Color _kActionSecondaryBg = Color(0xFF1E242A);
+const Color _kActionHairline = Color(0x1EE8EEF4); // rgba(232,238,244,.12)
+const Color _kActionPressedBg = Color(0xFF20313C);
+const Color _kActionPressedEdge = Color(0xFF3A6076);
+const Color _kActionPrimaryEdge = Color(0xF24A7A96); // rgba(74,122,150,.95)
+const Color _kActionPrimaryEdgeHover = Color(0xD9E8EEF4); // rgba(232,238,244,.85)
 
 String get _modKey =>
     defaultTargetPlatform == TargetPlatform.macOS ? '⌘' : 'Ctrl';
 
 String get _saveNextShortcut => '$_modKey S';
+String get _saveToBurstShortcut => '$_modKey B';
 String get _pasteLastShortcut => '$_modKey ⇧ V';
 const String _ftpShortcut = '⇧ F';
 
@@ -48,8 +80,8 @@ class CaptionV2ActionRow extends StatelessWidget {
     this.transmitEnabled = true,
     this.showTransmit = true,
     this.hideOrangeActions = false,
-    this.burstApplyCount = 0,
-    this.onApplyToBurst,
+    this.burstPaths = const [],
+    this.onSaveToBurst,
     this.onFtpHistory,
     this.onFtpProgress,
     this.ftpProgress,
@@ -80,10 +112,13 @@ class CaptionV2ActionRow extends StatelessWidget {
   /// Firebar is open, so Save & Next and FTP stay off this row.
   final bool hideOrangeActions;
 
-  /// Remaining frames after the current one in a forward burst. When > 0 and
-  /// [onApplyToBurst] is set, shows Save & apply to next N beside Save & Next.
-  final int burstApplyCount;
-  final VoidCallback? onApplyToBurst;
+  /// Forward burst chain from the current photo (first path = current). When
+  /// length > 1 and [onSaveToBurst] is set, shows Save to burst left of Save & next.
+  final List<String> burstPaths;
+
+  /// [selected] frames to write; [chain] is the full burst shown in the popover
+  /// (used to land on the first deselected frame after save).
+  final void Function(List<String> selected, List<String> chain)? onSaveToBurst;
   final VoidCallback? onFtpHistory;
 
   /// Opens the live list of files on the wire and waiting behind them.
@@ -133,20 +168,23 @@ class CaptionV2ActionRow extends StatelessWidget {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final showBurst = !hideOrangeActions &&
-            burstApplyCount > 0 &&
-            onApplyToBurst != null;
+            burstPaths.length > 1 &&
+            onSaveToBurst != null;
         // Burst adds another chip; tighten earlier so Copy/Paste don't overflow.
         final compact = singleRow || width <= 1060 || (showBurst && width <= 1320);
-        final narrow = !singleRow && width <= 640;
+        // Wrap earlier when FTP shows a full profile name so the row
+        // doesn't overflow once Save/Burst/FTP are all content-sized.
+        final narrow = !singleRow &&
+            (width <= 640 ||
+                (showTransmit && !hideOrangeActions && width <= 780));
         final clipIconOnly = singleRow || (showBurst && width <= 1180);
-        final pad = singleRow ? 8.0 : (compact ? 12.0 : 16.0);
+        final pad = singleRow ? 8.0 : 13.0;
         final prev = _NavButton(
-          label: singleRow ? 'Prev' : 'Save & Prev',
+          label: 'Save',
           tooltip: 'Save & Prev',
           icon: PhosphorIconsRegular.caretLeft,
           iconAtEnd: false,
           padding: EdgeInsets.symmetric(horizontal: pad),
-          leadingPad: compact ? pad : 12,
           onPressed: onSavePrevious,
         );
         final clip = _ClipGroup(
@@ -156,25 +194,25 @@ class CaptionV2ActionRow extends StatelessWidget {
           onPaste: onPaste,
           onPasteLast: onPastePrevious,
           pasteEnabled: pasteEnabled,
-          pasteLastShortcut: null,
+          pasteLastShortcut: _pasteLastShortcut,
         );
         final next = hideOrangeActions
             ? null
             : _NavButton(
-                label: singleRow ? 'Next' : 'Save & Next',
+                label: 'Save',
                 tooltip: 'Save & Next',
                 icon: PhosphorIconsRegular.caretRight,
                 enabled: saveNextEnabled,
-                padding: EdgeInsets.symmetric(horizontal: pad),
-                trailingPad: compact ? pad : 12,
+                primary: true,
+                shortcut: _saveNextShortcut,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 onPressed: onSaveNext,
               );
         final burst = showBurst
-            ? _BurstApplyNavButton(
-                count: burstApplyCount,
-                compact: compact || singleRow || width <= 1240,
-                onPressed: onApplyToBurst,
-                padding: EdgeInsets.symmetric(horizontal: pad),
+            ? _SaveToBurstButton(
+                paths: burstPaths,
+                shortcut: _saveToBurstShortcut,
+                onSave: (selected) => onSaveToBurst!(selected, burstPaths),
               )
             : null;
         final thumbs = onThumbs == null
@@ -190,6 +228,7 @@ class CaptionV2ActionRow extends StatelessWidget {
                 enabled: transmitEnabled,
                 onTransmit: onTransmit,
                 onHistory: ftpActive ? null : onFtpHistory,
+                shortcut: _ftpShortcut,
               )
             : null;
 
@@ -238,10 +277,10 @@ class CaptionV2ActionRow extends StatelessWidget {
                 children: [
                   if (thumbs != null) ...[
                     thumbs,
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 8),
                   ],
                   prev,
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 8),
                   Flexible(
                     fit: FlexFit.loose,
                     child: FittedBox(
@@ -251,64 +290,47 @@ class CaptionV2ActionRow extends StatelessWidget {
                     ),
                   ),
                   if (next != null) ...[
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 8),
                     next,
                   ],
                   if (burst != null) ...[
-                    const SizedBox(width: 6),
-                    Flexible(
-                      fit: FlexFit.loose,
-                      child: burst,
-                    ),
+                    const SizedBox(width: 8),
+                    burst,
                   ],
                   if (ftp != null) ...[
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: LayoutBuilder(
-                        builder: (context, slot) {
-                          final thumb = ftpActive &&
-                              ftpThumbPath != null &&
-                              ftpThumbPath!.trim().isNotEmpty;
-                          // The profile name gives up space first. The photo
-                          // drops next so Sending and the thumbnail never
-                          // paint on top of the button.
-                          final showThumb =
-                              !singleRow && thumb && slot.maxWidth >= 168;
-                          return Row(
-                            children: [
-                              Flexible(
-                                fit: FlexFit.loose,
-                                child: _FtpGroup(
-                                  narrow: true,
-                                  label: transmitLabel,
-                                  enabled: transmitEnabled,
-                                  onTransmit: onTransmit,
-                                  onHistory: ftpActive ? null : onFtpHistory,
-                                ),
-                              ),
-                              if (showThumb) ...[
-                                const SizedBox(width: 8),
-                                _FtpUploadPreview(
-                                  path: ftpThumbPath!.trim(),
-                                  onTap: openActive,
-                                ),
-                              ],
-                              if (!singleRow &&
-                                  ftpActive &&
-                                  progress != null) ...[
-                                const SizedBox(width: 8),
-                                Flexible(child: progress),
-                              ],
-                            ],
-                          );
-                        },
-                      ),
+                    const SizedBox(width: 8),
+                    // Content-sized so the full profile name never
+                    // ellipsizes or overflows a Flexible slot.
+                    // Copy/paste scales down first when space is tight.
+                    _FtpGroup(
+                      narrow: false,
+                      label: transmitLabel,
+                      enabled: transmitEnabled,
+                      onTransmit: onTransmit,
+                      onHistory: ftpActive ? null : onFtpHistory,
+                      shortcut: width >= 860 ? _ftpShortcut : null,
                     ),
+                    if (!singleRow &&
+                        ftpActive &&
+                        ftpThumbPath != null &&
+                        ftpThumbPath!.trim().isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      _FtpUploadPreview(
+                        path: ftpThumbPath!.trim(),
+                        onTap: openActive,
+                      ),
+                    ],
+                    if (!singleRow &&
+                        ftpActive &&
+                        progress != null) ...[
+                      const SizedBox(width: 8),
+                      Flexible(child: progress),
+                    ],
                   ] else if (!singleRow &&
                       ftpActive &&
                       progress != null) ...[
                     const SizedBox(width: 8),
-                    Expanded(child: progress),
+                    Flexible(child: progress),
                   ],
                 ],
               );
@@ -523,54 +545,806 @@ class _MobileDockBar extends StatelessWidget {
   }
 }
 
-/// Burst save action shown beside Save & Next when a multi-frame burst is
-/// detected from the current frame forward.
-class _BurstApplyNavButton extends StatelessWidget {
-  const _BurstApplyNavButton({
-    required this.count,
-    required this.onPressed,
-    required this.padding,
-    this.compact = false,
+/// Save to burst — gold-bordered button + filmstrip popover (hover/click).
+class _SaveToBurstButton extends StatefulWidget {
+  const _SaveToBurstButton({
+    required this.paths,
+    required this.onSave,
+    this.shortcut,
   });
 
-  final int count;
-  final VoidCallback? onPressed;
-  final EdgeInsets padding;
-  final bool compact;
+  /// Coherent burst with current first (Original); remaining frames — including
+  /// those before current in capture order — are optional extras.
+  final List<String> paths;
+  final ValueChanged<List<String>> onSave;
+  final String? shortcut;
+
+  @override
+  State<_SaveToBurstButton> createState() => _SaveToBurstButtonState();
+}
+
+class _SaveToBurstButtonState extends State<_SaveToBurstButton> {
+  static const _gold = Color(0xFFE8C547);
+  static const _goldEdge = Color(0x8CE8C547); // rgba(232,197,71,.55)
+  static const _goldInk = Color(0xFF1A1606);
+
+  final OverlayPortalController _portal = OverlayPortalController();
+  final LayerLink _link = LayerLink();
+  final FocusNode _focus = FocusNode(debugLabel: 'SaveToBurst');
+
+  late Set<String> _checked;
+
+  @override
+  void initState() {
+    super.initState();
+    _checked = _defaultChecked();
+    HardwareKeyboard.instance.addHandler(_onKey);
+  }
+
+  @override
+  void didUpdateWidget(covariant _SaveToBurstButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!listEquals(oldWidget.paths, widget.paths)) {
+      _checked = _defaultChecked();
+      _close();
+    }
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKey);
+    _focus.dispose();
+    if (_portal.isShowing) _portal.hide();
+    super.dispose();
+  }
+
+  /// Every non-Original frame (earlier and later) starts checked.
+  Set<String> _defaultChecked() => defaultCheckedBurstExtras(widget.paths);
+
+  int get _count => _checked.length;
+
+  /// Current frame is always included; extras are optional (hold-burst parity).
+  bool get _canSave => widget.paths.isNotEmpty;
+
+  /// Total frames that will be written (current + checked extras).
+  int get _saveTotal => widget.paths.isEmpty
+      ? 0
+      : resolveBurstSaveTargets(
+          dockPaths: widget.paths,
+          checkedExtras: _checked,
+        ).length;
+
+  bool _onKey(KeyEvent event) {
+    if (!_portal.isShowing) return false;
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.escape) return false;
+    _close();
+    return true;
+  }
+
+  void _open() {
+    if (!_portal.isShowing) {
+      _portal.show();
+      _focus.requestFocus();
+    }
+    // Defer rebuild so OverlayPortal show + setState don't race layout.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _close() {
+    if (_portal.isShowing) _portal.hide();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _toggleOpen() {
+    if (_portal.isShowing) {
+      _close();
+    } else {
+      _open();
+    }
+  }
+
+  void _toggle(String path) {
+    setState(() {
+      if (_checked.contains(path)) {
+        _checked.remove(path);
+      } else {
+        _checked.add(path);
+      }
+    });
+  }
+
+  void _selectAll() {
+    setState(() => _checked = _defaultChecked());
+  }
+
+  void _selectNone() {
+    setState(() => _checked = <String>{});
+  }
+
+  void _commit() {
+    if (!_canSave || widget.paths.isEmpty) return;
+    final paths = resolveBurstSaveTargets(
+      dockPaths: widget.paths,
+      checkedExtras: _checked,
+    );
+    _close();
+    widget.onSave(paths);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final label = count == 1
-        ? (compact ? 'Apply to next' : 'Save & apply to next')
-        : (compact
-            ? 'Apply to next $count'
-            : 'Save & apply to next $count');
-    return _BarTap(
-      tooltip: count == 1
-          ? 'Save this caption to the next burst frame'
-          : 'Save this caption to the next $count burst frames',
-      enabled: onPressed != null,
-      onTap: onPressed,
+    return OverlayPortal(
+      controller: _portal,
+      overlayChildBuilder: (context) {
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: _close,
+              ),
+            ),
+            CompositedTransformFollower(
+              link: _link,
+              showWhenUnlinked: false,
+              targetAnchor: Alignment.bottomRight,
+              followerAnchor: Alignment.topRight,
+              offset: const Offset(0, 8),
+              child: Focus(
+                focusNode: _focus,
+                child: _BurstFilmstripPopover(
+                  paths: widget.paths,
+                  checked: _checked,
+                  canSave: _canSave,
+                  saveCount: _saveTotal,
+                  onToggle: _toggle,
+                  onAll: _selectAll,
+                  onNone: _selectNone,
+                  onSave: _commit,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+      child: CompositedTransformTarget(
+        link: _link,
+        child: Opacity(
+          opacity: _canSave ? 1 : 0.5,
+          child: _BarTap(
+            tooltip: _canSave
+                ? 'Choose burst frames to save'
+                    '${widget.shortcut == null ? '' : '  ·  ${widget.shortcut}'}'
+                : 'Select burst frames to save',
+            enabled: true,
+            dimWhenDisabled: false,
+            onTap: _toggleOpen,
+            builder: (hovered, pressed) {
+              final bg = pressed || hovered
+                  ? FfTokens.nocturneHv
+                  : _kActionSecondaryBg;
+              // No LayoutBuilder here — OverlayPortal + hover setState
+              // otherwise hits debugNeedsLayout asserts (red flashes).
+              return _BarShell(
+                height: _kActionRowHeight,
+                padding: const EdgeInsets.fromLTRB(8, 0, 5, 0),
+                background: bg,
+                outline: _goldEdge,
+                radius: 9,
+                pressed: pressed,
+                nudge: false,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      PhosphorIconsFill.lightning,
+                      size: 13,
+                      color: _gold,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      'Save to Burst',
+                      style: _barLabel(FfTokens.nocturneTx),
+                    ),
+                    const SizedBox(width: 5),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _gold,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        '$_count',
+                        style: const TextStyle(
+                          fontFamily: FfTokens.fontFamily,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          height: 1.2,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                          color: _goldInk,
+                        ),
+                      ),
+                    ),
+                    if (widget.shortcut != null) ...[
+                      const SizedBox(width: 6),
+                      _ShortcutBadge(widget.shortcut!),
+                    ],
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BurstFilmstripPopover extends StatelessWidget {
+  const _BurstFilmstripPopover({
+    required this.paths,
+    required this.checked,
+    required this.canSave,
+    required this.saveCount,
+    required this.onToggle,
+    required this.onAll,
+    required this.onNone,
+    required this.onSave,
+  });
+
+  final List<String> paths;
+  final Set<String> checked;
+  final bool canSave;
+  final int saveCount;
+  final ValueChanged<String> onToggle;
+  final VoidCallback onAll;
+  final VoidCallback onNone;
+  final VoidCallback onSave;
+
+  static const _gold = Color(0xFFE8C547);
+  static const _goldInk = Color(0xFF1A1606);
+
+  @override
+  Widget build(BuildContext context) {
+    final n = paths.length;
+    // 180px cells + 4px gaps — at most 6 thumbs visible; longer bursts scroll.
+    const cell = 180.0;
+    const gap = 4.0;
+    const maxVisible = 6;
+    const panelPad = 8.0;
+    const panelBorder = 1.0; // Border.all on the panel
+    final stripNatural =
+        n <= 0 ? 0.0 : n * cell + (n - 1) * gap;
+    final maxByCount = maxVisible * cell + (maxVisible - 1) * gap;
+    final maxByScreen = MediaQuery.sizeOf(context).width - 48;
+    final maxStrip = maxByCount < maxByScreen ? maxByCount : maxByScreen;
+    final stripWidth =
+        stripNatural <= maxStrip ? stripNatural : maxStrip;
+    final scroll = stripNatural > stripWidth;
+    // Padding + border both inset content; omit either and the strip overflows.
+    final panelWidth =
+        stripWidth + panelPad * 2 + panelBorder * 2;
+    final saveLabel = saveCount <= 0
+        ? 'Save'
+        : 'Save · $saveCount frame${saveCount == 1 ? '' : 's'}';
+
+    final strip = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < paths.length; i++) ...[
+          if (i > 0) const SizedBox(width: gap),
+          _BurstFrameThumb(
+            path: paths[i],
+            isCurrent: i == 0,
+            selected: i == 0 || checked.contains(paths[i]),
+            onTap: i == 0 ? null : () => onToggle(paths[i]),
+          ),
+        ],
+      ],
+    );
+
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        width: panelWidth,
+        padding: const EdgeInsets.all(panelPad),
+        decoration: BoxDecoration(
+          color: _kActionSecondaryBg,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: _kActionHairline, width: panelBorder),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x80000000),
+              blurRadius: 32,
+              offset: Offset(0, 12),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  PhosphorIconsFill.lightning,
+                  size: 12,
+                  color: _gold,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Burst · $n frames',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.88,
+                      height: 1,
+                      color: FfTokens.nocturneT3,
+                    ),
+                  ),
+                ),
+                _GhostChip(label: 'All', onTap: onAll),
+                const SizedBox(width: 2),
+                _GhostChip(label: 'None', onTap: onNone),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: stripWidth,
+              child: scroll
+                  ? SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: strip,
+                    )
+                  : strip,
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Spacer(),
+                // Overlay-safe: no Tooltip/_BarTap (those assert under OverlayPortal).
+                _OverlaySafeTap(
+                  enabled: canSave,
+                  onTap: onSave,
+                  builder: (hovered, pressed) {
+                    final bg = !canSave
+                        ? const Color(0xFF3A3420)
+                        : pressed
+                            ? const Color(0xFFC9A93A)
+                            : hovered
+                                ? const Color(0xFFF0D15C)
+                                : _gold;
+                    final fg = canSave ? _goldInk : FfTokens.nocturneT3;
+                    return _BarShell(
+                      height: _kActionRowHeight,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      background: bg,
+                      radius: 8,
+                      pressed: pressed,
+                      nudge: false,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            PhosphorIconsFill.lightning,
+                            size: 13,
+                            color: fg,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            saveLabel,
+                            style: _barLabel(fg),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Hover tap without Tooltip — safe inside [OverlayPortal] (avoids nested
+/// overlay + hover setState `debugNeedsLayout` red flashes).
+class _OverlaySafeTap extends StatefulWidget {
+  const _OverlaySafeTap({
+    required this.enabled,
+    required this.onTap,
+    required this.builder,
+  });
+
+  final bool enabled;
+  final VoidCallback? onTap;
+  final Widget Function(bool hovered, bool pressed) builder;
+
+  @override
+  State<_OverlaySafeTap> createState() => _OverlaySafeTapState();
+}
+
+class _OverlaySafeTapState extends State<_OverlaySafeTap> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.enabled && widget.onTap != null;
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      onEnter: enabled
+          ? (_) {
+              if (!_hovered) setState(() => _hovered = true);
+            }
+          : null,
+      onExit: (_) {
+        if (_hovered || _pressed) {
+          setState(() {
+            _hovered = false;
+            _pressed = false;
+          });
+        }
+      },
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+        onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+        onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
+        onTap: enabled ? widget.onTap : null,
+        child: Opacity(
+          opacity: enabled ? 1 : 0.5,
+          child: widget.builder(enabled && _hovered, enabled && _pressed),
+        ),
+      ),
+    );
+  }
+}
+
+class _GhostChip extends StatelessWidget {
+  const _GhostChip({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return _OverlaySafeTap(
+      enabled: true,
+      onTap: onTap,
       builder: (hovered, pressed) {
-        const accent = Color(0xFF2EE6C5);
-        final bg = hovered
-            ? accent.withValues(alpha: 0.28)
-            : accent.withValues(alpha: 0.16);
-        final border = accent.withValues(alpha: hovered ? 0.95 : 0.55);
-        return _BarShell(
-          height: _kActionRowHeight,
-          padding: padding,
-          background: bg,
-          pressed: pressed,
-          outline: border,
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: hovered || pressed
+                ? FfTokens.nocturneHv
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(5),
+          ),
           child: Text(
             label,
-            softWrap: false,
-            overflow: TextOverflow.ellipsis,
-            style: _barLabel(accent, weight: FontWeight.w700),
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              height: 1,
+              color: hovered || pressed
+                  ? FfTokens.nocturneTx
+                  : FfTokens.nocturneT2,
+            ),
           ),
         );
       },
+    );
+  }
+}
+
+class _BurstFrameThumb extends StatefulWidget {
+  const _BurstFrameThumb({
+    required this.path,
+    required this.isCurrent,
+    required this.selected,
+    this.onTap,
+  });
+
+  final String path;
+  final bool isCurrent;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  State<_BurstFrameThumb> createState() => _BurstFrameThumbState();
+}
+
+class _BurstFrameThumbState extends State<_BurstFrameThumb> {
+  static const _gold = Color(0xFFE8C547);
+  static const _goldInk = Color(0xFF1A1606);
+  static const _nowMount = Color(0xFF20313C);
+  static const _cell = Color(0xFF262D35);
+  static const _size = 180.0;
+  static const _pad = 12.0;
+  static const _loupeSize = 78.0;
+  static const _magnification = 2.6;
+
+  Offset? _cursor;
+  bool _loupeArmed = false;
+
+  Rect get _imageRect =>
+      const Rect.fromLTWH(_pad, _pad, _size - _pad * 2, _size - _pad * 2);
+
+  void _toggleLoupe() {
+    setState(() {
+      _loupeArmed = !_loupeArmed;
+      if (!_loupeArmed) _cursor = null;
+    });
+  }
+
+  void _setCursor(Offset? pos) {
+    // Defer — setState from MouseRegion during overlay/layout rebuilds
+    // trips LayoutBuilder ('debugNeedsLayout' asserts / red flashes).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (pos == null) {
+        if (_cursor == null && !_loupeArmed) return;
+        setState(() {
+          _cursor = null;
+          _loupeArmed = false;
+        });
+        return;
+      }
+      if (_cursor == pos) return;
+      setState(() => _cursor = pos);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isCurrent = widget.isCurrent;
+    final selected = widget.selected;
+    final borderColor = isCurrent
+        ? FfTokens.nocturneAc
+        : selected
+            ? _gold
+            : const Color(0x0FE8EEF4);
+    final borderWidth = isCurrent || selected ? 1.5 : 1.0;
+    Widget thumb = OrientedFilePreview(
+      path: widget.path,
+      fit: BoxFit.contain,
+      cacheWidth: 400,
+      filterQuality: FilterQuality.medium,
+    );
+    if (!isCurrent && !selected) {
+      thumb = ColorFiltered(
+        colorFilter: const ColorFilter.matrix(<double>[
+          // Approx grayscale(.6) — HTML unchecked state
+          0.2126, 0.7152, 0.0722, 0, 0,
+          0.2126, 0.7152, 0.0722, 0, 0,
+          0.2126, 0.7152, 0.0722, 0, 0,
+          0, 0, 0, 1, 0,
+        ]),
+        child: Opacity(opacity: 0.35, child: thumb),
+      );
+    }
+
+    final imageRect = _imageRect;
+    final cursor = _cursor;
+    final overImage =
+        _loupeArmed && cursor != null && imageRect.contains(cursor);
+    final sampleAt = overImage
+        ? Offset(
+            cursor.dx.clamp(imageRect.left, imageRect.right),
+            cursor.dy.clamp(imageRect.top, imageRect.bottom),
+          )
+        : null;
+
+    final cell = SizedBox(
+      width: _size,
+      height: _size,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                color: isCurrent ? _nowMount : _cell,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: borderColor, width: borderWidth),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(_pad),
+                    child: thumb,
+                  ),
+                  if (isCurrent)
+                    Positioned(
+                      left: 4,
+                      bottom: 4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        decoration: BoxDecoration(
+                          color: FfTokens.nocturneAc,
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: const Text(
+                          'Original',
+                          style: TextStyle(
+                            fontFamily: FfTokens.fontFamily,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.54,
+                            height: 1.3,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    Positioned(
+                      right: 4,
+                      top: 4,
+                      child: Container(
+                        width: 16,
+                        height: 16,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: selected ? _gold : const Color(0xFF181D22),
+                          borderRadius: BorderRadius.circular(4),
+                          border: selected
+                              ? null
+                              : Border.all(color: const Color(0x40E8EEF4)),
+                        ),
+                        child: selected
+                            ? const Icon(
+                                PhosphorIconsBold.check,
+                                size: 10,
+                                color: _goldInk,
+                              )
+                            : null,
+                      ),
+                    ),
+                  Positioned(
+                    right: 4,
+                    bottom: 4,
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _toggleLoupe,
+                        child: Container(
+                          width: 18,
+                          height: 18,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: _loupeArmed
+                                ? FfTokens.nocturneAc
+                                : const Color(0xCC181D22),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: _loupeArmed
+                                  ? FfTokens.nocturneAc
+                                  : const Color(0x40E8EEF4),
+                            ),
+                          ),
+                          child: Icon(
+                            PhosphorIconsRegular.magnifyingGlass,
+                            size: 11,
+                            color: _loupeArmed
+                                ? Colors.white
+                                : FfTokens.nocturneT2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (sampleAt != null) _buildLoupe(sampleAt, imageRect),
+        ],
+      ),
+    );
+
+    return MouseRegion(
+      cursor: _loupeArmed
+          ? SystemMouseCursors.zoomIn
+          : (widget.onTap != null
+              ? SystemMouseCursors.click
+              : SystemMouseCursors.basic),
+      onHover: _loupeArmed
+          ? (event) => _setCursor(event.localPosition)
+          : null,
+      onExit: (_) => _setCursor(null),
+      child: widget.onTap == null
+          ? cell
+          : GestureDetector(onTap: widget.onTap, child: cell),
+    );
+  }
+
+  Widget _buildLoupe(Offset sampleAt, Rect imageRect) {
+    const loupe = _loupeSize;
+    const mag = _magnification;
+    final maxLeft = (_size - loupe - 2).clamp(2.0, double.infinity);
+    final maxTop = (_size - loupe - 2).clamp(2.0, double.infinity);
+    final left = (sampleAt.dx - loupe / 2).clamp(2.0, maxLeft);
+    final top = (sampleAt.dy - loupe / 2).clamp(2.0, maxTop);
+    final localX = sampleAt.dx - imageRect.left;
+    final localY = sampleAt.dy - imageRect.top;
+
+    return Positioned(
+      left: left,
+      top: top,
+      child: IgnorePointer(
+        child: Container(
+          width: loupe,
+          height: loupe,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.92),
+              width: 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.4),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: ClipOval(
+            child: ColoredBox(
+              color: _cell,
+              child: Stack(
+                clipBehavior: Clip.hardEdge,
+                children: [
+                  Positioned(
+                    left: loupe / 2 - localX * mag,
+                    top: loupe / 2 - localY * mag,
+                    width: imageRect.width * mag,
+                    height: imageRect.height * mag,
+                    child: OrientedFilePreview(
+                      path: widget.path,
+                      fit: BoxFit.fill,
+                      cacheWidth: 720,
+                      filterQuality: FilterQuality.high,
+                    ),
+                  ),
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.black.withValues(alpha: 0.18),
+                          width: 1,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -584,11 +1358,8 @@ class _NavButton extends StatelessWidget {
     required this.padding,
     this.shortcut,
     this.iconAtEnd = true,
-    this.filled = false,
-    this.fire = false,
+    this.primary = false,
     this.enabled = true,
-    this.leadingPad,
-    this.trailingPad,
   });
 
   final String label;
@@ -598,53 +1369,81 @@ class _NavButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final EdgeInsets padding;
   final bool iconAtEnd;
-  final bool filled;
-  final bool fire;
+  final bool primary;
   final bool enabled;
-  final double? leadingPad;
-  final double? trailingPad;
 
   @override
   Widget build(BuildContext context) {
-    final resolved = padding.copyWith(
-      left: leadingPad ?? padding.left,
-      right: trailingPad ?? padding.right,
-    );
     return _BarTap(
       tooltip: tooltip,
       enabled: enabled && onPressed != null,
       onTap: onPressed,
       builder: (hovered, pressed) {
-        final bg = fire
-            ? (hovered ? const Color(0xFFFF7340) : FfTokens.firebar)
-            : filled
-                ? (hovered ? FfTokens.accentHover : FfTokens.nocturneAc)
-                : (hovered ? FfTokens.nocturneHv : FfTokens.nocturneSunken);
-        final fg = fire
-            ? Colors.white
-            : filled
-                ? FfTokens.nocturneBg
-                : FfTokens.nocturneTx;
+        if (primary) {
+          final gradient = pressed
+              ? _kActionTealGradientPressed
+              : hovered
+                  ? _kActionTealGradientHover
+                  : _kActionTealGradient;
+          final border = hovered || pressed
+              ? _kActionPrimaryEdgeHover
+              : _kActionPrimaryEdge;
+          return _BarShell(
+            height: _kActionRowHeight,
+            padding: padding,
+            gradient: gradient,
+            outline: border,
+            radius: 9,
+            pressed: pressed,
+            nudge: false,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(label, style: _barLabel(Colors.white)),
+                if (iconAtEnd) ...[
+                  const SizedBox(width: 8),
+                  Icon(icon, size: 16, color: Colors.white),
+                ],
+                if (shortcut != null) ...[
+                  const SizedBox(width: 8),
+                  _ShortcutBadge(shortcut!, onPrimary: true),
+                ],
+              ],
+            ),
+          );
+        }
+
+        final bg = pressed
+            ? _kActionPressedBg
+            : hovered
+                ? FfTokens.nocturneHv
+                : _kActionSecondaryBg;
+        final edge = pressed ? _kActionPressedEdge : _kActionHairline;
+        const iconColor = FfTokens.nocturneT2;
         return _BarShell(
           height: _kActionRowHeight,
-          padding: resolved,
+          padding: padding,
           background: bg,
+          outline: edge,
+          radius: 9,
           pressed: pressed,
+          nudge: false,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               if (!iconAtEnd) ...[
-                Icon(icon, size: 18, color: fg),
-                const SizedBox(width: 8),
+                Icon(icon, size: 16, color: iconColor),
+                const SizedBox(width: 7),
               ],
-              Text(label, style: _barLabel(fg)),
+              Text(label, style: _barLabel(FfTokens.nocturneTx)),
               if (shortcut != null) ...[
-                const SizedBox(width: 6),
+                const SizedBox(width: 7),
                 _ShortcutBadge(shortcut!),
               ],
               if (iconAtEnd) ...[
-                const SizedBox(width: 8),
-                Icon(icon, size: 18, color: fg),
+                const SizedBox(width: 7),
+                Icon(icon, size: 16, color: iconColor),
               ],
             ],
           ),
@@ -675,8 +1474,7 @@ class _ClipGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pad = iconOnly ? 8.0 : (compact ? 10.0 : 12.0);
-    final gap = compact ? 6.0 : 8.0;
+    final pad = iconOnly ? 8.0 : 11.0;
     Widget item({
       required IconData icon,
       required String label,
@@ -690,26 +1488,24 @@ class _ClipGroup extends StatelessWidget {
         enabled: enabled && onPressed != null,
         onTap: onPressed,
         builder: (hovered, pressed) {
-          final fg = hovered ? FfTokens.nocturneTx : FfTokens.nocturneT2;
-          final iconColor = hovered ? FfTokens.nocturneTx : FfTokens.nocturneT3;
           return _BarShell(
             height: _kActionChipHeight,
             padding: EdgeInsets.symmetric(horizontal: pad),
-            background: hovered ? FfTokens.nocturneHv : Colors.transparent,
+            background:
+                hovered || pressed ? FfTokens.nocturneHv : Colors.transparent,
+            radius: 7,
             pressed: pressed,
+            nudge: false,
             child: iconOnly
-                ? Icon(icon, size: 18, color: iconColor)
+                ? Icon(icon, size: 16, color: FfTokens.nocturneT2)
                 : Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(icon, size: 18, color: iconColor),
-                      SizedBox(width: gap),
-                      Text(
-                        label,
-                        style: _barLabel(fg, weight: FontWeight.w500),
-                      ),
+                      Icon(icon, size: 16, color: FfTokens.nocturneT2),
+                      const SizedBox(width: 6),
+                      Text(label, style: _barLabel(FfTokens.nocturneTx)),
                       if (shortcut != null) ...[
-                        SizedBox(width: gap),
+                        const SizedBox(width: 6),
                         _ShortcutBadge(shortcut),
                       ],
                     ],
@@ -722,8 +1518,9 @@ class _ClipGroup extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        color: FfTokens.nocturneBg,
-        borderRadius: BorderRadius.circular(12),
+        color: _kActionSecondaryBg,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: _kActionHairline),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -734,14 +1531,12 @@ class _ClipGroup extends StatelessWidget {
             onPressed: onCopy,
             enabled: true,
           ),
-          const SizedBox(width: 2),
           item(
             icon: PhosphorIconsRegular.clipboardText,
             label: 'Paste',
             onPressed: onPaste,
             enabled: pasteEnabled,
           ),
-          const SizedBox(width: 2),
           item(
             icon: PhosphorIconsRegular.clockCounterClockwise,
             label: 'Paste last',
@@ -781,9 +1576,7 @@ class _FtpGroup extends StatelessWidget {
       onPressed: onTransmit,
       shortcut: shortcut,
     );
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: _kFtpButtonMaxWidth),
-      child: Row(
+    return Row(
       mainAxisSize: narrow ? MainAxisSize.max : MainAxisSize.min,
       children: [
         if (narrow) Expanded(child: send) else send,
@@ -794,18 +1587,26 @@ class _FtpGroup extends StatelessWidget {
             enabled: true,
             onTap: onHistory,
             builder: (hovered, pressed) {
+              final bg = pressed
+                  ? _kActionPressedBg
+                  : hovered
+                      ? FfTokens.nocturneHv
+                      : _kActionSecondaryBg;
+              final edge = pressed ? _kActionPressedEdge : _kActionHairline;
               final color =
-                  hovered ? FfTokens.nocturneTx : FfTokens.nocturneT3;
+                  hovered ? FfTokens.nocturneTx : FfTokens.nocturneT2;
               return _BarShell(
                 height: _kActionRowHeight,
                 width: _kActionRowHeight,
                 padding: EdgeInsets.zero,
-                background:
-                    hovered ? FfTokens.nocturneHv : FfTokens.nocturneSunken,
+                background: bg,
+                outline: edge,
+                radius: 9,
                 pressed: pressed,
+                nudge: false,
                 child: Icon(
-                  PhosphorIconsRegular.clockCounterClockwise,
-                  size: 18,
+                  PhosphorIconsRegular.clockClockwise,
+                  size: 16,
                   color: color,
                 ),
               );
@@ -813,7 +1614,6 @@ class _FtpGroup extends StatelessWidget {
           ),
         ],
       ],
-      ),
     );
   }
 }
@@ -958,6 +1758,7 @@ class _FtpSendButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final canSend = enabled && onPressed != null;
     final status = _destination;
+    final display = status.isEmpty ? 'FTP' : label;
     final tip = shortcut == null ? 'FTP · $label' : 'FTP · $shortcut';
 
     return _BarTap(
@@ -966,38 +1767,42 @@ class _FtpSendButton extends StatelessWidget {
       enabled: canSend,
       onTap: onPressed,
       builder: (hovered, pressed) {
-        final fg = FfTokens.nocturneTx;
+        final bg = pressed
+            ? _kActionPressedBg
+            : hovered
+                ? FfTokens.nocturneHv
+                : _kActionSecondaryBg;
+        final edge = pressed ? _kActionPressedEdge : _kActionHairline;
+        // Avoid LayoutBuilder inside _BarTap — hover setState under
+        // OverlayPortal/action-row rebuilds asserts debugNeedsLayout.
         return _BarShell(
           height: _kActionRowHeight,
           width: expand ? double.infinity : null,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          background: hovered ? FfTokens.nocturneHv : FfTokens.nocturneSunken,
+          padding: const EdgeInsets.symmetric(horizontal: 13),
+          background: bg,
+          outline: edge,
+          radius: 9,
           pressed: pressed,
+          nudge: false,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
             children: [
-              Icon(
+              const Icon(
                 PhosphorIconsRegular.cloudArrowUp,
-                size: 18,
-                color: fg,
+                size: 16,
+                color: FfTokens.nocturneT2,
               ),
-              const SizedBox(width: 8),
-              Text('FTP', style: _barLabel(fg)),
+              const SizedBox(width: 7),
+              Text(
+                display,
+                maxLines: 1,
+                softWrap: false,
+                style: _barLabel(FfTokens.nocturneTx),
+              ),
               if (shortcut != null) ...[
-                const SizedBox(width: 6),
+                const SizedBox(width: 7),
                 _ShortcutBadge(shortcut!),
-              ],
-              if (status.isNotEmpty) ...[
-                const SizedBox(width: 8),
-                Flexible(
-                  fit: FlexFit.loose,
-                  child: Text(
-                    status,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: _barLabel(fg),
-                  ),
-                ),
               ],
             ],
           ),
@@ -1008,32 +1813,33 @@ class _FtpSendButton extends StatelessWidget {
 }
 
 class _ShortcutBadge extends StatelessWidget {
-  const _ShortcutBadge(this.keys);
+  const _ShortcutBadge(this.keys, {this.onPrimary = false});
 
   final String keys;
-
-  static const _fill = Color(0xFF1A2834);
-  static const _edge = Color(0xFF3A5568);
-  static const _ink = Color(0xFF8EB4CE);
+  final bool onPrimary;
 
   @override
   Widget build(BuildContext context) {
+    final fill = onPrimary
+        ? const Color(0x1AFFFFFF) // rgba(255,255,255,.1)
+        : FfTokens.nocturneSunken; // #262D35
+    final ink = onPrimary
+        ? const Color(0xBFFFFFFF) // rgba(255,255,255,.75)
+        : FfTokens.nocturneT2; // #959AA0
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: _fill,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: _edge),
+        color: fill,
+        borderRadius: BorderRadius.circular(5),
       ),
       child: Text(
         keys,
-        style: const TextStyle(
-          fontFamily: FfTokens.monoFamily,
+        style: TextStyle(
+          fontFamily: FfTokens.fontFamily,
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          color: _ink,
+          color: ink,
           height: 1,
-          letterSpacing: -0.6,
         ),
       ),
     );
@@ -1066,6 +1872,19 @@ class _BarTapState extends State<_BarTap> {
   bool _hovered = false;
   bool _pressed = false;
 
+  void _setHover(bool hovered) {
+    // Defer past the current frame so OverlayPortal/Tooltip updates don't
+    // collide with LayoutBuilder scheduleLayoutCallback asserts.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_hovered == hovered && (hovered || !_pressed)) return;
+      setState(() {
+        _hovered = hovered;
+        if (!hovered) _pressed = false;
+      });
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final enabled = widget.enabled;
@@ -1081,11 +1900,8 @@ class _BarTapState extends State<_BarTap> {
           child: MouseRegion(
             cursor:
                 enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-            onEnter: enabled ? (_) => setState(() => _hovered = true) : null,
-            onExit: (_) => setState(() {
-              _hovered = false;
-              _pressed = false;
-            }),
+            onEnter: enabled ? (_) => _setHover(true) : null,
+            onExit: (_) => _setHover(false),
             child: GestureDetector(
               onTapDown:
                   enabled ? (_) => setState(() => _pressed = true) : null,
@@ -1107,21 +1923,25 @@ class _BarShell extends StatelessWidget {
   const _BarShell({
     required this.height,
     required this.padding,
-    required this.background,
     required this.pressed,
     required this.child,
+    this.background,
+    this.gradient,
     this.width,
     this.outline,
+    this.radius = 9,
     this.nudge = true,
   });
 
   final double height;
   final double? width;
   final EdgeInsets padding;
-  final Color background;
+  final Color? background;
+  final Gradient? gradient;
   final bool pressed;
   final Widget child;
   final Color? outline;
+  final double radius;
   final bool nudge;
 
   @override
@@ -1135,8 +1955,9 @@ class _BarShell extends StatelessWidget {
       padding: padding,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(10),
+        color: gradient == null ? background : null,
+        gradient: gradient,
+        borderRadius: BorderRadius.circular(radius),
         border: outline == null ? null : Border.all(color: outline!),
       ),
       child: child,
@@ -1147,7 +1968,7 @@ class _BarShell extends StatelessWidget {
 TextStyle _barLabel(Color color, {FontWeight weight = FontWeight.w600}) {
   return TextStyle(
     fontFamily: FfTokens.fontFamily,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: weight,
     color: color,
     height: 1,

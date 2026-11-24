@@ -61,13 +61,14 @@ class JerseyDigitIntent extends Intent {
 }
 
 /// What [CaptionV2Screen]'s hardware save handler should do for one key-down.
-enum CaptionV2SaveChord { none, save, transmit }
+enum CaptionV2SaveChord { none, save, transmit, burst }
 
-/// Maps a key-down to save or FTP.
+/// Maps a key-down to save, FTP, or Save to Burst.
 ///
-/// ⌘S / Ctrl+S always save (Shift may still be down after a range select).
-/// FTP is ⌘⇧Enter / Ctrl⇧Enter only — never plain ⌘Enter (too close to
-/// Firebar Return). Shift+Enter still FTPs when [ftpMode] is on.
+/// ⌘S / Ctrl+S and Shift+Enter always save (Shift may still be down on ⌘S
+/// after a range select). FTP is ⌘⇧Enter / Ctrl⇧Enter only — never plain
+/// ⌘Enter (too close to Firebar Return) and never bare Shift+Enter.
+/// ⌘B / Ctrl+B saves the current caption to the forward burst.
 /// Plain Enter is not a save chord, so Firebar can apply the shorthand line.
 CaptionV2SaveChord captionV2SaveChord({
   required LogicalKeyboardKey key,
@@ -80,17 +81,24 @@ CaptionV2SaveChord captionV2SaveChord({
   final isEnter = key == LogicalKeyboardKey.enter ||
       key == LogicalKeyboardKey.numpadEnter;
   final isS = key == LogicalKeyboardKey.keyS;
+  final isB = key == LogicalKeyboardKey.keyB;
   final metaOrControl = meta || control;
 
+  // ⌘⇧Enter / Ctrl⇧Enter → FTP (or save when FTP mode is off).
   if (isEnter && shift && metaOrControl) {
     return ftpMode ? CaptionV2SaveChord.transmit : CaptionV2SaveChord.save;
   }
+  // Shift+Enter → save (same as ⌘S).
   if (isEnter && shift && !metaOrControl && !alt) {
-    return ftpMode ? CaptionV2SaveChord.transmit : CaptionV2SaveChord.save;
+    return CaptionV2SaveChord.save;
   }
   // Ignore Shift so ⌘S still works right after Shift-click multi-select.
   if (isS && metaOrControl && !alt) {
     return CaptionV2SaveChord.save;
+  }
+  // ⌘B / Ctrl+B → Save to Burst (when a multi-frame burst is available).
+  if (isB && metaOrControl && !alt && !shift) {
+    return CaptionV2SaveChord.burst;
   }
   return CaptionV2SaveChord.none;
 }
@@ -129,7 +137,7 @@ Map<ShortcutActivator, Intent> buildCaptionV2Shortcuts() {
         const OpenSearchIntent(),
     const SingleActivator(LogicalKeyboardKey.keyK, control: true):
         const OpenSearchIntent(),
-    // ⌘S / Shift+Enter / ⌘Enter (FTP) / ⌘⇧Enter are handled by
+    // ⌘S / Shift+Enter (save) / ⌘⇧Enter (FTP) are handled by
     // CaptionV2Screen's hardware key handler so they still work when focus
     // is outside the Shortcuts tree.
     const SingleActivator(

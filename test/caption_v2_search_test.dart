@@ -159,9 +159,10 @@ void main() {
 
     expect(controller.firebarJerseySideChoiceOpen, isTrue);
     expect(controller.firebarOptionPrompt, 'Which #34?');
+    expect(controller.searchQuery, '34');
     expect(find.text('Which #34?'), findsOneWidget);
-    expect(find.textContaining('Auston Matthews'), findsWidgets);
-    expect(find.textContaining('Stephen Halliday'), findsWidgets);
+    expect(find.textContaining('Matthews'), findsWidgets);
+    expect(find.textContaining('Halliday'), findsWidgets);
 
     focusNode.requestFocus();
     await tester.pump();
@@ -334,7 +335,7 @@ void main() {
     expect(controller.firebarJerseySideChoiceOpen, isTrue);
     expect(
       controller.firebarOptions.map((o) => o.label).toList(),
-      ['H - Auston Matthews', 'V - Stephen Halliday'],
+      ['H - Matthews', 'V - Halliday'],
     );
 
     controller.chooseFirebarJerseySide(isHome: true);
