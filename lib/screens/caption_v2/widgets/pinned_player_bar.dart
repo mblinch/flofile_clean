@@ -19,7 +19,7 @@ class PinnedPlayerBar extends StatefulWidget {
   });
 
   /// Compact pinned row height (padding is applied inside).
-  static const pinnedBarHeight = 32.0;
+  static const pinnedBarHeight = 28.0;
 
   final CaptionV2Controller controller;
   final bool isHome;
@@ -55,12 +55,12 @@ class _PinnedPlayerBarState extends State<PinnedPlayerBar> {
 
     return Container(
       height: widget.height ?? PinnedPlayerBar.pinnedBarHeight,
-      padding: const EdgeInsets.symmetric(horizontal: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 3),
       child: Row(
         children: [
           if (widget.leading != null) ...[
             widget.leading!,
-            const SizedBox(width: 8),
+            const SizedBox(width: 5),
           ],
           Tooltip(
             message: hasPlayer ? 'Unpin' : 'No pinned player',
@@ -69,12 +69,12 @@ class _PinnedPlayerBarState extends State<PinnedPlayerBar> {
               hasPlayer
                   ? PhosphorIconsFill.pushPin
                   : PhosphorIconsRegular.pushPin,
-              size: 13,
+              size: 12,
               color: hasPlayer ? tokens.textSecondary : tokens.textTertiary,
             ),
           ),
           if (hasPlayer) ...[
-            const SizedBox(width: 6),
+            const SizedBox(width: 4),
             CmdClick(
               onTap: () => widget.controller.togglePlayerPin(
                 player,
@@ -91,7 +91,7 @@ class _PinnedPlayerBarState extends State<PinnedPlayerBar> {
                 style: TextStyle(
                   fontFamily: FfTokens.fontFamily,
                   fontWeight: FontWeight.w600,
-                  fontSize: 12,
+                  fontSize: 11,
                   height: 1.0,
                   color: selected
                       ? tokens.text
@@ -101,11 +101,11 @@ class _PinnedPlayerBarState extends State<PinnedPlayerBar> {
             ),
           ],
           if (widget.filter != null) ...[
-            const SizedBox(width: 8),
+            const SizedBox(width: 5),
             Expanded(child: widget.filter!),
           ],
           if (widget.trailing != null) ...[
-            if (widget.filter != null) const SizedBox(width: 8),
+            if (widget.filter != null) const SizedBox(width: 4),
             widget.trailing!,
           ],
         ],

@@ -301,6 +301,7 @@ class DefaultVerbAccordion extends StatefulWidget {
 class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
   late String _openCategory;
   final Set<String> _extraOpen = {};
+  final _bodyKey = GlobalKey(debugLabel: 'DefaultVerbAccordion body');
 
   CaptionV2Controller get controller => widget.controller;
 
@@ -494,6 +495,60 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
     return KeyEventResult.ignored;
   }
 
+  /// Largest font step whose open category still fits the body height.
+  Future<void> fitToBox() async {
+    final box = _bodyKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final bodyH = box.size.height;
+    if (bodyH <= 0) return;
+
+    final categories = _categories;
+    final openVerbs = _verbsFor(_openCategory);
+    final pinnedH = DefaultVerbAccordion.pinnedBarH;
+
+    double contentHeight(int step) {
+      final scale = 1 +
+          step *
+              (CaptionV2Controller.verbFontStepPx /
+                  CaptionV2Controller.verbFontBasePx);
+      var headerH = DefaultVerbAccordion.headerH * scale;
+      var verbRowH = DefaultVerbAccordion.verbRowH * scale;
+      final worstOneUp =
+          headerH * categories.length + openVerbs.length * verbRowH;
+      if (worstOneUp > bodyH) {
+        headerH = 28 * scale;
+        verbRowH = DefaultVerbAccordion.verbRowH * scale;
+      }
+      final availableForVerbs =
+          (bodyH - categories.length * headerH - pinnedH).clamp(0.0, bodyH);
+      final maxRowsOneUp =
+          verbRowH <= 0 ? 0 : (availableForVerbs / verbRowH).floor();
+      final twoUp = openVerbs.length > maxRowsOneUp && openVerbs.length > 1;
+      if (controller.verbListAll) {
+        return pinnedH + openVerbs.length * verbRowH;
+      }
+      if (twoUp) {
+        return categories.length * headerH +
+            pinnedH +
+            ((openVerbs.length + 1) ~/ 2) * verbRowH;
+      }
+      return categories.length * headerH +
+          pinnedH +
+          openVerbs.length * verbRowH;
+    }
+
+    var best = CaptionV2Controller.verbFontStepMin;
+    for (var step = CaptionV2Controller.verbFontStepMax;
+        step >= CaptionV2Controller.verbFontStepMin;
+        step--) {
+      if (contentHeight(step) <= bodyH + 2) {
+        best = step;
+        break;
+      }
+    }
+    await controller.setVerbFontStep(best);
+  }
+
   @override
   Widget build(BuildContext context) {
     _trimExtras();
@@ -513,13 +568,20 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
               children: [
                 _VerbSortMenu(controller: controller, tokens: t),
                 const Spacer(),
-                VerbMenuTools(controller: controller, tokens: t),
+                VerbMenuTools(
+                  controller: controller,
+                  tokens: t,
+                  onFit: () {
+                    fitToBox();
+                  },
+                ),
               ],
             ),
           ),
         ),
         Divider(height: 1, thickness: 1, color: t.divider),
         Expanded(
+          key: _bodyKey,
           child: LayoutBuilder(
             builder: (context, constraints) {
               final bodyH = constraints.maxHeight;
@@ -711,18 +773,22 @@ class VerbMenuTools extends StatelessWidget {
   const VerbMenuTools({
     required this.controller,
     required this.tokens,
+    this.onFit,
   });
 
   final CaptionV2Controller controller;
   final FfTokens tokens;
+
+  /// Fit verbs to the on-screen box (Index or A–Z list).
+  final VoidCallback? onFit;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _VerbTextSizeControl(controller: controller),
-        const SizedBox(width: 2),
+        _VerbTextSizeControl(controller: controller, onFit: onFit),
+        const SizedBox(width: 4),
         _VerbCascadeLimitMenu(controller: controller),
       ],
     );
@@ -731,25 +797,35 @@ class VerbMenuTools extends StatelessWidget {
 
 /// Compact small-A / big-A for verb text size, shown beside the gear.
 class _VerbTextSizeControl extends StatelessWidget {
-  const _VerbTextSizeControl({required this.controller});
+  const _VerbTextSizeControl({required this.controller, this.onFit});
 
   final CaptionV2Controller controller;
+  final VoidCallback? onFit;
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: controller,
       builder: (context, _) {
-        final step = controller.verbFontStep.clamp(
-          CaptionV2Controller.verbFontStepMin,
-          CaptionV2Controller.verbFontStepMax,
-        );
+        if (controller.verbListAll) {
+          final step = controller.verbFontStep;
+          return AaTextSizeControl(
+            height: 24,
+            canSmaller: step > CaptionV2Controller.verbFontStepMin,
+            canLarger: step < CaptionV2Controller.verbFontStepMax,
+            onSmaller: () => controller.nudgeVerbFont(-1),
+            onLarger: () => controller.nudgeVerbFont(1),
+            onFit: onFit,
+          );
+        }
+        final step = controller.verbIndexFontStep.clamp(0, 2);
         return AaTextSizeControl(
-          height: 30,
-          canSmaller: step > CaptionV2Controller.verbFontStepMin,
-          canLarger: step < CaptionV2Controller.verbFontStepMax,
-          onSmaller: () => controller.nudgeVerbFont(-1),
-          onLarger: () => controller.nudgeVerbFont(1),
+          height: 24,
+          canSmaller: step > 0,
+          canLarger: step < 2,
+          onSmaller: () => controller.nudgeVerbIndexFont(-1),
+          onLarger: () => controller.nudgeVerbIndexFont(1),
+          onFit: onFit,
         );
       },
     );
@@ -766,7 +842,7 @@ class _VerbCascadeLimitMenu extends StatefulWidget {
 }
 
 class _VerbCascadeLimitMenuState extends State<_VerbCascadeLimitMenu> {
-  static const _menuWidth = 360.0;
+  static const _menuWidth = 272.0;
 
   OverlayEntry? _entry;
   bool _open = false;
@@ -803,10 +879,16 @@ class _VerbCascadeLimitMenuState extends State<_VerbCascadeLimitMenu> {
       return;
     }
     final origin = overlayBox.globalToLocal(box.localToGlobal(Offset.zero));
-    const overhang = 8.0;
-    var left = origin.dx + box.size.width - _menuWidth + overhang;
+    const gap = 8.0;
+    // Prefer opening to the right of the gear so the popover doesn't cover
+    // the verb list. Fall back to the left when the window is too tight.
+    final rightLeft = origin.dx + box.size.width + gap;
+    final leftLeft = origin.dx - gap - _menuWidth;
     final maxLeft = overlayBox.size.width - 8 - _menuWidth;
-    left = left.clamp(8.0, maxLeft < 8 ? 8.0 : maxLeft);
+    final opensRight = rightLeft <= maxLeft;
+    final left = (opensRight ? rightLeft : leftLeft)
+        .clamp(8.0, maxLeft < 8 ? 8.0 : maxLeft);
+    final top = origin.dy;
 
     _entry = OverlayEntry(
       builder: (menuContext) {
@@ -819,8 +901,8 @@ class _VerbCascadeLimitMenuState extends State<_VerbCascadeLimitMenu> {
               ),
             ),
             CustomSingleChildLayout(
-              delegate: _VerbGearMenuAbove(
-                anchorTop: origin.dy,
+              delegate: _VerbGearMenuBeside(
+                top: top,
                 left: left,
                 width: _menuWidth,
               ),
@@ -836,7 +918,10 @@ class _VerbCascadeLimitMenuState extends State<_VerbCascadeLimitMenu> {
                 },
                 child: DefaultTextStyle.merge(
                   style: const TextStyle(decoration: TextDecoration.none),
-                  child: _VerbSettingsCard(controller: widget.controller),
+                  child: _VerbSettingsCard(
+                    controller: widget.controller,
+                    caretOnLeft: opensRight,
+                  ),
                 ),
               ),
             ),
@@ -859,16 +944,16 @@ class _VerbCascadeLimitMenuState extends State<_VerbCascadeLimitMenu> {
         onTap: _toggle,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 80),
-          width: 28,
-          height: 28,
+          width: 24,
+          height: 24,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: active ? FfTokens.nocturneHv : Colors.transparent,
-            borderRadius: BorderRadius.circular(7),
+            borderRadius: BorderRadius.circular(6),
           ),
           child: PhosphorIcon(
             PhosphorIconsRegular.gearSix,
-            size: 15,
+            size: 14,
             color: active ? FfTokens.nocturneTx : FfTokens.nocturneT2,
           ),
         ),
@@ -877,20 +962,21 @@ class _VerbCascadeLimitMenuState extends State<_VerbCascadeLimitMenu> {
   }
 }
 
-class _VerbGearMenuAbove extends SingleChildLayoutDelegate {
-  _VerbGearMenuAbove({
-    required this.anchorTop,
+class _VerbGearMenuBeside extends SingleChildLayoutDelegate {
+  _VerbGearMenuBeside({
+    required this.top,
     required this.left,
     required this.width,
   });
 
-  final double anchorTop;
+  final double top;
   final double left;
   final double width;
 
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
-    final maxHeight = (constraints.maxHeight - 16).clamp(0.0, constraints.maxHeight);
+    final maxHeight =
+        (constraints.maxHeight - 16).clamp(0.0, constraints.maxHeight);
     return BoxConstraints(
       minWidth: width,
       maxWidth: width,
@@ -900,79 +986,45 @@ class _VerbGearMenuAbove extends SingleChildLayoutDelegate {
 
   @override
   Offset getPositionForChild(Size size, Size childSize) {
-    var top = anchorTop - childSize.height;
-    if (top < 8) top = 8;
+    var y = top;
     final maxTop = size.height - 8 - childSize.height;
-    if (top > maxTop) top = maxTop < 8 ? 8.0 : maxTop;
+    if (y > maxTop) y = maxTop < 8 ? 8.0 : maxTop;
+    if (y < 8) y = 8;
     var x = left;
     final maxLeft = size.width - 8 - childSize.width;
     if (x > maxLeft) x = maxLeft < 8 ? 8.0 : maxLeft;
     if (x < 8) x = 8;
-    return Offset(x, top);
+    return Offset(x, y);
   }
 
   @override
-  bool shouldRelayout(covariant _VerbGearMenuAbove oldDelegate) {
-    return anchorTop != oldDelegate.anchorTop ||
+  bool shouldRelayout(covariant _VerbGearMenuBeside oldDelegate) {
+    return top != oldDelegate.top ||
         left != oldDelegate.left ||
         width != oldDelegate.width;
   }
 }
 
+/// Verb Index / A–Z settings popover (gear menu). Spec: Verb Settings Menu.html
 class _VerbSettingsCard extends StatelessWidget {
-  const _VerbSettingsCard({required this.controller});
+  const _VerbSettingsCard({
+    required this.controller,
+    this.caretOnLeft = false,
+  });
 
   final CaptionV2Controller controller;
 
-  int get _categoryCount {
-    final count = verbCategoriesForDisplay(controller.verbCategories).length;
-    return count < 1 ? 1 : count;
-  }
+  /// When the menu opens to the right of the gear, point the caret left.
+  final bool caretOnLeft;
 
-  bool get _allOpen {
-    final limit = controller.verbCascadeLimit;
-    final count = _categoryCount;
-    if (limit >= CaptionV2Controller.verbCascadeAll) return true;
-    return count > 1 && limit >= count;
-  }
+  static const _densityNames = ['Compact', 'Cozy', 'Comfortable'];
 
-  int get _shownOpen {
-    if (_allOpen) return _categoryCount;
-    final limit = controller.verbCascadeLimit;
-    if (limit < 1) return 1;
-    return limit;
-  }
-
-  String get _openHint {
-    if (_allOpen) return 'Categories stay open';
-    if (_shownOpen <= 1) return 'One at a time';
-    return 'Oldest closes after $_shownOpen';
-  }
-
-  bool get _isDefault =>
-      controller.verbCascadeLimit == 1 && !controller.verbListAll;
-
-  void _fewerCategories() {
-    if (_allOpen) {
-      final previous = _categoryCount - 1;
-      controller.setVerbCascadeLimit(previous < 1 ? 1 : previous);
-      return;
-    }
-    if (_shownOpen <= 1) return;
-    controller.setVerbCascadeLimit(_shownOpen - 1);
-  }
-
-  void _moreCategories() {
-    if (_allOpen) return;
-    final next = _shownOpen + 1;
-    controller.setVerbCascadeLimit(
-      next >= _categoryCount ? CaptionV2Controller.verbCascadeAll : next,
-    );
-  }
-
-  Future<void> _reset() async {
+  Future<void> _resetDefaults() async {
     await controller.setVerbListAll(false);
-    await controller.setVerbCascadeLimit(1);
+    await controller.setVerbIndexSortByCategory(false);
+    await controller.setVerbIndexDensity(1);
+    await controller.setVerbIndexShowHistory(true);
+    await controller.setVerbIndexHistoryLimit(3);
   }
 
   @override
@@ -980,100 +1032,773 @@ class _VerbSettingsCard extends StatelessWidget {
     return ListenableBuilder(
       listenable: controller,
       builder: (context, _) {
-        final atOpenMin = !_allOpen && _shownOpen <= 1;
-        final atOpenMax = _allOpen;
-        return DecoratedBox(
-          decoration: const BoxDecoration(
-            color: FfTokens.nocturneEl,
-            borderRadius: BorderRadius.all(Radius.circular(12)),
-            boxShadow: [
-              BoxShadow(
-                color: Color(0x80000000),
-                blurRadius: 40,
-                offset: Offset(0, 16),
+        final listAll = controller.verbListAll;
+        final dens = controller.verbIndexDensity.clamp(0, 2);
+        final historyOn = controller.verbIndexShowHistory;
+        final historyN = controller.verbIndexHistoryLimit.clamp(1, 10);
+
+        return Padding(
+          // Leave room for the caret diamond on the open side.
+          padding: EdgeInsets.only(
+            top: caretOnLeft ? 0 : 5,
+            left: caretOnLeft ? 5 : 0,
+          ),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: FfTokens.nocturneSf,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x24E8EEF4), // ≈ .14
+                      blurRadius: 0,
+                      spreadRadius: 1,
+                    ),
+                    BoxShadow(
+                      color: Color(0x8C000000), // .55
+                      blurRadius: 44,
+                      offset: Offset(0, 18),
+                    ),
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const _VsSectionLabel('LIST'),
+                      _VsRow(
+                        label: 'Layout',
+                        trailing: _VsSegmented(
+                          children: [
+                            _VsSegItem(
+                              label: 'Index',
+                              icon: PhosphorIconsRegular.rows,
+                              selected: !listAll,
+                              onTap: () => controller.setVerbListAll(false),
+                            ),
+                            _VsSegItem(
+                              label: 'A–Z',
+                              icon: PhosphorIconsRegular.list,
+                              selected: listAll,
+                              onTap: () => controller.setVerbListAll(true),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IgnorePointer(
+                        ignoring: listAll,
+                        child: Opacity(
+                          opacity: listAll ? 0.4 : 1,
+                          child: _VsRow(
+                            label: 'Group by',
+                            trailing: _VsSegmented(
+                              children: [
+                                _VsSegItem(
+                                  label: 'Letter',
+                                  selected:
+                                      !controller.verbIndexSortByCategory,
+                                  onTap: () => controller
+                                      .setVerbIndexSortByCategory(false),
+                                ),
+                                _VsSegItem(
+                                  label: 'Category',
+                                  selected:
+                                      controller.verbIndexSortByCategory,
+                                  onTap: () => controller
+                                      .setVerbIndexSortByCategory(true),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      _VsRow(
+                        label: 'Density',
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _densityNames[dens],
+                              style: const TextStyle(
+                                fontFamily: FfTokens.fontFamily,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w400,
+                                color: FfTokens.nocturneT2,
+                                decoration: TextDecoration.none,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            _VsSegmented(
+                              iconOnly: true,
+                              children: [
+                                for (var i = 0; i < 3; i++)
+                                  _VsSegItem(
+                                    tooltip: _densityNames[i],
+                                    selected: dens == i,
+                                    iconWidget: _DensityLinesIcon(lines: const [
+                                      5,
+                                      3,
+                                      2,
+                                    ][i]),
+                                    onTap: () =>
+                                        controller.setVerbIndexDensity(i),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const _VsDivider(),
+                      const _VsSectionLabel('SHOW'),
+                      _VsHistoryRow(
+                        value: historyOn,
+                        onChanged: controller.setVerbIndexShowHistory,
+                      ),
+                      ClipRect(
+                        child: AnimatedAlign(
+                          duration: const Duration(milliseconds: 200),
+                          curve: const Cubic(0.2, 0.8, 0.2, 1),
+                          alignment: Alignment.topCenter,
+                          heightFactor: historyOn ? 1 : 0,
+                          child: AnimatedOpacity(
+                            duration: const Duration(milliseconds: 150),
+                            opacity: historyOn ? 1 : 0,
+                            child: _VsRow(
+                              indent: true,
+                              label: 'Verbs shown',
+                              labelColor: FfTokens.nocturneT2,
+                              labelWeight: FontWeight.w400,
+                              labelSize: 12.5,
+                              trailing: _VsStepper(
+                                value: historyN,
+                                onDelta: (d) => controller
+                                    .setVerbIndexHistoryLimit(historyN + d),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const _VsDivider(),
+                      _VsFooter(onReset: _resetDefaults),
+                    ],
+                  ),
+                ),
               ),
-              BoxShadow(
-                color: FfTokens.nocturneLn,
-                spreadRadius: 1,
+              // Caret toward the gear: left edge when opened right, else top.
+              Positioned(
+                left: caretOnLeft ? -5 : null,
+                right: caretOnLeft ? null : 10,
+                top: caretOnLeft ? 10 : -5,
+                child: Transform.rotate(
+                  angle: 0.78539816339, // 45°
+                  child: Container(
+                    width: 9,
+                    height: 9,
+                    decoration: BoxDecoration(
+                      color: FfTokens.nocturneSf,
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0x24E8EEF4),
+                          offset: caretOnLeft
+                              ? const Offset(-1, 1)
+                              : const Offset(-1, -1),
+                          blurRadius: 0,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(6),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(10, 8, 10, 4),
-                  child: Text(
-                    'VERB PANEL',
+        );
+      },
+    );
+  }
+}
+
+class _VsSectionLabel extends StatelessWidget {
+  const _VsSectionLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontFamily: FfTokens.fontFamily,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.84, // .08em ≈ 10.5 * 0.08
+          color: FfTokens.nocturneT3,
+          decoration: TextDecoration.none,
+        ),
+      ),
+    );
+  }
+}
+
+class _VsDivider extends StatelessWidget {
+  const _VsDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      child: ColoredBox(
+        color: Color(0x14E8EEF4),
+        child: SizedBox(height: 1, width: double.infinity),
+      ),
+    );
+  }
+}
+
+class _VsRow extends StatelessWidget {
+  const _VsRow({
+    required this.label,
+    required this.trailing,
+    this.indent = false,
+    this.labelColor = FfTokens.nocturneTx,
+    this.labelWeight = FontWeight.w500,
+    this.labelSize = 13,
+    this.subtext,
+    this.onTap,
+  });
+
+  final String label;
+  final Widget trailing;
+  final bool indent;
+  final Color labelColor;
+  final FontWeight labelWeight;
+  final double labelSize;
+  final String? subtext;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final row = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 36),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(indent ? 20 : 8, 4, 8, 4),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
                     style: TextStyle(
                       fontFamily: FfTokens.fontFamily,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.88,
-                      color: FfTokens.nocturneT3,
+                      fontSize: labelSize,
+                      fontWeight: labelWeight,
+                      color: labelColor,
                       decoration: TextDecoration.none,
                     ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                _VerbSettingRow(
-                  name: 'Organization',
-                  hint: controller.verbListAll
-                      ? 'Alphabetical'
-                      : 'By category',
-                  child: _VerbOrgSegments(
-                    listAll: controller.verbListAll,
-                    onChanged: controller.setVerbListAll,
-                  ),
-                ),
-                if (!controller.verbListAll) ...[
-                const SizedBox(height: 2),
-                _VerbSettingRow(
-                  name: 'Open categories',
-                  hint: _openHint,
-                  child: _VerbStepper(
-                    atMin: atOpenMin,
-                    atMax: atOpenMax,
-                    onMinus: _fewerCategories,
-                    onPlus: _moreCategories,
-                    minus: const PhosphorIcon(
-                      PhosphorIconsRegular.minus,
-                      size: 15,
+                  if (subtext != null) ...[
+                    const SizedBox(height: 1),
+                    Text(
+                      subtext!,
+                      style: const TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w400,
+                        color: FfTokens.nocturneT3,
+                        decoration: TextDecoration.none,
+                      ),
                     ),
-                    plus: const PhosphorIcon(
-                      PhosphorIconsRegular.plus,
-                      size: 15,
-                    ),
-                    value: Text(
-                      _allOpen ? 'All' : '$_shownOpen',
-                      style: _stepValueStyle,
-                    ),
-                  ),
-                ),
+                  ],
                 ],
-                if (!_isDefault) ...[
-                  const SizedBox(height: 2),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(color: FfTokens.nocturneLn),
-                      child: SizedBox(height: 1),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: _ResetVerbSettings(onTap: _reset),
+              ),
+            ),
+            const SizedBox(width: 12),
+            trailing,
+          ],
+        ),
+      ),
+    );
+    if (onTap == null) return row;
+    return _VsHoverTap(
+      onTap: onTap!,
+      child: row,
+    );
+  }
+}
+
+class _VsHoverTap extends StatefulWidget {
+  const _VsHoverTap({required this.onTap, required this.child});
+
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  State<_VsHoverTap> createState() => _VsHoverTapState();
+}
+
+class _VsHoverTapState extends State<_VsHoverTap> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 80),
+          decoration: BoxDecoration(
+            color: _hovered ? FfTokens.nocturneSunken : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: widget.child,
+        ),
+      ),
+    );
+  }
+}
+
+class _VsHistoryRow extends StatelessWidget {
+  const _VsHistoryRow({
+    required this.value,
+    required this.onChanged,
+  });
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return _VsRow(
+      label: 'History',
+      subtext: 'Recent verbs above the list',
+      onTap: () => onChanged(!value),
+      trailing: _VsSwitch(value: value, onChanged: onChanged),
+    );
+  }
+}
+
+class _VsSwitch extends StatelessWidget {
+  const _VsSwitch({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => onChanged(!value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        width: 30,
+        height: 18,
+        decoration: BoxDecoration(
+          color: value ? FfTokens.nocturneAc : const Color(0xFF2F363C),
+          borderRadius: BorderRadius.circular(9),
+          boxShadow: value
+              ? null
+              : const [
+                  BoxShadow(
+                    color: Color(0x1EE8EEF4), // .12
+                    blurRadius: 0,
+                    spreadRadius: 1,
                   ),
                 ],
-              ],
+        ),
+        child: AnimatedAlign(
+          duration: const Duration(milliseconds: 180),
+          curve: const Cubic(0.2, 0.8, 0.2, 1),
+          alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+          child: Padding(
+            padding: const EdgeInsets.all(2),
+            child: Container(
+              width: 14,
+              height: 14,
+              decoration: BoxDecoration(
+                color: value ? Colors.white : FfTokens.nocturneT2,
+                shape: BoxShape.circle,
+              ),
             ),
           ),
-        );
-      },
+        ),
+      ),
+    );
+  }
+}
+
+class _VsSegItem {
+  const _VsSegItem({
+    required this.selected,
+    required this.onTap,
+    this.label,
+    this.icon,
+    this.iconWidget,
+    this.tooltip,
+  });
+
+  final String? label;
+  final IconData? icon;
+  final Widget? iconWidget;
+  final String? tooltip;
+  final bool selected;
+  final VoidCallback onTap;
+}
+
+class _VsSegmented extends StatelessWidget {
+  const _VsSegmented({
+    required this.children,
+    this.iconOnly = false,
+  });
+
+  final List<_VsSegItem> children;
+  final bool iconOnly;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFF151A1E),
+        borderRadius: BorderRadius.circular(7),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14E8EEF4),
+            blurRadius: 0,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < children.length; i++) ...[
+              if (i > 0) const SizedBox(width: 2),
+              _VsSegButton(item: children[i], iconOnly: iconOnly),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _VsSegButton extends StatefulWidget {
+  const _VsSegButton({required this.item, required this.iconOnly});
+
+  final _VsSegItem item;
+  final bool iconOnly;
+
+  @override
+  State<_VsSegButton> createState() => _VsSegButtonState();
+}
+
+class _VsSegButtonState extends State<_VsSegButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    final selected = item.selected;
+    final color = selected
+        ? Colors.white
+        : (_hovered ? FfTokens.nocturneTx : FfTokens.nocturneT2);
+    Widget child = AnimatedContainer(
+      duration: const Duration(milliseconds: 120),
+      height: 24,
+      width: widget.iconOnly ? 30 : null,
+      padding: widget.iconOnly
+          ? EdgeInsets.zero
+          : const EdgeInsets.symmetric(horizontal: 9),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: selected ? FfTokens.nocturneAccentSoft : Colors.transparent,
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(
+          color: selected ? FfTokens.nocturneAccentEdge : Colors.transparent,
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (item.iconWidget != null)
+            IconTheme(
+              data: IconThemeData(color: color, size: 14),
+              child: item.iconWidget!,
+            )
+          else if (item.icon != null) ...[
+            PhosphorIcon(item.icon!, size: 14, color: color),
+            if (item.label != null) const SizedBox(width: 5),
+          ],
+          if (item.label != null)
+            Text(
+              item.label!,
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: color,
+                decoration: TextDecoration.none,
+              ),
+            ),
+        ],
+      ),
+    );
+    if (item.tooltip != null) {
+      child = Tooltip(
+        message: item.tooltip!,
+        waitDuration: const Duration(milliseconds: 400),
+        child: child,
+      );
+    }
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: item.onTap,
+        child: child,
+      ),
+    );
+  }
+}
+
+class _DensityLinesIcon extends StatelessWidget {
+  const _DensityLinesIcon({required this.lines});
+
+  final int lines;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = IconTheme.of(context).color ?? FfTokens.nocturneT2;
+    return CustomPaint(
+      size: const Size(14, 14),
+      painter: _DensityLinesPainter(lines: lines, color: color),
+    );
+  }
+}
+
+class _DensityLinesPainter extends CustomPainter {
+  _DensityLinesPainter({required this.lines, required this.color});
+
+  final int lines;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    // Match design SVG: 11×1.6 bars, rx .8, x=1.5
+    const barW = 11.0;
+    const barH = 1.6;
+    const x = 1.5;
+    final List<double> ys;
+    switch (lines) {
+      case 5:
+        ys = const [2.2, 4.6, 7.0, 9.4, 11.8];
+        break;
+      case 2:
+        ys = const [3.0, 10.0];
+        break;
+      case 3:
+      default:
+        ys = const [2.5, 6.2, 9.9];
+        break;
+    }
+    for (final y in ys) {
+      final rr = RRect.fromRectAndRadius(
+        Rect.fromLTWH(x, y, barW, barH),
+        const Radius.circular(0.8),
+      );
+      canvas.drawRRect(rr, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DensityLinesPainter oldDelegate) =>
+      lines != oldDelegate.lines || color != oldDelegate.color;
+}
+
+class _VsStepper extends StatelessWidget {
+  const _VsStepper({
+    required this.value,
+    required this.onDelta,
+  });
+
+  final int value;
+  final ValueChanged<int> onDelta;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFF151A1E),
+        borderRadius: BorderRadius.circular(7),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14E8EEF4),
+            blurRadius: 0,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: SizedBox(
+        height: 28,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _VsStepBtn(
+              icon: PhosphorIconsBold.minus,
+              onTap: value > 1 ? () => onDelta(-1) : null,
+            ),
+            SizedBox(
+              width: 22,
+              child: Text(
+                '$value',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: FfTokens.nocturneTx,
+                  decoration: TextDecoration.none,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+            _VsStepBtn(
+              icon: PhosphorIconsBold.plus,
+              onTap: value < 10 ? () => onDelta(1) : null,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _VsStepBtn extends StatefulWidget {
+  const _VsStepBtn({required this.icon, required this.onTap});
+
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  State<_VsStepBtn> createState() => _VsStepBtnState();
+}
+
+class _VsStepBtnState extends State<_VsStepBtn> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.onTap != null;
+    final color = !enabled
+        ? FfTokens.nocturneT3.withValues(alpha: 0.45)
+        : (_hovered ? Colors.white : FfTokens.nocturneT2);
+    return MouseRegion(
+      cursor:
+          enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 80),
+          width: 26,
+          height: 28,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: enabled && _hovered
+                ? FfTokens.nocturneSunken
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(7),
+          ),
+          child: PhosphorIcon(widget.icon, size: 12, color: color),
+        ),
+      ),
+    );
+  }
+}
+
+class _VsFooter extends StatefulWidget {
+  const _VsFooter({required this.onReset});
+
+  final Future<void> Function() onReset;
+
+  @override
+  State<_VsFooter> createState() => _VsFooterState();
+}
+
+class _VsFooterState extends State<_VsFooter> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _hovered ? FfTokens.nocturneTx : FfTokens.nocturneT3;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+      child: Row(
+        children: [
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            onEnter: (_) => setState(() => _hovered = true),
+            onExit: (_) => setState(() => _hovered = false),
+            child: GestureDetector(
+              onTap: () => widget.onReset(),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 80),
+                height: 26,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: _hovered ? FfTokens.nocturneSunken : Colors.transparent,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  'Reset to defaults',
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: color,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: const Color(0x1EE8EEF4)),
+            ),
+            child: const Text(
+              'Esc',
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+                color: FfTokens.nocturneT3,
+                decoration: TextDecoration.none,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -5,8 +5,9 @@ import '../../../theme/ff_tokens.dart';
 /// Grouped "small A / big A" text-size control (option A visual spec).
 ///
 /// Callers keep their own step/limit/persistence logic; this only renders the
-/// two buttons and forwards taps. [height] should match the adjacent search
-/// field so the control lines up in the panel header.
+/// buttons and forwards taps. Optional [onFit] adds a third "Fit" action that
+/// sizes content to the on-screen box. [height] should match the adjacent
+/// search field so the control lines up in the panel header.
 class AaTextSizeControl extends StatelessWidget {
   const AaTextSizeControl({
     super.key,
@@ -14,6 +15,7 @@ class AaTextSizeControl extends StatelessWidget {
     required this.canLarger,
     required this.onSmaller,
     required this.onLarger,
+    this.onFit,
     this.height = 26,
   });
 
@@ -21,6 +23,9 @@ class AaTextSizeControl extends StatelessWidget {
   final bool canLarger;
   final VoidCallback onSmaller;
   final VoidCallback onLarger;
+
+  /// When set, shows a third "Fit" button after the A/A pair.
+  final VoidCallback? onFit;
 
   /// Total outer height (padding included). Match the search bar beside it.
   final double height;
@@ -30,13 +35,21 @@ class AaTextSizeControl extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final buttonSize = height - _pad * 2;
-    final dividerInset = (buttonSize * 0.2).clamp(3.0, 6.0);
+    // Wider than tall so the A/A hits aren't cramped beside Expanded search.
+    final buttonWidth = (buttonSize + 6).clamp(22.0, 28.0);
+    final dividerInset = (buttonSize * 0.18).clamp(2.0, 5.0);
+    final smallA = height <= 24 ? 9.0 : 10.0;
+    final bigA = height <= 24 ? 13.0 : 15.0;
+    final fitLabel = height <= 24 ? 9.0 : 10.0;
+    final showFit = onFit != null;
+    // "Fit" needs a bit more width than a single A.
+    final fitWidth = showFit ? (buttonWidth + 10).clamp(32.0, 40.0) : 0.0;
     return SizedBox(
       height: height,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: FfTokens.nocturneSunken,
-          borderRadius: BorderRadius.circular(height >= 32 ? 8 : 7),
+          borderRadius: BorderRadius.circular(height >= 30 ? 7 : 6),
         ),
         child: Padding(
           padding: const EdgeInsets.all(_pad),
@@ -47,8 +60,9 @@ class AaTextSizeControl extends StatelessWidget {
               children: [
                 _AaButton(
                   label: 'A',
-                  fontSize: 10,
-                  size: buttonSize,
+                  fontSize: smallA,
+                  width: buttonWidth,
+                  height: buttonSize,
                   tooltip: 'Smaller text',
                   enabled: canSmaller,
                   onTap: onSmaller,
@@ -62,12 +76,31 @@ class AaTextSizeControl extends StatelessWidget {
                 ),
                 _AaButton(
                   label: 'A',
-                  fontSize: 15,
-                  size: buttonSize,
+                  fontSize: bigA,
+                  width: buttonWidth,
+                  height: buttonSize,
                   tooltip: 'Larger text',
                   enabled: canLarger,
                   onTap: onLarger,
                 ),
+                if (showFit) ...[
+                  Padding(
+                    padding: EdgeInsets.symmetric(vertical: dividerInset),
+                    child: const SizedBox(
+                      width: 1,
+                      child: ColoredBox(color: FfTokens.nocturneLn),
+                    ),
+                  ),
+                  _AaButton(
+                    label: 'Fit',
+                    fontSize: fitLabel,
+                    width: fitWidth,
+                    height: buttonSize,
+                    tooltip: 'Fit to box',
+                    enabled: true,
+                    onTap: onFit!,
+                  ),
+                ],
               ],
             ),
           ),
@@ -81,7 +114,8 @@ class _AaButton extends StatefulWidget {
   const _AaButton({
     required this.label,
     required this.fontSize,
-    required this.size,
+    required this.width,
+    required this.height,
     required this.tooltip,
     required this.enabled,
     required this.onTap,
@@ -89,7 +123,8 @@ class _AaButton extends StatefulWidget {
 
   final String label;
   final double fontSize;
-  final double size;
+  final double width;
+  final double height;
   final String tooltip;
   final bool enabled;
   final VoidCallback onTap;
@@ -146,12 +181,13 @@ class _AaButtonState extends State<_AaButton> {
             opacity: enabled ? 1 : 0.35,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 80),
-              width: widget.size,
-              height: widget.size,
+              width: widget.width,
+              height: widget.height,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: background,
-                borderRadius: BorderRadius.circular(widget.size >= 28 ? 6 : 5),
+                borderRadius:
+                    BorderRadius.circular(widget.height >= 26 ? 5 : 4),
               ),
               child: Text(
                 widget.label,

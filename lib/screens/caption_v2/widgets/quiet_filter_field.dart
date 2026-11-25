@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
 import '../../../theme/ff_tokens.dart';
@@ -10,6 +11,8 @@ class QuietFilterField extends StatefulWidget {
     required this.controller,
     required this.tokens,
     this.onChanged,
+    this.onSubmitted,
+    this.focusNode,
     this.height = 26,
     this.hint = 'Search',
     this.leadingInset = 0,
@@ -22,11 +25,15 @@ class QuietFilterField extends StatefulWidget {
     this.iconColor,
     this.showFocusBorder = true,
     this.contentPadding = const EdgeInsets.symmetric(horizontal: 6),
+    this.trailing,
+    this.onKeyEvent,
   });
 
   final TextEditingController controller;
   final FfTokens tokens;
   final ValueChanged<String>? onChanged;
+  final ValueChanged<String>? onSubmitted;
+  final FocusNode? focusNode;
   final double height;
   final String hint;
 
@@ -47,19 +54,29 @@ class QuietFilterField extends StatefulWidget {
   final bool showFocusBorder;
   final EdgeInsetsGeometry contentPadding;
 
+  /// Optional trailing chip (e.g. match count) inside the field.
+  final Widget? trailing;
+
+  final KeyEventResult Function(FocusNode, KeyEvent)? onKeyEvent;
+
   @override
   State<QuietFilterField> createState() => _QuietFilterFieldState();
 }
 
 class _QuietFilterFieldState extends State<QuietFilterField> {
-  final FocusNode _focusNode = FocusNode();
+  FocusNode? _ownedFocus;
   bool _hovered = false;
   bool _focused = false;
   bool _filled = false;
 
+  FocusNode get _focusNode => widget.focusNode ?? _ownedFocus!;
+
   @override
   void initState() {
     super.initState();
+    if (widget.focusNode == null) {
+      _ownedFocus = FocusNode();
+    }
     _filled = widget.controller.text.isNotEmpty;
     _focusNode.addListener(_onFocusChanged);
     widget.controller.addListener(_onTextChanged);
@@ -68,6 +85,18 @@ class _QuietFilterFieldState extends State<QuietFilterField> {
   @override
   void didUpdateWidget(QuietFilterField oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusNode != widget.focusNode) {
+      oldWidget.focusNode?.removeListener(_onFocusChanged);
+      if (oldWidget.focusNode == null && widget.focusNode != null) {
+        _ownedFocus
+          ?..removeListener(_onFocusChanged)
+          ..dispose();
+        _ownedFocus = null;
+      } else if (oldWidget.focusNode != null && widget.focusNode == null) {
+        _ownedFocus = FocusNode();
+      }
+      _focusNode.addListener(_onFocusChanged);
+    }
     if (oldWidget.controller == widget.controller) return;
     oldWidget.controller.removeListener(_onTextChanged);
     _filled = widget.controller.text.isNotEmpty;
@@ -77,9 +106,8 @@ class _QuietFilterFieldState extends State<QuietFilterField> {
   @override
   void dispose() {
     widget.controller.removeListener(_onTextChanged);
-    _focusNode
-      ..removeListener(_onFocusChanged)
-      ..dispose();
+    _focusNode.removeListener(_onFocusChanged);
+    _ownedFocus?.dispose();
     super.dispose();
   }
 
@@ -132,33 +160,41 @@ class _QuietFilterFieldState extends State<QuietFilterField> {
               const SizedBox(width: 8),
             ],
             Expanded(
-              child: TextField(
-                controller: widget.controller,
-                focusNode: _focusNode,
-                style: TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontSize: widget.fontSize,
-                  fontWeight: widget.fontWeight,
-                  color: t.text,
-                  height: 1,
-                ),
-                cursorColor: t.accent,
-                cursorHeight: widget.fontSize,
-                decoration: InputDecoration(
-                  isCollapsed: true,
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.zero,
-                  hintText: widget.hint,
-                  hintStyle: TextStyle(
+              child: Focus(
+                onKeyEvent: widget.onKeyEvent,
+                child: TextField(
+                  controller: widget.controller,
+                  focusNode: _focusNode,
+                  style: TextStyle(
                     fontFamily: FfTokens.fontFamily,
                     fontSize: widget.fontSize,
                     fontWeight: widget.fontWeight,
-                    color: iconColor,
+                    color: t.text,
+                    height: 1,
                   ),
+                  cursorColor: t.accent,
+                  cursorHeight: widget.fontSize,
+                  decoration: InputDecoration(
+                    isCollapsed: true,
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.zero,
+                    hintText: widget.hint,
+                    hintStyle: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: widget.fontSize,
+                      fontWeight: widget.fontWeight,
+                      color: iconColor,
+                    ),
+                  ),
+                  onChanged: widget.onChanged,
+                  onSubmitted: widget.onSubmitted,
                 ),
-                onChanged: widget.onChanged,
               ),
             ),
+            if (widget.trailing != null) ...[
+              const SizedBox(width: 6),
+              widget.trailing!,
+            ],
           ],
         ),
       ),

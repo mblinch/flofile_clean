@@ -175,6 +175,25 @@ class PreferencesService {
   static const double captionTextSizeMax = 26;
   /// Verb panel layout: false is category cascade, true is one A–Z list.
   static const String _keyVerbListAll = 'verb_list_all';
+  /// Verb Index density: 0 compact / 1 cozy / 2 comfortable.
+  static const String _keyVerbIndexDensity = 'verb_index_density';
+  /// Verb Index sort: "letter" (default) or "category".
+  static const String _keyVerbIndexSort = 'verb_index_sort';
+  /// Verb Index font step: 0→13px / 1→15px / 2→17px.
+  static const String _keyVerbIndexFontStep = 'verb_index_font_step';
+  static const String _keyVerbIndexShowSuggestions =
+      'verb_index_show_suggestions';
+  static const String _keyVerbIndexFavoritesOnly =
+      'verb_index_favorites_only';
+  /// Verb Index filter bar: "all" | "faves" | "mostUsed".
+  static const String _keyVerbIndexFilterMode = 'verb_index_filter_mode';
+  /// When true, Faves / Most used hide non-matches instead of greying them.
+  static const String _keyVerbIndexHideOthers = 'verb_index_hide_others';
+  /// How many recent history verbs to show (1–10, default 3).
+  static const String _keyVerbIndexHistoryLimit = 'verb_index_history_limit';
+  static const String _keyVerbIndexShowHistory = 'verb_index_show_history';
+  /// Last 10 picked verb keys (newest first), JSON array.
+  static const String _keyVerbIndexHistory = 'verb_index_history';
   /// Per-sport map of verb key → usage count (synced via user Firebase prefs).
   static const String _keyVerbUsageCounts = 'verb_usage_counts';
   static const String _keySportDefaultPrefix = 'sport_default_'; // Per-sport "Set as default" bundle
@@ -2107,6 +2126,138 @@ class PreferencesService {
   Future<void> saveVerbListAll(bool value) async {
     final prefs = await _getPrefs();
     await prefs.setBool(_keyVerbListAll, value);
+    _afterLocalPreferencesChanged();
+  }
+
+  Future<int> getVerbIndexDensity() async {
+    final prefs = await _getPrefs();
+    return (prefs.getInt(_keyVerbIndexDensity) ?? 1).clamp(0, 2);
+  }
+
+  Future<void> saveVerbIndexDensity(int value) async {
+    final prefs = await _getPrefs();
+    await prefs.setInt(_keyVerbIndexDensity, value.clamp(0, 2));
+    _afterLocalPreferencesChanged();
+  }
+
+  Future<String> getVerbIndexSort() async {
+    final prefs = await _getPrefs();
+    // Letter (A–W) is the polish default; category remains optional.
+    final raw = (prefs.getString(_keyVerbIndexSort) ?? 'letter').trim();
+    return raw == 'category' ? 'category' : 'letter';
+  }
+
+  Future<void> saveVerbIndexSort(String value) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(
+      _keyVerbIndexSort,
+      value == 'category' ? 'category' : 'letter',
+    );
+    _afterLocalPreferencesChanged();
+  }
+
+  Future<int> getVerbIndexFontStep() async {
+    final prefs = await _getPrefs();
+    return (prefs.getInt(_keyVerbIndexFontStep) ?? 1).clamp(0, 2);
+  }
+
+  Future<void> saveVerbIndexFontStep(int step) async {
+    final prefs = await _getPrefs();
+    await prefs.setInt(_keyVerbIndexFontStep, step.clamp(0, 2));
+    _afterLocalPreferencesChanged();
+  }
+
+  Future<bool> getVerbIndexShowSuggestions() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keyVerbIndexShowSuggestions) ?? true;
+  }
+
+  Future<void> saveVerbIndexShowSuggestions(bool value) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keyVerbIndexShowSuggestions, value);
+    _afterLocalPreferencesChanged();
+  }
+
+  Future<bool> getVerbIndexFavoritesOnly() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keyVerbIndexFavoritesOnly) ?? false;
+  }
+
+  Future<void> saveVerbIndexFavoritesOnly(bool value) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keyVerbIndexFavoritesOnly, value);
+    _afterLocalPreferencesChanged();
+  }
+
+  Future<String> getVerbIndexFilterMode() async {
+    final prefs = await _getPrefs();
+    final raw = prefs.getString(_keyVerbIndexFilterMode);
+    if (raw != null && raw.isNotEmpty) return raw;
+    // Migrate legacy favorites-only toggle.
+    if (await getVerbIndexFavoritesOnly()) return 'faves';
+    return 'all';
+  }
+
+  Future<void> saveVerbIndexFilterMode(String value) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(_keyVerbIndexFilterMode, value);
+    _afterLocalPreferencesChanged();
+  }
+
+  Future<bool> getVerbIndexHideOthers() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keyVerbIndexHideOthers) ?? false;
+  }
+
+  Future<void> saveVerbIndexHideOthers(bool value) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keyVerbIndexHideOthers, value);
+    _afterLocalPreferencesChanged();
+  }
+
+  Future<int> getVerbIndexHistoryLimit() async {
+    final prefs = await _getPrefs();
+    final raw = prefs.getInt(_keyVerbIndexHistoryLimit);
+    if (raw == null) return 3;
+    return raw.clamp(1, 10);
+  }
+
+  Future<void> saveVerbIndexHistoryLimit(int value) async {
+    final prefs = await _getPrefs();
+    await prefs.setInt(_keyVerbIndexHistoryLimit, value.clamp(1, 10));
+    _afterLocalPreferencesChanged();
+  }
+
+  Future<bool> getVerbIndexShowHistory() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keyVerbIndexShowHistory) ?? true;
+  }
+
+  Future<void> saveVerbIndexShowHistory(bool value) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keyVerbIndexShowHistory, value);
+    _afterLocalPreferencesChanged();
+  }
+
+  Future<List<String>> getVerbIndexHistory() async {
+    final prefs = await _getPrefs();
+    final raw = prefs.getString(_keyVerbIndexHistory);
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final decoded = json.decode(raw);
+      if (decoded is! List) return const [];
+      return [
+        for (final item in decoded)
+          if (item is String && item.trim().isNotEmpty) item.trim(),
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> saveVerbIndexHistory(List<String> keys) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(_keyVerbIndexHistory, json.encode(keys));
     _afterLocalPreferencesChanged();
   }
 

@@ -8,6 +8,7 @@ import '../../../theme/ff_tokens.dart';
 import '../../../widgets/ff_menu.dart';
 import '../data/caption_v2_controller.dart' show CaptionProvenanceSpan;
 import '../layout/caption_v2_search.dart' show kFirebarTapGroup;
+import 'aa_text_size_control.dart';
 
 /// One editable value chip inside [CaptionStrip].
 class CaptionChipData {
@@ -286,7 +287,7 @@ class CaptionStrip extends StatelessWidget {
 
   /// Lines reserved for the live caption so wrapping never shoves Save /
   /// roster / verb UI under the cursor. Longer text scrolls inside.
-  static const int fixedCaptionLines = 4;
+  static const int fixedCaptionLines = 3;
 
   Widget _captionBody(
     FfTokens t,
@@ -772,7 +773,7 @@ class _CaptionEditorState extends State<_CaptionEditor> {
       controller: _controller,
       focusNode: _focusNode,
       maxLines: null,
-      minLines: 1,
+      minLines: CaptionStrip.fixedCaptionLines,
       keyboardType: TextInputType.multiline,
       textAlignVertical: TextAlignVertical.top,
       style: baseStyle,
@@ -1259,12 +1260,12 @@ class _CaptionPanelState extends State<_CaptionPanel> {
     final multi = widget.multiWriteCount >= 2;
     const multiAlert = Color(0xFFF5D000);
     final Color? alert = multi ? multiAlert : null;
-    final sizeStepper = _CaptionSizeStepper(
-      tokens: t,
-      canDecrease: _captionSize > PreferencesService.captionTextSizeMin,
-      canIncrease: _captionSize < PreferencesService.captionTextSizeMax,
-      onDecrease: () => _stepCaptionSize(-1),
-      onIncrease: () => _stepCaptionSize(1),
+    final sizeStepper = AaTextSizeControl(
+      height: 24,
+      canSmaller: _captionSize > PreferencesService.captionTextSizeMin,
+      canLarger: _captionSize < PreferencesService.captionTextSizeMax,
+      onSmaller: () => _stepCaptionSize(-1),
+      onLarger: () => _stepCaptionSize(1),
     );
     final n = widget.multiWriteCount;
     final multiLabel = n == 1
@@ -1301,7 +1302,7 @@ class _CaptionPanelState extends State<_CaptionPanel> {
                     color: alert ?? t.text,
                   ).copyWith(fontSize: 15, letterSpacing: 1.2, height: 1),
                 ),
-                // Personality fills the middle; +/- and edit stay pinned right.
+                // Personality fills the middle; aA and edit stay pinned right.
                 Expanded(
                   child: widget.headerTrailing == null
                       ? const SizedBox.shrink()
@@ -1351,75 +1352,6 @@ class _CaptionPanelState extends State<_CaptionPanel> {
           else
             widget.childBuilder(_captionSize),
         ],
-      ),
-    );
-  }
-}
-
-class _CaptionSizeStepper extends StatelessWidget {
-  const _CaptionSizeStepper({
-    required this.tokens,
-    required this.canDecrease,
-    required this.canIncrease,
-    required this.onDecrease,
-    required this.onIncrease,
-  });
-
-  final FfTokens tokens;
-  final bool canDecrease;
-  final bool canIncrease;
-  final VoidCallback onDecrease;
-  final VoidCallback onIncrease;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _CaptionSizeButton(
-          icon: PhosphorIconsRegular.minus,
-          tooltip: 'Smaller caption text',
-          tokens: tokens,
-          onTap: canDecrease ? onDecrease : null,
-        ),
-        _CaptionSizeButton(
-          icon: PhosphorIconsRegular.plus,
-          tooltip: 'Larger caption text',
-          tokens: tokens,
-          onTap: canIncrease ? onIncrease : null,
-        ),
-      ],
-    );
-  }
-}
-
-class _CaptionSizeButton extends StatelessWidget {
-  const _CaptionSizeButton({
-    required this.icon,
-    required this.tooltip,
-    required this.tokens,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String tooltip;
-  final FfTokens tokens;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: Opacity(
-        opacity: onTap == null ? 0.35 : 1,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(6),
-          child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: PhosphorIcon(icon, size: 14, color: tokens.textSecondary),
-          ),
-        ),
       ),
     );
   }

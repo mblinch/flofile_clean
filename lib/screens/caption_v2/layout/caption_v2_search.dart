@@ -456,7 +456,7 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar>
               child: AnimatedContainer(
                 key: _firebarBarKey,
                 duration: const Duration(milliseconds: 150),
-                constraints: const BoxConstraints(minHeight: 34),
+                constraints: const BoxConstraints(minHeight: 32),
                 padding: const EdgeInsets.fromLTRB(10, 2, 6, 2),
                 decoration: BoxDecoration(
                   color: widget.embedded

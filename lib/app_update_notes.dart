@@ -12,11 +12,11 @@ const String kAppUpdateNotesTitle = 'What’s new';
 const String kAppUpdateNotesBody = '''
 Here is what changed in this version.
 
-Numbers mode: set the squares to 4, 5, or 6 across with − and + beside the roster search. Plus makes the squares larger. The default is 4. Home and away share the same count.
+Players and verbs aA control: new Fit option sizes content to the box on screen.
 
-Caption text size − and + stay in the top caption bar.
+Verb Index: ⌘-click pins again. Gear menus open beside the gear so they don’t cover the list.
 
-Player search text starts at the left once you type. The magnifying glass hides until the field is empty.
+Fit respects the pinned-verb chip under the mode bar.
 
 This message shows one time after you update. Tap OK or outside the box to close it.
 ''';

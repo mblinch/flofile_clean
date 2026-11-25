@@ -44,10 +44,10 @@ const LinearGradient _kActionTealGradientPressed = LinearGradient(
   stops: [0.0, 0.55, 1.0],
 );
 
-/// Match Firebar outer bar (minHeight 34 in caption_v2_search.dart).
-/// Grouped clip chips sit inside a 2px shell → 30 so the group is also 34.
-const double _kActionRowHeight = 34;
-const double _kActionChipHeight = 30;
+/// Match Firebar / period bar (minHeight 32 in caption_v2_search.dart).
+/// Grouped clip chips sit inside a 2px shell → 28 so the group is also 32.
+const double _kActionRowHeight = 32;
+const double _kActionChipHeight = 28;
 
 const Color _kActionSecondaryBg = Color(0xFF1E242A);
 const Color _kActionHairline = Color(0x1EE8EEF4); // rgba(232,238,244,.12)

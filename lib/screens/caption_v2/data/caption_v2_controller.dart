@@ -21,6 +21,7 @@ import '../../../caption_style/sport_verb_categories.dart';
 import '../../../caption_style/verb_authoring_model.dart';
 import '../../../caption_style/verb_category_colors.dart';
 import '../../../caption_style/verb_caption_wording.dart';
+import '../../../caption_style/verb_index_filter_mode.dart';
 import '../../../caption_style/verb_sort_mode.dart';
 import '../../../caption_style/verb_sub_options.dart';
 import '../../../caption_style/wire_iptc_specs.dart';
@@ -554,11 +555,46 @@ class CaptionV2Controller extends ChangeNotifier {
   /// False keeps categories. True lists every verb once, A–Z.
   bool verbListAll = false;
 
+  /// Verb Index text size: 0→12 / 1→14 / 2→16.
+  int verbIndexFontStep = 1;
+
+  /// Verb Index density: 0 compact / 1 cozy / 2 comfortable.
+  int verbIndexDensity = 1;
+
+  /// Verb Index sort: false = letter rows, true = category groups.
+  bool verbIndexSortByCategory = false;
+
+  bool verbIndexShowSuggestions = true;
+  /// Legacy: true when filter mode is Faves (kept for older call sites).
+  bool get verbIndexFavoritesOnly =>
+      verbIndexFilterMode == VerbIndexFilterMode.faves;
+  VerbIndexFilterMode verbIndexFilterMode = VerbIndexFilterMode.all;
+  /// When true, Faves / Most used hide non-matches instead of greying them.
+  bool verbIndexHideOthers = false;
+  bool verbIndexShowHistory = true;
+  /// How many history verbs to show (1–10). Full store keeps last 10.
+  int verbIndexHistoryLimit = 3;
+
+  /// Last 10 picked verb keys, newest first.
+  List<String> verbIndexHistory = [];
+
+  /// Faint caption preview while searching or burst-remembering a verb.
+  String? verbGhostPreview;
+
+  /// Last verb picked in the current burst (pre-highlight on next frame).
+  String? burstMemoryVerb;
+  String? _burstMemoryBurstId;
+
   static const double verbFontBasePx = 13.5;
   static const double verbFontStepPx = 0.5;
   /// About −3px … +6px around the default, matching the old 80%–140% span.
   static const int verbFontStepMin = -6;
   static const int verbFontStepMax = 12;
+
+  static const List<double> verbIndexFontSizes = [12, 14, 16];
+
+  double get verbIndexFontSize =>
+      verbIndexFontSizes[verbIndexFontStep.clamp(0, 2)];
 
   double get verbFontScale =>
       1 + verbFontStep * (verbFontStepPx / verbFontBasePx);
@@ -1577,13 +1613,254 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   Future<void> nudgeVerbFont(int delta) async {
-    final next =
-        (verbFontStep + delta).clamp(verbFontStepMin, verbFontStepMax);
+    await setVerbFontStep(verbFontStep + delta);
+  }
+
+  Future<void> setVerbFontStep(int step) async {
+    final next = step.clamp(verbFontStepMin, verbFontStepMax);
     if (next == verbFontStep) return;
     verbFontStep = next;
     notifyListeners();
     await _prefs?.saveVerbFontStep(next);
   }
+
+  Future<void> nudgeVerbIndexFont(int delta) async {
+    await setVerbIndexFontStep(verbIndexFontStep + delta);
+  }
+
+  Future<void> setVerbIndexFontStep(int step) async {
+    final next = step.clamp(0, 2);
+    if (next == verbIndexFontStep) return;
+    verbIndexFontStep = next;
+    notifyListeners();
+    await _prefs?.saveVerbIndexFontStep(next);
+  }
+
+  Future<void> setVerbIndexDensity(int value) async {
+    final next = value.clamp(0, 2);
+    if (next == verbIndexDensity) return;
+    verbIndexDensity = next;
+    notifyListeners();
+    await _prefs?.saveVerbIndexDensity(next);
+  }
+
+  Future<void> setVerbIndexSortByCategory(bool value) async {
+    if (verbIndexSortByCategory == value) return;
+    verbIndexSortByCategory = value;
+    notifyListeners();
+    await _prefs?.saveVerbIndexSort(value ? 'category' : 'letter');
+  }
+
+  Future<void> setVerbIndexShowSuggestions(bool value) async {
+    if (verbIndexShowSuggestions == value) return;
+    verbIndexShowSuggestions = value;
+    notifyListeners();
+    await _prefs?.saveVerbIndexShowSuggestions(value);
+  }
+
+  Future<void> setVerbIndexFavoritesOnly(bool value) async {
+    await setVerbIndexFilterMode(
+      value ? VerbIndexFilterMode.faves : VerbIndexFilterMode.all,
+    );
+  }
+
+  Future<void> setVerbIndexFilterMode(VerbIndexFilterMode mode) async {
+    if (verbIndexFilterMode == mode) return;
+    verbIndexFilterMode = mode;
+    notifyListeners();
+    await _prefs?.saveVerbIndexFilterMode(mode.storageValue);
+    await _prefs?.saveVerbIndexFavoritesOnly(mode == VerbIndexFilterMode.faves);
+  }
+
+  /// All → Faves → Frequent → All (shortcut: F).
+  Future<void> cycleVerbIndexFilterMode() async {
+    final next = switch (verbIndexFilterMode) {
+      VerbIndexFilterMode.all => VerbIndexFilterMode.faves,
+      VerbIndexFilterMode.faves => VerbIndexFilterMode.mostUsed,
+      VerbIndexFilterMode.mostUsed => VerbIndexFilterMode.all,
+    };
+    await setVerbIndexFilterMode(next);
+  }
+
+  Future<void> setVerbIndexHideOthers(bool value) async {
+    if (verbIndexHideOthers == value) return;
+    verbIndexHideOthers = value;
+    notifyListeners();
+    await _prefs?.saveVerbIndexHideOthers(value);
+  }
+
+  Future<void> setVerbIndexHistoryLimit(int value) async {
+    final next = value.clamp(1, 10);
+    if (verbIndexHistoryLimit == next) return;
+    verbIndexHistoryLimit = next;
+    notifyListeners();
+    await _prefs?.saveVerbIndexHistoryLimit(next);
+  }
+
+  Future<void> setVerbIndexShowHistory(bool value) async {
+    if (verbIndexShowHistory == value) return;
+    verbIndexShowHistory = value;
+    notifyListeners();
+    await _prefs?.saveVerbIndexShowHistory(value);
+  }
+
+  /// Most-used tier for a verb key: 3 = top 3, 2 = ranks 4–6, 1 = 7–9, 0 = rest.
+  /// Ranking uses local usage counts (Firebase lifetime hooks up in stats work).
+  int verbMostUsedTier(String key) {
+    final ranked = _mostUsedRankedKeys();
+    final i = ranked.indexOf(key);
+    if (i < 0) return 0;
+    if (i < 3) return 3;
+    if (i < 6) return 2;
+    if (i < 9) return 1;
+    return 0;
+  }
+
+  List<String> _mostUsedRankedKeys() {
+    final entries = _verbUsageCounts.entries
+        .where((e) => e.value > 0)
+        .toList(growable: false)
+      ..sort((a, b) {
+        final byCount = b.value.compareTo(a.value);
+        if (byCount != 0) return byCount;
+        return a.key.compareTo(b.key);
+      });
+    return [for (final e in entries) e.key];
+  }
+
+  void setVerbGhostPreview(String? label) {
+    if (verbGhostPreview == label) return;
+    verbGhostPreview = label;
+    notifyListeners();
+  }
+
+  /// Push [key] to the front of Verb Index History (after save / FTP).
+  void rememberVerbIndexPick(String key) {
+    final trimmed = key.trim();
+    if (trimmed.isEmpty) return;
+    final next = [
+      trimmed,
+      for (final item in verbIndexHistory)
+        if (item != trimmed) item,
+    ].take(10).toList(growable: false);
+    if (listEquals(next, verbIndexHistory)) {
+      _rememberBurstVerb(trimmed);
+      return;
+    }
+    verbIndexHistory = next;
+    unawaited(_prefs?.saveVerbIndexHistory(next));
+    _rememberBurstVerb(trimmed);
+  }
+
+  void restoreVerbIndexHistory(List<String> keys) {
+    verbIndexHistory = List<String>.from(keys);
+    unawaited(_prefs?.saveVerbIndexHistory(verbIndexHistory));
+  }
+
+  void _rememberBurstVerb(String key) {
+    if (!burstDetectionEnabled) {
+      burstMemoryVerb = key;
+      return;
+    }
+    final path = currentPath;
+    final chain = path == null ? const <String>[] : forwardBurstChain;
+    final burstId = chain.length > 1 ? chain.join('|') : path;
+    burstMemoryVerb = key;
+    _burstMemoryBurstId = burstId;
+  }
+
+  /// Call after navigating to another frame so burst memory can pre-highlight.
+  void syncBurstMemoryForCurrentFrame() {
+    if (burstMemoryVerb == null) return;
+    if (!burstDetectionEnabled) return;
+    final path = currentPath;
+    final chain = path == null ? const <String>[] : forwardBurstChain;
+    final burstId = chain.length > 1 ? chain.join('|') : path;
+    if (burstId != _burstMemoryBurstId) {
+      burstMemoryVerb = null;
+      _burstMemoryBurstId = null;
+      if (verbGhostPreview != null) {
+        verbGhostPreview = null;
+        notifyListeners();
+      }
+      return;
+    }
+    // Same burst: ghost the remembered verb for ↵ to confirm.
+    final def = verbDefinition(burstMemoryVerb!);
+    verbGhostPreview = def?.label ?? burstMemoryVerb;
+    notifyListeners();
+  }
+
+  EffectiveVerb? _verbIndexResolve(String? raw) {
+    if (raw == null) return null;
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return null;
+    final byKey = verbDefinition(trimmed);
+    if (byKey != null) return byKey;
+    for (final verb in _verbCatalog.byKey.values) {
+      if (verb.label == trimmed ||
+          verb.label.toLowerCase() == trimmed.toLowerCase()) {
+        return verb;
+      }
+    }
+    return null;
+  }
+
+  /// Suggestions for the Verb Index: same burst, nearby ±15s, then links.
+  List<({EffectiveVerb verb, String reason})> verbIndexSuggestions({
+    int limit = 3,
+  }) {
+    final out = <({EffectiveVerb verb, String reason})>[];
+    void add(String? raw, String reason) {
+      final verb = _verbIndexResolve(raw);
+      if (verb == null) return;
+      if (out.any((row) => row.verb.key == verb.key)) return;
+      if (out.length >= limit) return;
+      out.add((verb: verb, reason: reason));
+    }
+
+    if (burstMemoryVerb != null) {
+      add(burstMemoryVerb, 'used in this burst');
+    }
+
+    final path = currentPath;
+    final now = path == null ? null : captureByPath[path];
+    if (now != null) {
+      final nearby = <({String key, int dt})>[];
+      for (final entry in _clicksByPath.entries) {
+        if (entry.key == path) continue;
+        final verb = entry.value.verb?.trim();
+        if (verb == null || verb.isEmpty) continue;
+        final captured = captureByPath[entry.key];
+        if (captured == null) continue;
+        final dt = captured.difference(now).inSeconds;
+        if (dt.abs() > 15 || dt == 0) continue;
+        nearby.add((key: verb, dt: dt));
+      }
+      nearby.sort((a, b) => a.dt.abs().compareTo(b.dt.abs()));
+      for (final row in nearby) {
+        final abs = row.dt.abs();
+        final when = row.dt < 0 ? 'before' : 'after';
+        add(row.key, 'used on a photo ${abs}s $when');
+      }
+    }
+
+    final last = burstMemoryVerb ??
+        (verbIndexHistory.isNotEmpty ? verbIndexHistory.first : null) ??
+        selectedVerb;
+    if (last != null) {
+      final label = _verbIndexResolve(last)?.label ?? last;
+      for (final linked in _verbIndexLinks[label] ?? const <String>[]) {
+        add(linked, 'usually follows $label');
+      }
+    }
+
+    return out;
+  }
+
+  static const Map<String, List<String>> _verbIndexLinks = {
+    'Scores': ['Celebrates a Goal'],
+  };
 
   String _playerProvenanceTip(RosterHit row) {
     final side = row.isHome ? 'Home' : 'Away';
@@ -2588,14 +2865,29 @@ class CaptionV2Controller extends ChangeNotifier {
     final lead = hasTeamPlayersSubject
         ? _teamPlayersLead(captionTemplate)
         : _playerLead(captionTemplate);
-    if (!hasVerbSelection) {
+    // Verb Index ghost: preview the focused match / burst memory in the caption.
+    final ghost = _verbIndexResolve(verbGhostPreview);
+    final usingGhost = ghost != null &&
+        (selectedVerb == null || selectedVerb != ghost.key) &&
+        customVerbPhrase.trim().isEmpty;
+    if (!hasVerbSelection && !usingGhost) {
       return '$lead ${_incompleteContextPhrase()}'
           .replaceAll(RegExp(r'\s+'), ' ')
           .trim();
     }
-    final action = customVerbPhrase.trim().isNotEmpty
-        ? _customActionPhrase()
-        : _actionPhrase();
+    if (customVerbPhrase.trim().isNotEmpty) {
+      return '$lead ${_customActionPhrase()}'
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+    }
+    if (usingGhost) {
+      final saved = selectedVerb;
+      selectedVerb = ghost.key;
+      final action = _actionPhrase();
+      selectedVerb = saved;
+      return '$lead $action'.replaceAll(RegExp(r'\s+'), ' ').trim();
+    }
+    final action = _actionPhrase();
     return '$lead $action'.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
@@ -3123,6 +3415,18 @@ class CaptionV2Controller extends ChangeNotifier {
     verbListAll = await _prefs!.getVerbListAll();
     verbFontStep = (await _prefs!.getVerbFontStep())
         .clamp(verbFontStepMin, verbFontStepMax);
+    verbIndexFontStep = await _prefs!.getVerbIndexFontStep();
+    verbIndexDensity = await _prefs!.getVerbIndexDensity();
+    verbIndexSortByCategory =
+        (await _prefs!.getVerbIndexSort()) == 'category';
+    verbIndexShowSuggestions = await _prefs!.getVerbIndexShowSuggestions();
+    verbIndexFilterMode = VerbIndexFilterModeStorage.fromStorage(
+      await _prefs!.getVerbIndexFilterMode(),
+    );
+    verbIndexHideOthers = await _prefs!.getVerbIndexHideOthers();
+    verbIndexHistoryLimit = await _prefs!.getVerbIndexHistoryLimit();
+    verbIndexShowHistory = await _prefs!.getVerbIndexShowHistory();
+    verbIndexHistory = await _prefs!.getVerbIndexHistory();
     _verbUsageCounts = await _prefs!.getVerbUsageCountsForSport(sport);
     await _loadVerbCatalog();
     captionTemplate = await _prefs!.getCaptionTemplate();
@@ -5891,6 +6195,17 @@ class CaptionV2Controller extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Undo a Verb Index pick without wiping players / personality.
+  void clearSelectedVerbOnly() {
+    selectedVerb = null;
+    celebrationType = null;
+    verbModifierSelections.clear();
+    rbi = 0;
+    selectedBase = null;
+    _syncKeywords();
+    notifyListeners();
+  }
+
   void selectVerb(String verb) {
     captionSelectionStarted = true;
     if (statusMessage == incompleteCaptionWarning ||
@@ -5920,6 +6235,8 @@ class CaptionV2Controller extends ChangeNotifier {
       selectedBase = null;
     }
     _syncKeywords();
+    // Burst memory tracks the pick; History only updates on save/FTP.
+    _rememberBurstVerb(verb);
     unawaited(_recordVerbUsage(verb));
     if (autoAdvanceTabs) {
       final def = verbDefinition(verb);
@@ -8824,6 +9141,7 @@ class CaptionV2Controller extends ChangeNotifier {
     currentIndex = index.clamp(0, imagePaths.length - 1);
     _clearCaptionSelection();
     _restoreRememberedClicks();
+    syncBurstMemoryForCurrentFrame();
     // Each new photo opens on the Home players page (phone TOR tab).
     // Player tap still auto-advances to Actions via [selectPlayer].
     columnFocus = 0;
@@ -11061,6 +11379,13 @@ class CaptionV2Controller extends ChangeNotifier {
             ? values['XMP-getty:Personality'] ?? ''
             : personality,
       );
+      // History registers the verb only once it's actually saved / FTPed.
+      if (wroteCaption) {
+        final used = selectedVerb?.trim();
+        if (used != null && used.isNotEmpty) {
+          rememberVerbIndexPick(used);
+        }
+      }
       // Drop unpinned custom verbs after a successful save so the next frame
       // starts clean (pinned custom verbs intentionally survive).
       if (!customVerbPinned && customVerbPhrase.isNotEmpty) {
