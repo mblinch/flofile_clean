@@ -2047,7 +2047,7 @@ class PhotoSaveArrow extends StatelessWidget {
       button: true,
       label: previous ? 'Previous photo' : 'Next photo',
       child: Tooltip(
-        message: previous ? 'Save & previous' : 'Save & next (⌘S)',
+        message: previous ? 'Save & previous (⌘⇧↵)' : 'Save & next (⌘↵)',
         child: Material(
           color: _fill,
           elevation: 0,

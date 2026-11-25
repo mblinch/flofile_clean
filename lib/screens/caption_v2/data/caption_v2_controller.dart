@@ -8383,7 +8383,7 @@ class CaptionV2Controller extends ChangeNotifier {
       _prepareFirebarCelebrationOptions(verb);
     } else {
       // Leave the field open so another jersey can be added after the verb.
-      // Save stays on ⌘S / Shift+Enter; FTP on ⌘⇧Enter.
+      // Save stays on ⌘↵ / ⌘S / Shift+Enter; FTP on ⌘U.
       _clearFirebarOptions();
       return;
     }

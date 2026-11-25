@@ -59,10 +59,11 @@ const Color _kActionPrimaryEdgeHover = Color(0xD9E8EEF4); // rgba(232,238,244,.8
 String get _modKey =>
     defaultTargetPlatform == TargetPlatform.macOS ? '⌘' : 'Ctrl';
 
-String get _saveNextShortcut => '$_modKey S';
+String get _saveNextShortcut => '$_modKey ↵';
+String get _savePrevShortcut => '$_modKey ⇧ ↵';
 String get _saveToBurstShortcut => '$_modKey B';
 String get _pasteLastShortcut => '$_modKey ⇧ V';
-const String _ftpShortcut = '⇧ F';
+String get _ftpShortcut => '$_modKey U';
 
 /// Compact caption actions shown beneath the all-at-once search field.
 class CaptionV2ActionRow extends StatelessWidget {
@@ -172,29 +173,33 @@ class CaptionV2ActionRow extends StatelessWidget {
             onSaveToBurst != null;
         // Burst adds another chip; tighten earlier so Copy/Paste don't overflow.
         final compact = singleRow || width <= 1060 || (showBurst && width <= 1320);
-        // Wrap earlier when FTP shows a full profile name so the row
-        // doesn't overflow once Save/Burst/FTP are all content-sized.
-        final narrow = !singleRow &&
-            (width <= 640 ||
-                (showTransmit && !hideOrangeActions && width <= 780));
-        final clipIconOnly = singleRow || (showBurst && width <= 1180);
-        final pad = singleRow ? 8.0 : 13.0;
+        // Stay on one horizontal line always — never Wrap/stack when the
+        // photo pane takes width. Compact earlier instead.
+        final tight = !singleRow &&
+            (width <= 720 ||
+                (showTransmit && !hideOrangeActions && width <= 900) ||
+                (showBurst && width <= 1000));
+        final clipIconOnly =
+            singleRow || tight || (showBurst && width <= 1180);
+        final pad = singleRow || tight ? 8.0 : 13.0;
+        final showShortcuts = !tight;
         final prev = _NavButton(
           label: 'Save',
           tooltip: 'Save & Prev',
           icon: PhosphorIconsRegular.caretLeft,
           iconAtEnd: false,
+          shortcut: showShortcuts ? _savePrevShortcut : null,
           padding: EdgeInsets.symmetric(horizontal: pad),
           onPressed: onSavePrevious,
         );
         final clip = _ClipGroup(
-          compact: compact,
+          compact: compact || tight,
           iconOnly: clipIconOnly,
           onCopy: onCopy,
           onPaste: onPaste,
           onPasteLast: onPastePrevious,
           pasteEnabled: pasteEnabled,
-          pasteLastShortcut: _pasteLastShortcut,
+          pasteLastShortcut: showShortcuts ? _pasteLastShortcut : null,
         );
         final next = hideOrangeActions
             ? null
@@ -204,14 +209,14 @@ class CaptionV2ActionRow extends StatelessWidget {
                 icon: PhosphorIconsRegular.caretRight,
                 enabled: saveNextEnabled,
                 primary: true,
-                shortcut: _saveNextShortcut,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                shortcut: showShortcuts ? _saveNextShortcut : null,
+                padding: EdgeInsets.symmetric(horizontal: tight ? 10 : 16),
                 onPressed: onSaveNext,
               );
         final burst = showBurst
             ? _SaveToBurstButton(
                 paths: burstPaths,
-                shortcut: _saveToBurstShortcut,
+                shortcut: showShortcuts ? _saveToBurstShortcut : null,
                 onSave: (selected) => onSaveToBurst!(selected, burstPaths),
               )
             : null;
@@ -221,16 +226,6 @@ class CaptionV2ActionRow extends StatelessWidget {
                 selected: thumbsSelected,
                 onPressed: onThumbs,
               );
-        final ftp = showTransmit && !hideOrangeActions
-            ? _FtpGroup(
-                narrow: narrow || singleRow,
-                label: transmitLabel,
-                enabled: transmitEnabled,
-                onTransmit: onTransmit,
-                onHistory: ftpActive ? null : onFtpHistory,
-                shortcut: _ftpShortcut,
-              )
-            : null;
 
         final openActive = ftpActive ? onFtpProgress : null;
         final progress = showTransmit
@@ -243,73 +238,46 @@ class CaptionV2ActionRow extends StatelessWidget {
                 onTap: openActive,
               )
             : null;
-        final bar = narrow
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      if (thumbs != null) thumbs,
-                      prev,
-                      clip,
-                      if (next != null) next,
-                      if (burst != null) burst,
-                      if (ftp != null) ftp,
-                      if (ftpActive &&
-                          ftpThumbPath != null &&
-                          ftpThumbPath!.trim().isNotEmpty)
-                        _FtpUploadPreview(
-                          path: ftpThumbPath!.trim(),
-                          onTap: openActive,
-                        ),
+        // Always one horizontal line. Scale the chip cluster down when the
+        // caption column shrinks (photo pane dragged wider) instead of wrapping.
+        final bar = Row(
+          children: [
+            Flexible(
+              fit: FlexFit.loose,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (thumbs != null) ...[
+                      thumbs,
+                      const SizedBox(width: 8),
                     ],
-                  ),
-                  if (progress != null) ...[
-                    const SizedBox(height: 8),
-                    progress,
-                  ],
-                ],
-              )
-            : Row(
-                children: [
-                  if (thumbs != null) ...[
-                    thumbs,
+                    prev,
                     const SizedBox(width: 8),
-                  ],
-                  prev,
-                  const SizedBox(width: 8),
-                  Flexible(
-                    fit: FlexFit.loose,
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: clip,
-                    ),
-                  ),
-                  if (next != null) ...[
-                    const SizedBox(width: 8),
-                    next,
-                  ],
-                  if (burst != null) ...[
-                    const SizedBox(width: 8),
-                    burst,
-                  ],
-                  if (ftp != null) ...[
-                    const SizedBox(width: 8),
-                    // Content-sized so the full profile name never
-                    // ellipsizes or overflows a Flexible slot.
-                    // Copy/paste scales down first when space is tight.
-                    _FtpGroup(
-                      narrow: false,
-                      label: transmitLabel,
-                      enabled: transmitEnabled,
-                      onTransmit: onTransmit,
-                      onHistory: ftpActive ? null : onFtpHistory,
-                      shortcut: width >= 860 ? _ftpShortcut : null,
-                    ),
+                    clip,
+                    if (next != null) ...[
+                      const SizedBox(width: 8),
+                      next,
+                    ],
+                    if (burst != null) ...[
+                      const SizedBox(width: 8),
+                      burst,
+                    ],
+                    if (showTransmit && !hideOrangeActions) ...[
+                      const SizedBox(width: 8),
+                      _FtpGroup(
+                        narrow: false,
+                        label: transmitLabel,
+                        enabled: transmitEnabled,
+                        onTransmit: onTransmit,
+                        onHistory: ftpActive ? null : onFtpHistory,
+                        shortcut: showShortcuts && width >= 860
+                            ? _ftpShortcut
+                            : null,
+                      ),
+                    ],
                     if (!singleRow &&
                         ftpActive &&
                         ftpThumbPath != null &&
@@ -320,20 +288,16 @@ class CaptionV2ActionRow extends StatelessWidget {
                         onTap: openActive,
                       ),
                     ],
-                    if (!singleRow &&
-                        ftpActive &&
-                        progress != null) ...[
-                      const SizedBox(width: 8),
-                      Flexible(child: progress),
-                    ],
-                  ] else if (!singleRow &&
-                      ftpActive &&
-                      progress != null) ...[
-                    const SizedBox(width: 8),
-                    Flexible(child: progress),
                   ],
-                ],
-              );
+                ),
+              ),
+            ),
+            if (!singleRow && ftpActive && progress != null) ...[
+              const SizedBox(width: 8),
+              Flexible(child: progress),
+            ],
+          ],
+        );
 
         return Container(
           width: double.infinity,

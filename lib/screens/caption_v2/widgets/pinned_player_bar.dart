@@ -55,7 +55,7 @@ class _PinnedPlayerBarState extends State<PinnedPlayerBar> {
 
     return Container(
       height: widget.height ?? PinnedPlayerBar.pinnedBarHeight,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Row(
         children: [
           if (widget.leading != null) ...[

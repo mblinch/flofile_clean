@@ -7,6 +7,7 @@ import '../../../services/mac_spell_check_service.dart';
 import '../../../theme/ff_tokens.dart';
 import '../data/caption_v2_controller.dart';
 import '../data/effective_verb_catalog.dart';
+import '../widgets/aa_text_size_control.dart';
 import '../widgets/base_row.dart';
 import '../widgets/celebration_dropdown.dart';
 import '../widgets/custom_name_entry.dart';
@@ -619,9 +620,10 @@ class _DrumPickerState extends State<DrumPicker> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               for (var i = 0; i < lanes.length; i++) ...[
-                if (i > 0) const SizedBox(width: 10),
+                if (i > 0) const SizedBox(width: 8),
                 Expanded(
-                  flex: i == 1 ? 4 : 5,
+                  // 5.5 : 5 : 5 — flex is int-only, so 11 : 10 : 10.
+                  flex: i == 1 ? 11 : 10,
                   child: lanes[i],
                 ),
               ],
@@ -663,43 +665,63 @@ class _DrumPickerState extends State<DrumPicker> {
     ValueChanged<EffectiveVerb> onPinnedVerbTap,
   ) {
     final pinned = controller.pinnedVerbDefinition;
-    final selected = pinned != null && controller.selectedVerb == pinned.key;
-    return _PinnedVerbSlot(
-      height: 36,
-      tokens: tokens,
-      controller: controller,
-      verb: pinned,
-      selected: selected,
-      committed: selected,
-      showRbi: false,
-      showBase: false,
-      showCelebration: false,
-      rbi: controller.rbi,
-      selectedBase: controller.selectedBase,
-      celebrationType: controller.celebrationType,
-      reactionOptions: const <String>[],
-      onTap: pinned == null ? null : () => onPinnedVerbTap(pinned),
-      onRbiChanged: controller.setRbi,
-      onBaseChanged: controller.setSelectedBase,
-      onCelebrationChanged: controller.setCelebrationType,
-      trailing: Row(
-        children: [
-          Expanded(
-            child: QuietFilterField(
-              controller: _verbFilter,
-              tokens: tokens,
-              height: 26,
-              hint: '',
-              onChanged: (_) => setState(() {}),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(6, 4, 4, 4),
+          child: SizedBox(
+            height: 30,
+            child: Row(
+              children: [
+                _VerbHeaderIconButton(
+                  icon: pinned != null
+                      ? PhosphorIconsFill.pushPin
+                      : PhosphorIconsRegular.pushPin,
+                  tooltip: pinned?.label ?? 'Pin a verb with ⌘-click',
+                  selected: pinned != null &&
+                      controller.selectedVerb == pinned.key,
+                  onTap: pinned == null
+                      ? null
+                      : () => onPinnedVerbTap(pinned),
+                  onCmdTap: pinned == null
+                      ? null
+                      : () => controller.toggleVerbPin(pinned.key),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: QuietFilterField(
+                    controller: _verbFilter,
+                    tokens: tokens,
+                    height: 30,
+                    hint: '',
+                    fillColor: FfTokens.nocturneSunken,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    borderRadius: 7,
+                    iconSize: 14,
+                    iconColor: FfTokens.nocturneT3,
+                    showFocusBorder: false,
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 8),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                VerbMenuTools(
+                  controller: controller,
+                  tokens: tokens,
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 2),
-          VerbMenuTools(
-            controller: controller,
-            tokens: tokens,
-          ),
-        ],
-      ),
+        ),
+        const ColoredBox(
+          color: FfTokens.nocturneLn,
+          child: SizedBox(height: 1, width: double.infinity),
+        ),
+      ],
     );
   }
 
@@ -1133,7 +1155,7 @@ class _DrumPickerState extends State<DrumPicker> {
             ),
             if (showCustom)
               Padding(
-                padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+                padding: const EdgeInsets.fromLTRB(6, 6, 6, 8),
                 child: _DrumCustomVerbField(
                   textController: _customVerbController,
                   focusNode: _customVerbFocusNode,
@@ -1149,6 +1171,68 @@ class _DrumPickerState extends State<DrumPicker> {
           ],
         );
       },
+    );
+  }
+}
+
+class _VerbHeaderIconButton extends StatefulWidget {
+  const _VerbHeaderIconButton({
+    required this.icon,
+    required this.tooltip,
+    this.selected = false,
+    this.onTap,
+    this.onCmdTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final bool selected;
+  final VoidCallback? onTap;
+  final VoidCallback? onCmdTap;
+
+  @override
+  State<_VerbHeaderIconButton> createState() => _VerbHeaderIconButtonState();
+}
+
+class _VerbHeaderIconButtonState extends State<_VerbHeaderIconButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.onTap != null || widget.onCmdTap != null;
+    final hot = _hovered && enabled;
+    return Tooltip(
+      message: widget.tooltip,
+      child: MouseRegion(
+        cursor: enabled
+            ? SystemMouseCursors.click
+            : SystemMouseCursors.basic,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: CmdClick(
+          onTap: widget.onTap,
+          onCmdTap: widget.onCmdTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 80),
+            width: 28,
+            height: 28,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: hot || widget.selected
+                  ? FfTokens.nocturneHv
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(7),
+            ),
+            child: PhosphorIcon(
+              widget.icon,
+              size: 15,
+              color: hot || widget.selected
+                  ? FfTokens.nocturneTx
+                  : FfTokens.nocturneT2,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1177,10 +1261,14 @@ class _DrumCustomVerbField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 38,
+      height: 36,
+      padding: const EdgeInsets.fromLTRB(10, 0, 6, 0),
       decoration: BoxDecoration(
-        color: tokens.bg,
+        color: FfTokens.nocturneSunken,
         borderRadius: BorderRadius.circular(8),
+        border: pinned
+            ? Border.all(color: FfTokens.pinned.withValues(alpha: 0.55))
+            : null,
       ),
       child: Row(
         children: [
@@ -1193,22 +1281,21 @@ class _DrumCustomVerbField extends StatelessWidget {
               onChanged: onChanged,
               spellCheckConfiguration: floSpellCheckConfiguration(),
               contextMenuBuilder: floSpellCheckContextMenuBuilder,
-              style: tokens.labelStyle.copyWith(
-                fontSize: 11.5,
-                color: tokens.text,
+              style: const TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: FfTokens.nocturneTx,
+                height: 1.1,
               ),
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 isDense: true,
-                hintText: 'Custom verb',
-                hintStyle: tokens.labelStyle.copyWith(
-                  fontSize: 11.5,
-                  color: tokens.textSecondary,
-                ),
-                contentPadding: const EdgeInsets.fromLTRB(8, 6, 4, 6),
+                contentPadding: EdgeInsets.symmetric(vertical: 8),
                 border: InputBorder.none,
               ),
             ),
           ),
+          const SizedBox(width: 4),
           _DrumCustomVerbAction(
             icon: PhosphorIconsRegular.clockCounterClockwise,
             tooltip: 'Use last custom verb',
@@ -1217,7 +1304,9 @@ class _DrumCustomVerbField extends StatelessWidget {
             onTap: onUseLast,
           ),
           _DrumCustomVerbAction(
-            icon: pinned ? PhosphorIconsFill.pushPin : PhosphorIconsRegular.pushPin,
+            icon: pinned
+                ? PhosphorIconsFill.pushPin
+                : PhosphorIconsRegular.pushPin,
             tooltip: pinned ? 'Unpin custom verb' : 'Pin custom verb',
             tokens: tokens,
             enabled: textController.text.trim().isNotEmpty,
@@ -1253,15 +1342,16 @@ class _DrumCustomVerbAction extends StatelessWidget {
       message: tooltip,
       child: InkWell(
         onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(7),
         child: SizedBox(
-          width: 25,
+          width: 28,
           height: 28,
           child: PhosphorIcon(
             icon,
-            size: 14,
+            size: 15,
             color: enabled
-                ? (selected ? FfTokens.pinned : tokens.textSecondary)
-                : tokens.divider,
+                ? (selected ? FfTokens.pinned : FfTokens.nocturneT3)
+                : FfTokens.nocturneT3.withValues(alpha: 0.35),
           ),
         ),
       ),
@@ -1292,14 +1382,16 @@ class _VerbAccordion extends StatelessWidget {
   static const minHeaderHeight = 26.0;
   /// Must match [_PinnedHintBar] fixed height (padding + label + bottom border).
   static const pinnedBarHeight = 26.0;
-  static const rowHeight = 18.0;
-  static const selectedRowHeight = 18.0;
+  static const rowHeight = 22.0;
+  static const selectedRowHeight = 22.0;
   /// Vertical padding around an unselected row.
   static const rowOuterPadding = 0.0;
   /// Vertical padding around a selected row.
   static const selectedRowOuterPadding = 0.0;
-  /// Inset from the lane so a selected verb is narrower than its category bar.
-  static const verbHighlightInset = 10.0;
+  /// Gap under each letter group in the two-column All list.
+  static const letterGroupGap = 1.0;
+  /// Fall back to one column only when the lane is too narrow for two chips.
+  static const twoColumnMinWidth = 200.0;
   static const rbiExtrasHeight = 26.0;
   static const baseExtrasHeight = 26.0;
   static const celebrationExtrasHeight = 28.0;
@@ -1381,6 +1473,10 @@ class _VerbAccordion extends StatelessWidget {
                 ? selectedRowHeight * scale + selectedRowOuterPadding
                 : rowHeight * scale + rowOuterPadding;
           }
+          if (category == 'All' && verbs.isNotEmpty) {
+            openBodyHeight +=
+                verbLetterBands(verbs).length * letterGroupGap;
+          }
           if (category != selectedCategory &&
               !pinnedSelected &&
               selectedVerbKey != null &&
@@ -1421,7 +1517,10 @@ class _VerbAccordion extends StatelessWidget {
             resolvedHeight > constraints.maxHeight - scrollSlack;
 
         if (needsScroll || stillOverflows) {
-          return ListView(
+          return ScrollConfiguration(
+            behavior:
+                ScrollConfiguration.of(context).copyWith(scrollbars: false),
+            child: ListView(
             padding: const EdgeInsets.only(bottom: 8),
             children: [
               _PinnedVerbSlot(
@@ -1463,7 +1562,7 @@ class _VerbAccordion extends StatelessWidget {
                   headerHeight: headerHeight,
                   showHeader: showHeaders,
                   open: openCategories.contains(category),
-                  fontSize: 12.5 * scale,
+                  fontSize: 13 * scale,
                   selectedIndex: selectedIndex,
                   selectedVerbKey: selectedVerbKey,
                   armed: armed,
@@ -1473,6 +1572,7 @@ class _VerbAccordion extends StatelessWidget {
                   onToggleFavorite: onToggleFavorite,
                 ),
             ],
+            ),
           );
         }
 
@@ -1520,7 +1620,7 @@ class _VerbAccordion extends StatelessWidget {
                 headerHeight: stillOverflows ? minHeader : headerHeight,
                 showHeader: showHeaders,
                 open: openCategories.contains(category),
-                fontSize: 12.5 * scale,
+                fontSize: 13 * scale,
                 selectedIndex: selectedIndex,
                 selectedVerbKey: selectedVerbKey,
                 armed: armed,
@@ -1555,7 +1655,7 @@ class _VerbAccordionSection extends StatelessWidget {
     required this.onVerbArmed,
     required this.onToggleFavorite,
     this.scrollable = false,
-    this.fontSize = 12.5,
+    this.fontSize = 13,
   });
 
   final CaptionV2Controller controller;
@@ -1656,7 +1756,7 @@ class _VerbAccordionSection extends StatelessWidget {
               selectedVerbKey: selectedVerbKey,
               armed: armed,
               tokens: tokens,
-              leadingPadding: 26,
+              leadingPadding: 4,
               fontSize: fontSize,
               gold: isFavorites,
               letterBands: category == 'All',
@@ -1678,7 +1778,7 @@ class _VerbAccordionSection extends StatelessWidget {
                     selectedVerbKey: selectedVerbKey,
                     armed: armed,
                     tokens: tokens,
-                    leadingPadding: 26,
+                    leadingPadding: 4,
                     fontSize: fontSize,
                     gold: isFavorites,
                     letterBands: category == 'All',
@@ -1780,8 +1880,8 @@ class _VerbRows extends StatefulWidget {
     required this.tokens,
     required this.onVerbArmed,
     required this.onToggleFavorite,
-    this.leadingPadding = 26,
-    this.fontSize = 13.5,
+    this.leadingPadding = 4,
+    this.fontSize = 13,
     this.scrollable = false,
     this.gold = false,
     this.letterBands = false,
@@ -1881,18 +1981,93 @@ class _VerbRowsState extends State<_VerbRows> {
     );
   }
 
-  List<Widget> _bandedChildren() {
-    final bands = verbLetterBands(widget.verbs);
+  Widget _letterGroup(
+    String letter,
+    List<EffectiveVerb> verbs,
+    int startIndex,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: _VerbAccordion.letterGroupGap),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: VerbBandLetter.width,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: VerbBandLetter(letter: letter, tokens: widget.tokens),
+            ),
+          ),
+          const SizedBox(width: 3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < verbs.length; i++)
+                  _row(startIndex + i),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _groupsForBands(
+    List<(String, List<EffectiveVerb>)> bands,
+    int startIndex,
+  ) {
     final out = <Widget>[];
-    var index = 0;
+    var index = startIndex;
     for (final band in bands) {
-      for (var i = 0; i < band.$2.length; i++) {
-        // Letter shares the first verb's row; later verbs keep an empty lane.
-        out.add(_row(index, bandLetter: i == 0 ? band.$1 : ''));
-        index++;
-      }
+      out.add(_letterGroup(band.$1, band.$2, index));
+      index += band.$2.length;
     }
     return out;
+  }
+
+  Widget _bandedBody({required bool twoColumns}) {
+    final bands = verbLetterBands(widget.verbs);
+    if (!twoColumns) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: _groupsForBands(bands, 0),
+      );
+    }
+
+    final columns = verbLetterBandColumns(bands);
+    var running = 0;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var c = 0; c < columns.length; c++) ...[
+          if (c > 0) const SizedBox(width: 2),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: () {
+                final start = running;
+                for (final band in columns[c]) {
+                  running += band.$2.length;
+                }
+                return _groupsForBands(columns[c], start);
+              }(),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _wrapScroll(Widget child) {
+    return ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+      child: SingleChildScrollView(
+        controller: _scrollController,
+        padding: const EdgeInsets.fromLTRB(2, 4, 2, 2),
+        child: child,
+      ),
+    );
   }
 
   @override
@@ -1903,36 +2078,41 @@ class _VerbRowsState extends State<_VerbRows> {
       );
     }
     if (widget.letterBands) {
-      final children = _bandedChildren();
-      if (widget.scrollable) {
-        return Scrollbar(
-          controller: _scrollController,
-          thumbVisibility: true,
-          child: ListView(
-            controller: _scrollController,
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            children: children,
-          ),
-        );
-      }
-      return Column(children: children);
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          // Two columns down to ~200px; only collapse when the lane is too
+          // narrow for two readable chips (or width is unbounded).
+          final twoColumns = width.isFinite &&
+              width >= _VerbAccordion.twoColumnMinWidth;
+          final body = _bandedBody(twoColumns: twoColumns);
+          if (widget.scrollable) return _wrapScroll(body);
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(2, 4, 2, 2),
+            child: body,
+          );
+        },
+      );
     }
     if (widget.scrollable) {
-      return Scrollbar(
-        controller: _scrollController,
-        thumbVisibility: true,
+      return ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
         child: ListView.builder(
           controller: _scrollController,
-          padding: const EdgeInsets.symmetric(vertical: 2),
+          padding: const EdgeInsets.fromLTRB(2, 4, 2, 2),
           itemCount: widget.verbs.length,
           itemBuilder: (context, index) => _row(index),
         ),
       );
     }
-    return Column(
-      children: [
-        for (var index = 0; index < widget.verbs.length; index++) _row(index),
-      ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 4, 2, 2),
+      child: Column(
+        children: [
+          for (var index = 0; index < widget.verbs.length; index++)
+            _row(index),
+        ],
+      ),
     );
   }
 }
@@ -2246,106 +2426,74 @@ class _HoverVerbBlockState extends State<_HoverVerbBlock> {
   Widget build(BuildContext context) {
     final hasOptionRows =
         widget.showRbi || widget.showBase || widget.showCelebration;
-
-    final boxed = widget.selected;
-    // The highlight sits in from the lane. Inner left insets stay aligned
-    // with unselected rows (leadingPadding from the lane edge).
-    final highlightInset = _VerbAccordion.verbHighlightInset;
-    final insetLeft =
-        boxed ? widget.leadingPadding - highlightInset : widget.leadingPadding;
-    final column = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _VerbAccordionRow(
-          controller: widget.controller,
-          verb: widget.verb,
-          selected: widget.selected,
-          committed: widget.committed,
-          hovered: _hovered,
-          boxed: boxed,
-          fontSize: widget.fontSize,
-          leadingPadding: widget.leadingPadding,
-          gold: widget.gold,
-          tokens: widget.tokens,
-          bandLetter: widget.bandLetter,
-          onTap: widget.onTap,
-          onToggleFavorite: widget.onToggleFavorite,
-        ),
-        if (hasOptionRows) ...[
-          if (widget.showRbi)
-            Padding(
-              padding: EdgeInsets.fromLTRB(insetLeft, 3, 8, 1),
-              child: RbiRow(
-                value: widget.rbi,
-                compact: true,
-                homeRunStyle: widget.verb.key == 'Home Run',
-                onChanged: widget.onRbiChanged,
-              ),
-            ),
-          if (widget.showBase)
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                insetLeft,
-                widget.showRbi ? 4 : 3,
-                8,
-                1,
-              ),
-              child: BaseRow(
-                value: widget.selectedBase,
-                compact: true,
-                onChanged: widget.onBaseChanged,
-              ),
-            ),
-          if (widget.showCelebration)
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                insetLeft,
-                (widget.showRbi || widget.showBase) ? 4 : 3,
-                8,
-                2,
-              ),
-              child: CelebrationDropdown(
-                compact: true,
-                reactions: widget.reactionOptions,
-                celebrations: widget.celebrationTypeOptions,
-                selected: widget.celebrationType,
-                onChanged: widget.onCelebrationChanged,
-              ),
-            ),
-        ],
-      ],
-    );
+    // Extras sit under the verb chip; match its horizontal padding.
+    final insetLeft = widget.leadingPadding;
 
     return MouseRegion(
       onEnter: (_) => _setHovered(true),
       onExit: (_) => _setHovered(false),
       cursor: SystemMouseCursors.click,
-      child: boxed
-          ? Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: _VerbAccordion.verbHighlightInset,
-                vertical: _VerbAccordion.selectedRowOuterPadding / 2,
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(FfTokens.radiusRow),
-                child: Stack(
-                  children: [
-                    ColoredBox(
-                      color: const Color(0xFF2C333A),
-                      child: column,
-                    ),
-                    Positioned(
-                      left: 0,
-                      top: 0,
-                      bottom: 0,
-                      width: 2,
-                      child: ColoredBox(color: widget.tokens.accent),
-                    ),
-                  ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _VerbAccordionRow(
+            controller: widget.controller,
+            verb: widget.verb,
+            selected: widget.selected,
+            committed: widget.committed,
+            hovered: _hovered,
+            fontSize: widget.fontSize,
+            leadingPadding: widget.leadingPadding,
+            gold: widget.gold,
+            tokens: widget.tokens,
+            bandLetter: widget.bandLetter,
+            onTap: widget.onTap,
+            onToggleFavorite: widget.onToggleFavorite,
+          ),
+          if (hasOptionRows) ...[
+            if (widget.showRbi)
+              Padding(
+                padding: EdgeInsets.fromLTRB(insetLeft, 3, 8, 1),
+                child: RbiRow(
+                  value: widget.rbi,
+                  compact: true,
+                  homeRunStyle: widget.verb.key == 'Home Run',
+                  onChanged: widget.onRbiChanged,
                 ),
               ),
-            )
-          : column,
+            if (widget.showBase)
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  insetLeft,
+                  widget.showRbi ? 4 : 3,
+                  8,
+                  1,
+                ),
+                child: BaseRow(
+                  value: widget.selectedBase,
+                  compact: true,
+                  onChanged: widget.onBaseChanged,
+                ),
+              ),
+            if (widget.showCelebration)
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  insetLeft,
+                  (widget.showRbi || widget.showBase) ? 4 : 3,
+                  8,
+                  2,
+                ),
+                child: CelebrationDropdown(
+                  compact: true,
+                  reactions: widget.reactionOptions,
+                  celebrations: widget.celebrationTypeOptions,
+                  selected: widget.celebrationType,
+                  onChanged: widget.onCelebrationChanged,
+                ),
+              ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -2361,8 +2509,7 @@ class _VerbAccordionRow extends StatelessWidget {
     required this.tokens,
     required this.onTap,
     required this.onToggleFavorite,
-    this.boxed = false,
-    this.leadingPadding = 26,
+    this.leadingPadding = 4,
     this.gold = false,
     this.bandLetter,
   });
@@ -2372,8 +2519,6 @@ class _VerbAccordionRow extends StatelessWidget {
   final bool selected;
   final bool committed;
   final bool hovered;
-  /// Parent draws the grey selection box around the verb and its actions.
-  final bool boxed;
   final double fontSize;
   final FfTokens tokens;
   final VoidCallback onTap;
@@ -2384,9 +2529,17 @@ class _VerbAccordionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fill = selected
-        ? tokens.hover
-        : (hovered ? tokens.sunken : null);
+    final Color? fill;
+    if (selected) {
+      fill = FfTokens.nocturneAccentSoft;
+    } else if (hovered) {
+      fill = FfTokens.nocturneHv;
+    } else {
+      fill = null;
+    }
+    final labelColor = gold
+        ? FfTokens.favoritesVerb
+        : (selected ? Colors.white : FfTokens.nocturneTx);
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: CmdClick(
@@ -2396,32 +2549,23 @@ class _VerbAccordionRow extends StatelessWidget {
         onCmdTap: () => controller.toggleVerbPin(verb.key),
         onSecondaryTapDown: (details) =>
             _showContextMenu(context, details.globalPosition),
-        child: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: boxed ? 0 : 6,
-            vertical: boxed
-                ? 0
-                : selected
-                    ? _VerbAccordion.selectedRowOuterPadding / 2
-                    : _VerbAccordion.rowOuterPadding / 2,
-          ),
+        child: Tooltip(
+          message: verb.label,
+          waitDuration: const Duration(milliseconds: 600),
           child: Container(
             height: (selected
                     ? _VerbAccordion.selectedRowHeight
                     : _VerbAccordion.rowHeight) *
                 controller.verbFontScale,
-            clipBehavior: Clip.none,
-            padding: EdgeInsets.only(
-              left: bandLetter != null ? 8 : leadingPadding - 6,
-              right: 4,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 6),
             decoration: BoxDecoration(
               color: fill,
               borderRadius: BorderRadius.circular(7),
-              // The selected box draws one accent bar for the verb and its
-              // actions. A border here would stop at the verb row.
-              border: selected && !boxed
-                  ? Border(left: BorderSide(color: tokens.accent, width: 2))
+              border: selected
+                  ? Border.all(
+                      color: FfTokens.nocturneAccentEdge,
+                      width: 1,
+                    )
                   : null,
             ),
             child: Row(
@@ -2430,34 +2574,30 @@ class _VerbAccordionRow extends StatelessWidget {
                   VerbBandLetter(letter: bandLetter, tokens: tokens),
                   const SizedBox(width: 4),
                 ],
-                SizedBox(
-                  width: 14,
-                  child: controller.isVerbPinned(verb.key)
-                      ? PhosphorIcon(PhosphorIconsFill.pushPin,
-                          size: 10,
-                          color: FfTokens.pinned,
-                        )
-                      : null,
-                ),
+                if (controller.isVerbPinned(verb.key)) ...[
+                  PhosphorIcon(
+                    PhosphorIconsFill.pushPin,
+                    size: 10,
+                    color: FfTokens.pinned,
+                  ),
+                  const SizedBox(width: 3),
+                ],
                 Expanded(
                   child: Text(
                     verb.label,
                     maxLines: 1,
                     softWrap: false,
                     overflow: TextOverflow.ellipsis,
-                    style: FfTokens.rosterName(
-                      color: gold ? FfTokens.favoritesVerb : tokens.text,
-                      selected: selected,
-                    ).copyWith(fontSize: fontSize, height: 1.05),
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: fontSize,
+                      fontWeight:
+                          selected ? FontWeight.w600 : FontWeight.w500,
+                      height: 1.05,
+                      color: labelColor,
+                    ),
                   ),
                 ),
-                if (committed) ...[
-                  const SizedBox(width: 4),
-                  PhosphorIcon(PhosphorIconsRegular.check,
-                    size: 12,
-                    color: tokens.textSecondary,
-                  ),
-                ],
               ],
             ),
           ),
@@ -2719,7 +2859,8 @@ class _NumberRoster extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        const horizontalPad = 10.0;
+        // Thin even inset so tiles aren't flush against the pane edge.
+        const horizontalPad = 4.0;
         final innerWidth = constraints.maxWidth - horizontalPad * 2;
         final cols = columns.clamp(minColumns, maxColumns);
         final cellW = cols <= 1
@@ -2797,70 +2938,84 @@ class _NumberRoster extends StatelessWidget {
           );
         }
 
-        return ListView(
-          padding: const EdgeInsets.fromLTRB(horizontalPad, 0, horizontalPad, 8),
-          children: [
-            for (var i = 0; i < bands.length; i++) ...[
-              Padding(
-                padding: EdgeInsets.only(top: i == 0 ? 0 : 6, bottom: 6),
-                child: Row(
-                  children: [
-                    Text(
-                      bands[i].$1,
-                      style: TextStyle(
-                        fontFamily: FfTokens.fontFamily,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.6,
-                        color: tokens.textTertiary,
-                        height: 1,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Container(height: 1, color: tokens.divider),
-                    ),
-                  ],
-                ),
-              ),
-              Builder(
-                builder: (context) {
-                  final band = bands[i];
-                  final isOther = band.$1 == 'Other';
-                  final subjectCount = isOther && showSubjects ? 3 : 0;
-                  final count = band.$2.length + subjectCount;
-                  // Other: one row of 3 equal subject buttons (Players / Team
-                  // name / Teammates). Number bands keep jersey square columns.
-                  final bandCols = isOther ? 3 : cols;
-                  final gap = isOther ? 4.0 : columnGap;
-                  final rowCount = count == 0 ? 0 : (count / bandCols).ceil();
-                  final rowH = isOther ? 40.0 : fittedH;
-                  return Column(
+        return ScrollConfiguration(
+          behavior:
+              ScrollConfiguration.of(context).copyWith(scrollbars: false),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(
+              horizontalPad,
+              0,
+              horizontalPad,
+              4,
+            ),
+            children: [
+              for (var i = 0; i < bands.length; i++) ...[
+                Padding(
+                  padding: EdgeInsets.only(top: i == 0 ? 0 : 4, bottom: 4),
+                  child: Row(
                     children: [
-                      for (var row = 0; row < rowCount; row++) ...[
-                        if (row > 0) SizedBox(height: gap),
-                        SizedBox(
-                          height: rowH,
-                          child: Row(
-                            children: [
-                              for (var col = 0; col < bandCols; col++) ...[
-                                if (col > 0) SizedBox(width: gap),
-                                Expanded(
-                                  child: row * bandCols + col < count
-                                      ? cellAt(band, row * bandCols + col)
-                                      : const SizedBox.shrink(),
-                                ),
-                              ],
-                            ],
-                          ),
+                      Text(
+                        bands[i].$1,
+                        style: TextStyle(
+                          fontFamily: FfTokens.fontFamily,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.6,
+                          color: tokens.textTertiary,
+                          height: 1,
                         ),
-                      ],
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Container(height: 1, color: tokens.divider),
+                      ),
                     ],
-                  );
-                },
-              ),
+                  ),
+                ),
+                Builder(
+                  builder: (context) {
+                    final band = bands[i];
+                    final isOther = band.$1 == 'Other';
+                    final subjectCount = isOther && showSubjects ? 3 : 0;
+                    final count = band.$2.length + subjectCount;
+                    // Other: one row of 3 equal subject buttons (Players / Team
+                    // name / Teammates). Number bands keep jersey square columns.
+                    final bandCols = isOther ? 3 : cols;
+                    final gap = isOther ? 4.0 : columnGap;
+                    final rowCount =
+                        count == 0 ? 0 : (count / bandCols).ceil();
+                    final rowH = isOther ? 40.0 : fittedH;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (var row = 0; row < rowCount; row++) ...[
+                          if (row > 0) SizedBox(height: gap),
+                          SizedBox(
+                            height: rowH,
+                            child: Row(
+                              children: [
+                                for (var col = 0; col < bandCols; col++) ...[
+                                  if (col > 0) SizedBox(width: gap),
+                                  Expanded(
+                                    child: row * bandCols + col < count
+                                        ? cellAt(
+                                            band,
+                                            row * bandCols + col,
+                                          )
+                                        : const SizedBox.shrink(),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    );
+                  },
+                ),
+              ],
             ],
-          ],
+          ),
         );
       },
     );
@@ -4271,53 +4426,12 @@ class _SquareSizeStepper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _SquareStepButton(
-          icon: PhosphorIconsRegular.minus,
-          enabled: canShrink,
-          onTap: onShrink,
-        ),
-        const SizedBox(width: 6),
-        _SquareStepButton(
-          icon: PhosphorIconsRegular.plus,
-          enabled: canGrow,
-          onTap: onGrow,
-        ),
-      ],
-    );
-  }
-}
-
-class _SquareStepButton extends StatelessWidget {
-  const _SquareStepButton({
-    required this.icon,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-      hitTestBehavior: HitTestBehavior.opaque,
-      child: Listener(
-        behavior: HitTestBehavior.opaque,
-        onPointerDown: enabled ? (_) => onTap() : null,
-        child: Opacity(
-          opacity: enabled ? 1 : 0.3,
-          child: SizedBox(
-            width: 14,
-            height: 22,
-            child: Icon(icon, size: 12, color: FfTokens.nocturneT2),
-          ),
-        ),
-      ),
+    return AaTextSizeControl(
+      height: 26,
+      canSmaller: canShrink,
+      canLarger: canGrow,
+      onSmaller: onShrink,
+      onLarger: onGrow,
     );
   }
 }

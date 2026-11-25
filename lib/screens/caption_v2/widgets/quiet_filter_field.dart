@@ -14,6 +14,14 @@ class QuietFilterField extends StatefulWidget {
     this.hint = 'Search',
     this.leadingInset = 0,
     this.hideIconWhenFilled = false,
+    this.fillColor,
+    this.fontSize = 12.5,
+    this.fontWeight = FfTokens.weightRegular,
+    this.borderRadius = 7,
+    this.iconSize = 14,
+    this.iconColor,
+    this.showFocusBorder = true,
+    this.contentPadding = const EdgeInsets.symmetric(horizontal: 6),
   });
 
   final TextEditingController controller;
@@ -28,6 +36,16 @@ class QuietFilterField extends StatefulWidget {
   /// Player search: drop the magnifying glass and [leadingInset] once the
   /// field has text, so the caret starts at the field's normal left padding.
   final bool hideIconWhenFilled;
+
+  /// When set, always paints this fill (verb panel search uses sunken).
+  final Color? fillColor;
+  final double fontSize;
+  final FontWeight fontWeight;
+  final double borderRadius;
+  final double iconSize;
+  final Color? iconColor;
+  final bool showFocusBorder;
+  final EdgeInsetsGeometry contentPadding;
 
   @override
   State<QuietFilterField> createState() => _QuietFilterFieldState();
@@ -83,7 +101,8 @@ class _QuietFilterFieldState extends State<QuietFilterField> {
   @override
   Widget build(BuildContext context) {
     final t = widget.tokens;
-    final fill = _focused || _hovered ? t.bg : t.bg;
+    final fill = widget.fillColor ?? t.bg;
+    final iconColor = widget.iconColor ?? t.textTertiary;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -91,12 +110,12 @@ class _QuietFilterFieldState extends State<QuietFilterField> {
         duration: const Duration(milliseconds: 120),
         curve: Curves.easeOut,
         height: widget.height,
-        padding: const EdgeInsets.symmetric(horizontal: 6),
+        padding: widget.contentPadding,
         alignment: Alignment.centerLeft,
         decoration: BoxDecoration(
           color: fill,
-          borderRadius: BorderRadius.circular(7),
-          border: _focused
+          borderRadius: BorderRadius.circular(widget.borderRadius),
+          border: widget.showFocusBorder && _focused
               ? Border.all(color: t.accent, width: 1)
               : null,
         ),
@@ -107,10 +126,10 @@ class _QuietFilterFieldState extends State<QuietFilterField> {
             if (_showLeading) ...[
               PhosphorIcon(
                 PhosphorIconsRegular.magnifyingGlass,
-                size: 14,
-                color: t.textTertiary,
+                size: widget.iconSize,
+                color: iconColor,
               ),
-              const SizedBox(width: 5),
+              const SizedBox(width: 8),
             ],
             Expanded(
               child: TextField(
@@ -118,13 +137,13 @@ class _QuietFilterFieldState extends State<QuietFilterField> {
                 focusNode: _focusNode,
                 style: TextStyle(
                   fontFamily: FfTokens.fontFamily,
-                  fontSize: 12.5,
-                  fontWeight: FfTokens.weightRegular,
+                  fontSize: widget.fontSize,
+                  fontWeight: widget.fontWeight,
                   color: t.text,
                   height: 1,
                 ),
                 cursorColor: t.accent,
-                cursorHeight: 12,
+                cursorHeight: widget.fontSize,
                 decoration: InputDecoration(
                   isCollapsed: true,
                   border: InputBorder.none,
@@ -132,8 +151,9 @@ class _QuietFilterFieldState extends State<QuietFilterField> {
                   hintText: widget.hint,
                   hintStyle: TextStyle(
                     fontFamily: FfTokens.fontFamily,
-                    fontSize: 12,
-                    color: t.textTertiary,
+                    fontSize: widget.fontSize,
+                    fontWeight: widget.fontWeight,
+                    color: iconColor,
                   ),
                 ),
                 onChanged: widget.onChanged,

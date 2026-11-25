@@ -7,8 +7,8 @@ void main() {
   test('maps paste, navigation, and numeric activators', () {
     final shortcuts = buildCaptionV2Shortcuts();
 
-    // ⌘S / Shift+Enter / ⌘⇧Enter are hardware chords (captionV2SaveChord),
-    // not Shortcuts entries — keeps Firebar Enter free.
+    // ⌘↵ / ⌘S / Shift+Enter / ⌘⇧Enter / ⌘U are hardware chords
+    // (captionV2SaveChord), not Shortcuts entries — keeps Firebar Enter free.
     expect(
       shortcuts[const SingleActivator(LogicalKeyboardKey.keyS, meta: true)],
       isNull,
@@ -99,7 +99,7 @@ void main() {
     expect(searchHit, 4);
   });
 
-  test('FTP chords match the Firebar hints', () {
+  test('save / prev / FTP chords match the action-row hints', () {
     CaptionV2SaveChord chord({
       LogicalKeyboardKey key = LogicalKeyboardKey.enter,
       bool shift = false,
@@ -118,16 +118,16 @@ void main() {
       );
     }
 
-    // Plain ⌘Enter must NOT FTP — too close to Firebar Return.
-    expect(chord(meta: true), CaptionV2SaveChord.none);
+    // ⌘Enter / Ctrl+Enter → save & next.
+    expect(chord(meta: true), CaptionV2SaveChord.save);
     expect(
       chord(key: LogicalKeyboardKey.numpadEnter, meta: true),
-      CaptionV2SaveChord.none,
+      CaptionV2SaveChord.save,
     );
-    expect(chord(control: true), CaptionV2SaveChord.none);
-    // Shift+Enter always saves; FTP is ⌘⇧Enter only.
+    expect(chord(control: true), CaptionV2SaveChord.save);
+    // Shift+Enter always saves; ⌘⇧Enter saves & previous.
     expect(chord(shift: true), CaptionV2SaveChord.save);
-    expect(chord(shift: true, meta: true), CaptionV2SaveChord.transmit);
+    expect(chord(shift: true, meta: true), CaptionV2SaveChord.savePrevious);
     expect(
       chord(key: LogicalKeyboardKey.keyS, meta: true),
       CaptionV2SaveChord.save,
@@ -138,6 +138,19 @@ void main() {
     );
     expect(
       chord(key: LogicalKeyboardKey.keyS, control: true, ftpMode: false),
+      CaptionV2SaveChord.save,
+    );
+    // ⌘U → FTP (or save when FTP mode is off).
+    expect(
+      chord(key: LogicalKeyboardKey.keyU, meta: true),
+      CaptionV2SaveChord.transmit,
+    );
+    expect(
+      chord(key: LogicalKeyboardKey.keyU, control: true),
+      CaptionV2SaveChord.transmit,
+    );
+    expect(
+      chord(key: LogicalKeyboardKey.keyU, meta: true, ftpMode: false),
       CaptionV2SaveChord.save,
     );
     expect(
@@ -153,11 +166,11 @@ void main() {
       CaptionV2SaveChord.none,
     );
     expect(chord(), CaptionV2SaveChord.none);
-    expect(chord(meta: true, ftpMode: false), CaptionV2SaveChord.none);
+    expect(chord(meta: true, ftpMode: false), CaptionV2SaveChord.save);
     expect(chord(shift: true, ftpMode: false), CaptionV2SaveChord.save);
     expect(
       chord(shift: true, meta: true, ftpMode: false),
-      CaptionV2SaveChord.save,
+      CaptionV2SaveChord.savePrevious,
     );
     expect(chord(meta: true, alt: true), CaptionV2SaveChord.none);
   });

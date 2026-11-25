@@ -740,13 +740,12 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     });
   }
 
-  /// Global ⌘S / Ctrl+S / Shift+Enter / ⌘⇧Enter.
+  /// Global ⌘↵ / ⌘S / Shift+Enter / ⌘⇧Enter / ⌘U / ⌘B.
   ///
-  /// ⌘S and Shift+Enter save only. With FTP on, ⌘⇧Enter saves and FTPs.
-  /// Plain ⌘Enter does not (too close to Firebar Return). Plain Enter
-  /// applies the Firebar line. Flutter [Shortcuts] only fire when focus is
-  /// inside that subtree; this handler still works when focus is in a text
-  /// field, drum lane, or lost.
+  /// ⌘Enter, ⌘S, and Shift+Enter save & next. ⌘⇧Enter saves & previous.
+  /// With FTP on, ⌘U saves and FTPs. Plain Enter applies the Firebar line.
+  /// Flutter [Shortcuts] only fire when focus is inside that subtree; this
+  /// handler still works when focus is in a text field, drum lane, or lost.
   bool _handleSaveShortcut(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
 
@@ -755,8 +754,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         event.logicalKey == LogicalKeyboardKey.numpadEnter;
     final isS = event.logicalKey == LogicalKeyboardKey.keyS;
 
-    // Burst picker: Enter / ⌘S confirm the primary action even if focus left
-    // the dialog Shortcuts subtree (e.g. landed on Cancel).
+    // Burst picker: Enter / ⌘S / ⌘↵ confirm the primary action even if focus
+    // left the dialog Shortcuts subtree (e.g. landed on Cancel).
     if (_burstSaveDialogOpen) {
       final confirmSelected = isEnter &&
           !keys.isShiftPressed &&
@@ -766,7 +765,11 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       final confirmCmdS = isS &&
           (keys.isMetaPressed || keys.isControlPressed) &&
           !keys.isAltPressed;
-      if (confirmSelected || confirmCmdS) {
+      final confirmCmdEnter = isEnter &&
+          (keys.isMetaPressed || keys.isControlPressed) &&
+          !keys.isShiftPressed &&
+          !keys.isAltPressed;
+      if (confirmSelected || confirmCmdS || confirmCmdEnter) {
         _confirmBurstSaveSelected?.call();
         return true;
       }
@@ -785,10 +788,11 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     );
     if (chord == CaptionV2SaveChord.none) return false;
 
-    // ⌘⇧Enter → FTP; Shift+Enter / ⌘S → save; ⌘B → Save to Burst.
-    // Firebar line is applied inside the save paths. Plain ⌘Enter is not FTP.
+    // ⌘↵ / ⌘S / ⇧↵ → save; ⌘⇧↵ → save & prev; ⌘U → FTP; ⌘B → burst.
     if (chord == CaptionV2SaveChord.transmit) {
       unawaited(_saveTransmitAndNext());
+    } else if (chord == CaptionV2SaveChord.savePrevious) {
+      unawaited(_saveAndPrevious());
     } else if (chord == CaptionV2SaveChord.burst) {
       return _saveToBurstFromShortcut();
     } else {

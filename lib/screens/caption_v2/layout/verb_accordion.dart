@@ -5,6 +5,7 @@ import '../../../caption_style/verb_sort_mode.dart';
 import '../../../theme/ff_tokens.dart';
 import '../data/caption_v2_controller.dart';
 import '../data/effective_verb_catalog.dart';
+import '../widgets/aa_text_size_control.dart';
 import '../widgets/base_row.dart';
 import '../widgets/rbi_row.dart';
 import '../widgets/celebration_dropdown.dart';
@@ -124,6 +125,33 @@ List<(String, List<EffectiveVerb>)> verbLetterBands(List<EffectiveVerb> verbs) {
   return bands;
 }
 
+/// Packs letter bands into [columnCount] columns, reading down the left then
+/// the right — groups stay intact (CSS `break-inside: avoid`).
+List<List<(String, List<EffectiveVerb>)>> verbLetterBandColumns(
+  List<(String, List<EffectiveVerb>)> bands, {
+  int columnCount = 2,
+}) {
+  if (bands.isEmpty) return const [];
+  if (columnCount <= 1) return [bands];
+  final total = bands.fold<int>(0, (n, band) => n + band.$2.length);
+  final target = (total + 1) ~/ 2;
+  final left = <(String, List<EffectiveVerb>)>[];
+  final right = <(String, List<EffectiveVerb>)>[];
+  var leftCount = 0;
+  var fillLeft = true;
+  for (final band in bands) {
+    if (fillLeft && (left.isEmpty || leftCount < target)) {
+      left.add(band);
+      leftCount += band.$2.length;
+      if (leftCount >= target) fillLeft = false;
+    } else {
+      right.add(band);
+    }
+  }
+  if (right.isEmpty) return [left];
+  return [left, right];
+}
+
 /// Fixed-width letter glyph on the first verb of an A–Z band (empty for the rest).
 class VerbBandLetter extends StatelessWidget {
   const VerbBandLetter({
@@ -136,7 +164,7 @@ class VerbBandLetter extends StatelessWidget {
   final String? letter;
   final FfTokens tokens;
 
-  static const double width = 14;
+  static const double width = 12;
 
   @override
   Widget build(BuildContext context) {
@@ -148,12 +176,11 @@ class VerbBandLetter extends StatelessWidget {
           : Text(
               letter!,
               maxLines: 1,
-              style: TextStyle(
+              style: const TextStyle(
                 fontFamily: FfTokens.fontFamily,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.4,
-                color: tokens.textTertiary,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: FfTokens.nocturneT3,
                 height: 1,
               ),
             ),
@@ -702,7 +729,7 @@ class VerbMenuTools extends StatelessWidget {
   }
 }
 
-/// Compact minus and plus for verb text size, shown beside the gear.
+/// Compact small-A / big-A for verb text size, shown beside the gear.
 class _VerbTextSizeControl extends StatelessWidget {
   const _VerbTextSizeControl({required this.controller});
 
@@ -717,21 +744,12 @@ class _VerbTextSizeControl extends StatelessWidget {
           CaptionV2Controller.verbFontStepMin,
           CaptionV2Controller.verbFontStepMax,
         );
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _HeaderStepButton(
-              icon: PhosphorIconsRegular.minus,
-              enabled: step > CaptionV2Controller.verbFontStepMin,
-              onTap: () => controller.nudgeVerbFont(-1),
-            ),
-            const SizedBox(width: 6),
-            _HeaderStepButton(
-              icon: PhosphorIconsRegular.plus,
-              enabled: step < CaptionV2Controller.verbFontStepMax,
-              onTap: () => controller.nudgeVerbFont(1),
-            ),
-          ],
+        return AaTextSizeControl(
+          height: 30,
+          canSmaller: step > CaptionV2Controller.verbFontStepMin,
+          canLarger: step < CaptionV2Controller.verbFontStepMax,
+          onSmaller: () => controller.nudgeVerbFont(-1),
+          onLarger: () => controller.nudgeVerbFont(1),
         );
       },
     );
@@ -841,17 +859,17 @@ class _VerbCascadeLimitMenuState extends State<_VerbCascadeLimitMenu> {
         onTap: _toggle,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 80),
-          width: 36,
-          height: 36,
+          width: 28,
+          height: 28,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: active ? FfTokens.nocturneHv : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(7),
           ),
           child: PhosphorIcon(
             PhosphorIconsRegular.gearSix,
-            size: 18,
-            color: active ? FfTokens.nocturneTx : FfTokens.nocturneT3,
+            size: 15,
+            color: active ? FfTokens.nocturneTx : FfTokens.nocturneT2,
           ),
         ),
       ),
@@ -1248,39 +1266,6 @@ class _VerbStepper extends StatelessWidget {
             const SizedBox(width: 2),
             _StepButton(enabled: !atMax, onTap: onPlus, child: plus),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Same bare minus and plus as the roster square-size control.
-class _HeaderStepButton extends StatelessWidget {
-  const _HeaderStepButton({
-    required this.icon,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-      hitTestBehavior: HitTestBehavior.opaque,
-      child: Listener(
-        behavior: HitTestBehavior.opaque,
-        onPointerDown: enabled ? (_) => onTap() : null,
-        child: Opacity(
-          opacity: enabled ? 1 : 0.3,
-          child: SizedBox(
-            width: 14,
-            height: 22,
-            child: Icon(icon, size: 12, color: FfTokens.nocturneT2),
-          ),
         ),
       ),
     );

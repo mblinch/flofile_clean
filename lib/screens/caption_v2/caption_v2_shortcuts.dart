@@ -61,15 +61,16 @@ class JerseyDigitIntent extends Intent {
 }
 
 /// What [CaptionV2Screen]'s hardware save handler should do for one key-down.
-enum CaptionV2SaveChord { none, save, transmit, burst }
+enum CaptionV2SaveChord { none, save, savePrevious, transmit, burst }
 
-/// Maps a key-down to save, FTP, or Save to Burst.
+/// Maps a key-down to save, save-previous, FTP, or Save to Burst.
 ///
-/// ⌘S / Ctrl+S and Shift+Enter always save (Shift may still be down on ⌘S
-/// after a range select). FTP is ⌘⇧Enter / Ctrl⇧Enter only — never plain
-/// ⌘Enter (too close to Firebar Return) and never bare Shift+Enter.
-/// ⌘B / Ctrl+B saves the current caption to the forward burst.
-/// Plain Enter is not a save chord, so Firebar can apply the shorthand line.
+/// ⌘Enter / Ctrl+Enter is the primary save (& next). ⌘S / Ctrl+S and
+/// Shift+Enter stay as aliases (Shift may still be down on ⌘S after a
+/// range select). ⌘⇧Enter / Ctrl⇧Enter saves & previous. FTP is ⌘U /
+/// Ctrl+U (upload). ⌘B / Ctrl+B saves the current caption to the forward
+/// burst. Plain Enter is not a save chord, so Firebar can apply the
+/// shorthand line.
 CaptionV2SaveChord captionV2SaveChord({
   required LogicalKeyboardKey key,
   required bool shift,
@@ -82,19 +83,28 @@ CaptionV2SaveChord captionV2SaveChord({
       key == LogicalKeyboardKey.numpadEnter;
   final isS = key == LogicalKeyboardKey.keyS;
   final isB = key == LogicalKeyboardKey.keyB;
+  final isU = key == LogicalKeyboardKey.keyU;
   final metaOrControl = meta || control;
 
-  // ⌘⇧Enter / Ctrl⇧Enter → FTP (or save when FTP mode is off).
+  // ⌘⇧Enter / Ctrl⇧Enter → save & previous.
   if (isEnter && shift && metaOrControl) {
-    return ftpMode ? CaptionV2SaveChord.transmit : CaptionV2SaveChord.save;
+    return CaptionV2SaveChord.savePrevious;
   }
-  // Shift+Enter → save (same as ⌘S).
+  // ⌘Enter / Ctrl+Enter → save & next.
+  if (isEnter && metaOrControl && !shift && !alt) {
+    return CaptionV2SaveChord.save;
+  }
+  // Shift+Enter → save (same as ⌘Enter).
   if (isEnter && shift && !metaOrControl && !alt) {
     return CaptionV2SaveChord.save;
   }
   // Ignore Shift so ⌘S still works right after Shift-click multi-select.
   if (isS && metaOrControl && !alt) {
     return CaptionV2SaveChord.save;
+  }
+  // ⌘U / Ctrl+U → FTP / upload (or save when FTP mode is off).
+  if (isU && metaOrControl && !alt && !shift) {
+    return ftpMode ? CaptionV2SaveChord.transmit : CaptionV2SaveChord.save;
   }
   // ⌘B / Ctrl+B → Save to Burst (when a multi-frame burst is available).
   if (isB && metaOrControl && !alt && !shift) {
@@ -137,9 +147,9 @@ Map<ShortcutActivator, Intent> buildCaptionV2Shortcuts() {
         const OpenSearchIntent(),
     const SingleActivator(LogicalKeyboardKey.keyK, control: true):
         const OpenSearchIntent(),
-    // ⌘S / Shift+Enter (save) / ⌘⇧Enter (FTP) are handled by
-    // CaptionV2Screen's hardware key handler so they still work when focus
-    // is outside the Shortcuts tree.
+    // ⌘↵ / ⌘S / Shift+Enter (save), ⌘⇧↵ (save & prev), ⌘U (FTP) are
+    // handled by CaptionV2Screen's hardware key handler so they still work
+    // when focus is outside the Shortcuts tree.
     const SingleActivator(
       LogicalKeyboardKey.keyV,
       meta: true,
