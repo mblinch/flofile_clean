@@ -39,6 +39,7 @@ class CaptionStrip extends StatelessWidget {
     this.fullCaption,
     this.highlightPhrases = const [],
     this.verbHighlightPhrases = const [],
+    this.pinnedVerbPhrase,
     this.provenanceSpans = const [],
     this.unmatchedTip,
     this.onChipTap,
@@ -84,6 +85,7 @@ class CaptionStrip extends StatelessWidget {
     this.captionHint =
         'Caption will appear here as you add players and a verb.',
     this.onEditTap,
+    this.headerActions,
     this.footer,
     this.firebarActive = false,
     this.firebarShellKey,
@@ -114,6 +116,9 @@ class CaptionStrip extends StatelessWidget {
 
   /// Verb / action phrases drawn in a warmer amber orange.
   final List<String> verbHighlightPhrases;
+
+  /// When set, matching verb highlights show a pin icon before the text.
+  final String? pinnedVerbPhrase;
 
   /// Phrases with hover tips explaining where caption pieces came from.
   final List<CaptionProvenanceSpan> provenanceSpans;
@@ -187,6 +192,9 @@ class CaptionStrip extends StatelessWidget {
   final String? keywords;
   final ValueChanged<String>? onKeywordsChanged;
   final VoidCallback? onEditTap;
+
+  /// Right-side header actions (account, settings, new session, …).
+  final Widget? headerActions;
   final Widget? footer;
 
   /// When true, period + Firebar share one orange shell border.
@@ -236,6 +244,7 @@ class CaptionStrip extends StatelessWidget {
                         tokens: t,
                         onChanged: onPersonalityChanged!,
                       ),
+                headerActions: headerActions,
                 childBuilder: (captionSize) => _captionBody(
                   t,
                   captionSize,
@@ -255,6 +264,7 @@ class CaptionStrip extends StatelessWidget {
                       tokens: t,
                       onChanged: onPersonalityChanged!,
                     ),
+              headerActions: headerActions,
               childBuilder: (captionSize) => _captionBody(
                 t,
                 captionSize,
@@ -307,6 +317,7 @@ class CaptionStrip extends StatelessWidget {
             fontSize: captionSize,
             highlightPhrases: highlightPhrases,
             verbHighlightPhrases: verbHighlightPhrases,
+            pinnedVerbPhrase: pinnedVerbPhrase,
             provenanceSpans: provenanceSpans,
             unmatchedTip: unmatchedTip,
             onChanged: onCaptionChanged!,
@@ -317,6 +328,7 @@ class CaptionStrip extends StatelessWidget {
                   fullCaption!,
                   firebarPhrases: highlightPhrases,
                   verbPhrases: verbHighlightPhrases,
+                  pinnedVerbPhrase: pinnedVerbPhrase,
                   provenance: provenanceSpans,
                   base: captionStyle,
                   firebarColor: FfTokens.firebar,
@@ -582,6 +594,7 @@ class _CompactCaptionStrip extends StatelessWidget {
                             fontSize: 13,
                             highlightPhrases: strip.highlightPhrases,
                             verbHighlightPhrases: strip.verbHighlightPhrases,
+                            pinnedVerbPhrase: strip.pinnedVerbPhrase,
                             provenanceSpans: strip.provenanceSpans,
                             unmatchedTip: strip.unmatchedTip,
                             onChanged: strip.onCaptionChanged!,
@@ -665,6 +678,7 @@ class _CaptionEditor extends StatefulWidget {
     this.fontSize = 17,
     this.highlightPhrases = const [],
     this.verbHighlightPhrases = const [],
+    this.pinnedVerbPhrase,
     this.provenanceSpans = const [],
     this.unmatchedTip,
   });
@@ -676,6 +690,7 @@ class _CaptionEditor extends StatefulWidget {
   final ValueChanged<String> onChanged;
   final List<String> highlightPhrases;
   final List<String> verbHighlightPhrases;
+  final String? pinnedVerbPhrase;
   final List<CaptionProvenanceSpan> provenanceSpans;
   final String? unmatchedTip;
 
@@ -751,6 +766,7 @@ class _CaptionEditorState extends State<_CaptionEditor> {
               text,
               firebarPhrases: widget.highlightPhrases,
               verbPhrases: widget.verbHighlightPhrases,
+              pinnedVerbPhrase: widget.pinnedVerbPhrase,
               provenance: widget.provenanceSpans,
               base: baseStyle,
               firebarColor: FfTokens.firebar,
@@ -841,6 +857,7 @@ TextSpan _captionAnnotatedSpan(
   String text, {
   required List<String> firebarPhrases,
   List<String> verbPhrases = const [],
+  String? pinnedVerbPhrase,
   required List<CaptionProvenanceSpan> provenance,
   required TextStyle base,
   required Color firebarColor,
@@ -988,6 +1005,23 @@ TextSpan _captionAnnotatedSpan(
     final TextStyle style;
     if (range.verb) {
       style = base.copyWith(color: verbColor);
+      final pin = pinnedVerbPhrase?.trim() ?? '';
+      if (pin.isNotEmpty &&
+          phrase.toLowerCase() == pin.toLowerCase()) {
+        children.add(
+          const WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: Padding(
+              padding: EdgeInsets.only(right: 4),
+              child: PhosphorIcon(
+                PhosphorIconsFill.pushPin,
+                size: 11,
+                color: FfTokens.accentHover,
+              ),
+            ),
+          ),
+        );
+      }
     } else if (range.firebar) {
       style = base.copyWith(color: firebarColor);
     } else if (range.fill != null) {
@@ -1204,6 +1238,7 @@ class _CaptionPanel extends StatefulWidget {
     required this.tokens,
     required this.childBuilder,
     this.headerTrailing,
+    this.headerActions,
     this.onTap,
     this.fillHeight = false,
     this.multiWriteCount = 0,
@@ -1212,6 +1247,7 @@ class _CaptionPanel extends StatefulWidget {
   final FfTokens tokens;
   final Widget Function(double captionSize) childBuilder;
   final Widget? headerTrailing;
+  final Widget? headerActions;
   final VoidCallback? onTap;
   final bool fillHeight;
   final int multiWriteCount;
@@ -1302,28 +1338,7 @@ class _CaptionPanelState extends State<_CaptionPanel> {
                     color: alert ?? t.text,
                   ).copyWith(fontSize: 15, letterSpacing: 1.2, height: 1),
                 ),
-                // Personality fills the middle; aA and edit stay pinned right.
-                Expanded(
-                  child: widget.headerTrailing == null
-                      ? const SizedBox.shrink()
-                      : Padding(
-                          padding: const EdgeInsets.only(left: 10, right: 8),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Container(
-                                width: 1,
-                                height: 14,
-                                color: t.divider,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(child: widget.headerTrailing!),
-                            ],
-                          ),
-                        ),
-                ),
-                sizeStepper,
-                const SizedBox(width: 2),
+                const SizedBox(width: 4),
                 MouseRegion(
                   onEnter: (_) => setState(() => _hovered = true),
                   onExit: (_) => setState(() => _hovered = false),
@@ -1343,6 +1358,29 @@ class _CaptionPanelState extends State<_CaptionPanel> {
                     ),
                   ),
                 ),
+                const SizedBox(width: 2),
+                sizeStepper,
+                // Personality fills the middle; account / settings stay right.
+                Expanded(
+                  child: widget.headerTrailing == null
+                      ? const SizedBox.shrink()
+                      : Padding(
+                          padding: const EdgeInsets.only(left: 10, right: 8),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 1,
+                                height: 14,
+                                color: t.divider,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(child: widget.headerTrailing!),
+                            ],
+                          ),
+                        ),
+                ),
+                if (widget.headerActions != null) widget.headerActions!,
               ],
             ),
           ),

@@ -2156,14 +2156,53 @@ class PreferencesService {
     _afterLocalPreferencesChanged();
   }
 
+  static const String _keyVerbIndexFontStepV2 = 'verb_index_font_step_v2';
+
+  static const String _keyVerbIndexFontSize = 'verb_index_font_size';
+
+  /// Exact Verb Index type size in px (Fit stores tenths).
+  /// Falls back to the older whole-pixel step table.
+  Future<double> getVerbIndexFontSize() async {
+    final prefs = await _getPrefs();
+    final exact = prefs.getDouble(_keyVerbIndexFontSize);
+    if (exact != null) return exact.clamp(10.0, 24.0);
+    final step = await getVerbIndexFontStep();
+    return (10 + step).clamp(10, 24).toDouble();
+  }
+
+  Future<void> saveVerbIndexFontSize(double size) async {
+    final prefs = await _getPrefs();
+    await prefs.setDouble(_keyVerbIndexFontSize, size.clamp(10.0, 24.0));
+    _afterLocalPreferencesChanged();
+  }
+
+  /// Verb Index font step into an expanded size table (10–24px).
+  /// Migrates legacy 0/1/2 ([11,13,15]) once.
   Future<int> getVerbIndexFontStep() async {
     final prefs = await _getPrefs();
-    return (prefs.getInt(_keyVerbIndexFontStep) ?? 1).clamp(0, 2);
+    const max = 14; // 15 sizes: 10…24
+    const defaultStep = 3; // 13px
+    final raw = prefs.getInt(_keyVerbIndexFontStep);
+    if (raw == null) return defaultStep;
+    if (prefs.getBool(_keyVerbIndexFontStepV2) != true) {
+      // Legacy steps 0/1/2 → 11/13/15 in the new table.
+      final mapped = switch (raw) {
+        0 => 1,
+        1 => 3,
+        2 => 5,
+        _ => raw,
+      }.clamp(0, max);
+      await prefs.setInt(_keyVerbIndexFontStep, mapped);
+      await prefs.setBool(_keyVerbIndexFontStepV2, true);
+      return mapped;
+    }
+    return raw.clamp(0, max);
   }
 
   Future<void> saveVerbIndexFontStep(int step) async {
     final prefs = await _getPrefs();
-    await prefs.setInt(_keyVerbIndexFontStep, step.clamp(0, 2));
+    await prefs.setInt(_keyVerbIndexFontStep, step.clamp(0, 14));
+    await prefs.setBool(_keyVerbIndexFontStepV2, true);
     _afterLocalPreferencesChanged();
   }
 

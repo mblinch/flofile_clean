@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../caption_style/verb_index_filter_mode.dart';
+import '../../../flo_layout_constants.dart';
 import '../../../services/mlb_api_service.dart';
 import '../../../services/mac_spell_check_service.dart';
 import '../../../theme/ff_tokens.dart';
@@ -79,6 +80,7 @@ class _DrumPickerState extends State<DrumPicker> {
   bool _numberMode = true;
   /// Squares across each numbers-mode row. Fewer columns means larger squares.
   late int _numberColumns;
+  bool? _wasCompactForNumberFit;
   bool _verbAccordionCollapsed = false;
   int? _appliedCascadeLimit;
   final Set<String> _extraOpenVerbCategories = {};
@@ -429,6 +431,24 @@ class _DrumPickerState extends State<DrumPicker> {
     setState(() => _numberColumns = best);
   }
 
+  void _fitNumberColumnsWhenReady({int attempt = 0}) {
+    if (!_numberMode || !mounted) return;
+    final homeBox =
+        _homeRosterBodyKey.currentContext?.findRenderObject() as RenderBox?;
+    final awayBox =
+        _awayRosterBodyKey.currentContext?.findRenderObject() as RenderBox?;
+    final ready = (homeBox != null && homeBox.hasSize) ||
+        (awayBox != null && awayBox.hasSize);
+    if (!ready) {
+      if (attempt >= 8) return;
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _fitNumberColumnsWhenReady(attempt: attempt + 1),
+      );
+      return;
+    }
+    _fitNumberColumns();
+  }
+
   Future<void> _fitVerbText() async {
     if (controller.verbListAll) {
       await _fitAzVerbFont();
@@ -445,7 +465,10 @@ class _DrumPickerState extends State<DrumPicker> {
     final available = box.size.height;
     if (available <= 0) return;
 
-    final dens = controller.verbIndexDensity.clamp(0, 2);
+    final dens = floVerbIndexDensity(
+      MediaQuery.sizeOf(context),
+      controller.verbIndexDensity,
+    );
     final heightScale = switch (dens) {
       0 => 0.88,
       2 => 1.18,
@@ -702,6 +725,16 @@ class _DrumPickerState extends State<DrumPicker> {
     if (controller.singleTeamMode && _armedLane == DrumLane.away) {
       _armedLane = DrumLane.verbs;
     }
+    final compact = floWindowIsCompact(MediaQuery.sizeOf(context));
+    final firstCompactPass = _wasCompactForNumberFit == null && compact;
+    final compactChanged =
+        _wasCompactForNumberFit != null && _wasCompactForNumberFit != compact;
+    _wasCompactForNumberFit = compact;
+    if (_numberMode && (firstCompactPass || compactChanged)) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _fitNumberColumnsWhenReady(),
+      );
+    }
     final tokens = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final lanes = _laneChildren(tokens);
     final body = widget.layout == DrumLayout.paged
@@ -793,37 +826,18 @@ class _DrumPickerState extends State<DrumPicker> {
     );
   }
 
-  Widget _verbTopLine(
-    FfTokens tokens,
-    ValueChanged<EffectiveVerb> onPinnedVerbTap,
-  ) {
-    final pinned = controller.pinnedVerbDefinition;
+  Widget _verbTopLine(FfTokens tokens) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Match team PinnedPlayerBar height (28) so columns align.
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 3),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
           child: SizedBox(
-            height: 28,
+            height: 27,
             child: Row(
               children: [
-                _VerbHeaderIconButton(
-                  icon: pinned != null
-                      ? PhosphorIconsFill.pushPin
-                      : PhosphorIconsRegular.pushPin,
-                  tooltip: pinned?.label ?? 'Pin a verb with ⌘-click',
-                  selected: pinned != null &&
-                      controller.selectedVerb == pinned.key,
-                  onTap: pinned == null
-                      ? null
-                      : () => onPinnedVerbTap(pinned),
-                  onCmdTap: pinned == null
-                      ? null
-                      : () => controller.toggleVerbPin(pinned.key),
-                ),
-                const SizedBox(width: 4),
                 Expanded(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(minWidth: 118),
@@ -831,17 +845,17 @@ class _DrumPickerState extends State<DrumPicker> {
                       controller: _verbFilter,
                       focusNode: _verbFilterFocus,
                       tokens: tokens,
-                      height: 24,
+                      height: 27,
                       hint: 'Search',
                       fillColor: FfTokens.nocturneSunken,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      borderRadius: 6,
-                      iconSize: 12,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w400,
+                      borderRadius: 8,
+                      iconSize: 14,
                       iconColor: FfTokens.nocturneT3,
                       showFocusBorder: true,
                       contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 6),
+                          const EdgeInsets.symmetric(horizontal: 10),
                       trailing: _verbMatchCount > 0
                           ? Text(
                               '$_verbMatchCount',
@@ -1297,88 +1311,93 @@ class _DrumPickerState extends State<DrumPicker> {
             selectedKey != null && controller.verbNeedsBase(selectedKey);
         final showCelebration = selectedKey != null &&
             controller.verbNeedsCelebration(selectedKey);
-        return Column(
-          children: [
-            _verbTopLine(tokens, selectPinnedVerb),
-            Expanded(
-              child: controller.verbListAll
-                  ? _azListLane(
-                      tokens: tokens,
-                      onPinnedVerbTap: selectPinnedVerb,
-                    )
-                  : VerbIndexPanel(
-                      key: _verbIndexKey,
-                      controller: controller,
-                      filterController: _verbFilter,
-                      filterFocusNode: _verbFilterFocus,
-                      tokens: tokens,
-                      onMatchCountChanged: (count) {
-                        if (_verbMatchCount == count) return;
-                        setState(() => _verbMatchCount = count);
-                      },
-                      onVerbArmed: (verb) {
-                        _arm(DrumLane.verbs);
-                        final index =
-                            _verbs.indexWhere((v) => v.key == verb.key);
-                        if (index >= 0) {
-                          _setIndex(DrumLane.verbs, index);
-                        }
-                        // selectVerb already ran inside VerbIndexPanel._pick.
-                      },
-                      onToggleFavorite: _toggleVerbFavorite,
-                      onAddCustom: (raw) {
-                        controller.setCustomVerbPhrase(raw);
-                        _verbFilter.clear();
-                        setState(() => _verbMatchCount = 0);
-                      },
-                    ),
-            ),
-            if (showRbi || showBase || showCelebration)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (showRbi)
-                      RbiRow(
-                        value: controller.rbi,
-                        compact: true,
-                        homeRunStyle: selectedKey == 'Home Run',
-                        onChanged: controller.setRbi,
+        // Panel: 8px top/bottom, 6px gaps (header → filter → … → custom).
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            children: [
+              _verbTopLine(tokens),
+              Expanded(
+                child: controller.verbListAll
+                    ? _azListLane(
+                        tokens: tokens,
+                        onPinnedVerbTap: selectPinnedVerb,
+                      )
+                    : VerbIndexPanel(
+                        key: _verbIndexKey,
+                        controller: controller,
+                        filterController: _verbFilter,
+                        filterFocusNode: _verbFilterFocus,
+                        tokens: tokens,
+                        onMatchCountChanged: (count) {
+                          if (_verbMatchCount == count) return;
+                          setState(() => _verbMatchCount = count);
+                        },
+                        onVerbArmed: (verb) {
+                          _arm(DrumLane.verbs);
+                          final index =
+                              _verbs.indexWhere((v) => v.key == verb.key);
+                          if (index >= 0) {
+                            _setIndex(DrumLane.verbs, index);
+                          }
+                          // selectVerb already ran inside VerbIndexPanel._pick.
+                        },
+                        onToggleFavorite: _toggleVerbFavorite,
+                        onAddCustom: (raw) {
+                          controller.setCustomVerbPhrase(raw);
+                          _verbFilter.clear();
+                          setState(() => _verbMatchCount = 0);
+                        },
                       ),
-                    if (showBase)
-                      BaseRow(
-                        value: controller.selectedBase,
-                        compact: true,
-                        onChanged: controller.setSelectedBase,
-                      ),
-                    if (showCelebration)
-                      CelebrationDropdown(
-                        compact: true,
-                        reactions: controller.reactionOptionsFor(selectedKey!),
-                        celebrations: const <String>[],
-                        selected: controller.celebrationType,
-                        onChanged: controller.setCelebrationType,
-                      ),
-                  ],
-                ),
               ),
-            if (showCustom)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-                child: _DrumCustomVerbField(
-                  textController: _customVerbController,
-                  focusNode: _customVerbFocusNode,
-                  tokens: tokens,
-                  pinned: controller.customVerbPinned,
-                  canUseLast:
-                      controller.lastCustomVerbPhrase.trim().isNotEmpty,
-                  onChanged: controller.setCustomVerbPhrase,
-                  onTogglePin: controller.toggleCustomVerbPin,
-                  onUseLast: controller.useLastCustomVerb,
+              if (showRbi || showBase || showCelebration)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (showRbi)
+                        RbiRow(
+                          value: controller.rbi,
+                          compact: true,
+                          homeRunStyle: selectedKey == 'Home Run',
+                          onChanged: controller.setRbi,
+                        ),
+                      if (showBase)
+                        BaseRow(
+                          value: controller.selectedBase,
+                          compact: true,
+                          onChanged: controller.setSelectedBase,
+                        ),
+                      if (showCelebration)
+                        CelebrationDropdown(
+                          compact: true,
+                          reactions:
+                              controller.reactionOptionsFor(selectedKey!),
+                          celebrations: const <String>[],
+                          selected: controller.celebrationType,
+                          onChanged: controller.setCelebrationType,
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-          ],
+              if (showCustom)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 6, 10, 0),
+                  child: _DrumCustomVerbField(
+                    textController: _customVerbController,
+                    focusNode: _customVerbFocusNode,
+                    tokens: tokens,
+                    pinned: controller.customVerbPinned,
+                    canUseLast:
+                        controller.lastCustomVerbPhrase.trim().isNotEmpty,
+                    onChanged: controller.setCustomVerbPhrase,
+                    onTogglePin: controller.toggleCustomVerbPin,
+                    onUseLast: controller.useLastCustomVerb,
+                  ),
+                ),
+            ],
+          ),
         );
       },
     );
@@ -1393,7 +1412,10 @@ class _DrumPickerState extends State<DrumPicker> {
     final pinned = controller.pinnedVerbDefinition;
     final pinnedSelected =
         pinned != null && controller.selectedVerb == pinned.key;
-    final dens = controller.verbIndexDensity.clamp(0, 2);
+    final dens = floVerbIndexDensity(
+      MediaQuery.sizeOf(context),
+      controller.verbIndexDensity,
+    );
     final baseFont = 13 * controller.verbFontScale;
     final fontSize = switch (dens) {
       0 => baseFont * 0.92,
@@ -1459,15 +1481,12 @@ class _DrumPickerState extends State<DrumPicker> {
           ),
         ],
         if (!searching) ...[
-          const SizedBox(height: 3),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 3),
-            child: VerbIndexModeBar(
-              controller: controller,
-              showPinned: false,
-            ),
+          const SizedBox(height: 6),
+          VerbIndexModeBar(
+            controller: controller,
+            showPinned: false,
           ),
-          const SizedBox(height: 3),
+          const SizedBox(height: 6),
         ],
         Expanded(
           key: _azListBodyKey,
@@ -1737,11 +1756,11 @@ class _DrumCustomVerbField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 24,
-      padding: const EdgeInsets.fromLTRB(8, 0, 2, 0),
+      height: 21,
+      padding: const EdgeInsets.fromLTRB(12, 0, 4, 0),
       decoration: BoxDecoration(
         color: FfTokens.nocturneSunken,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(9),
         border: pinned
             ? Border.all(color: FfTokens.pinned.withValues(alpha: 0.55))
             : null,
@@ -1750,10 +1769,10 @@ class _DrumCustomVerbField extends StatelessWidget {
         children: [
           const PhosphorIcon(
             PhosphorIconsRegular.plus,
-            size: 12,
+            size: 14,
             color: FfTokens.nocturneT3,
           ),
-          const SizedBox(width: 5),
+          const SizedBox(width: 6),
           Expanded(
             child: TextField(
               controller: textController,
@@ -1765,7 +1784,7 @@ class _DrumCustomVerbField extends StatelessWidget {
               contextMenuBuilder: floSpellCheckContextMenuBuilder,
               style: const TextStyle(
                 fontFamily: FfTokens.fontFamily,
-                fontSize: 12,
+                fontSize: 13,
                 fontWeight: FontWeight.w400,
                 color: FfTokens.nocturneTx,
                 height: 1,
@@ -1777,7 +1796,7 @@ class _DrumCustomVerbField extends StatelessWidget {
                 hintText: 'Custom verb',
                 hintStyle: TextStyle(
                   fontFamily: FfTokens.fontFamily,
-                  fontSize: 12,
+                  fontSize: 13,
                   fontWeight: FontWeight.w400,
                   color: FfTokens.nocturneT3,
                   height: 1,
@@ -1833,11 +1852,11 @@ class _DrumCustomVerbAction extends StatelessWidget {
         onTap: enabled ? onTap : null,
         borderRadius: BorderRadius.circular(4),
         child: SizedBox(
-          width: 22,
-          height: 22,
+          width: 20,
+          height: 17,
           child: PhosphorIcon(
             icon,
-            size: 13,
+            size: 14,
             color: enabled
                 ? (selected ? FfTokens.pinned : FfTokens.nocturneT3)
                 : FfTokens.nocturneT3.withValues(alpha: 0.35),
@@ -3337,7 +3356,10 @@ class _NumberRoster extends StatelessWidget {
     return smallAspect + (1.0 - smallAspect) * t;
   }
 
-  /// Fewest columns (largest tiles) whose estimated height still fits [height].
+  /// Fewest columns (largest tiles) that still fit [height].
+  ///
+  /// Uses the minimum readable cell height so Fit can pick a wider tile even
+  /// when the natural square would overflow; [build] then grows cells to fill.
   static int bestColumnsFor({
     required double width,
     required double height,
@@ -3348,7 +3370,7 @@ class _NumberRoster extends StatelessWidget {
   }) {
     var best = maxColumns;
     for (var cols = minColumns; cols <= maxColumns; cols++) {
-      final needed = estimateHeight(
+      final metrics = layoutMetrics(
         width: width,
         columns: cols,
         players: players,
@@ -3356,6 +3378,8 @@ class _NumberRoster extends StatelessWidget {
         showSubjects: showSubjects,
         scale: scale,
       );
+      final needed = metrics.chromeHeight +
+          metrics.jerseyRowCount * metrics.contentH;
       if (needed <= height + 2) {
         best = cols;
         break;
@@ -3365,8 +3389,19 @@ class _NumberRoster extends StatelessWidget {
     return best;
   }
 
-  /// Matches [build] layout math so Fit can pick columns without a dry-run.
-  static double estimateHeight({
+  /// Shared roster geometry for Fit estimates and [build].
+  static ({
+    double cellW,
+    double contentH,
+    double naturalH,
+    double jerseySize,
+    double nameSize,
+    int numberedRows,
+    int otherRows,
+    int jerseyRowCount,
+    int subjectRows,
+    double chromeHeight,
+  }) layoutMetrics({
     required double width,
     required int columns,
     required List<Player> players,
@@ -3391,6 +3426,7 @@ class _NumberRoster extends StatelessWidget {
         ? (other.length / cols).ceil().clamp(1, 1000)
         : 0;
     final subjectRows = showSubjects ? 1 : 0;
+    final jerseyRowCount = numberedRows + otherRows;
 
     final numberSize = 26.0 * scale;
     final nameSize = 13.0 * scale;
@@ -3401,35 +3437,44 @@ class _NumberRoster extends StatelessWidget {
     final squareH =
         (cellW / _aspectForCellWidth(cellW)).clamp(40.0, maxCell);
     final contentH = (fittedName - 0.5) * 1.05 + 4 + jerseySize + 8;
-    final fittedH = squareH < contentH ? contentH : squareH;
+    final naturalH = squareH < contentH ? contentH : squareH;
 
-    // Each band: optional top pad (4 after the first) + label (~10+4) + rows.
+    // Pads + range labels + subject row; jersey cell heights are separate.
     const labelBlock = 14.0;
-    var total = 4.0; // list bottom pad
+    var chrome = 4.0; // list bottom pad
     var bandIndex = 0;
     void addBandTopPad() {
-      if (bandIndex > 0) total += 4;
+      if (bandIndex > 0) chrome += 4;
       bandIndex++;
     }
 
     if (numberedRows > 0) {
-      // One jersey row per numbered band (chunk size == columns).
       for (var i = 0; i < numberedRows; i++) {
         addBandTopPad();
-        total += labelBlock + fittedH;
+        chrome += labelBlock;
       }
     }
     if (otherRows > 0) {
       addBandTopPad();
-      total += labelBlock +
-          otherRows * fittedH +
-          (otherRows - 1) * columnGap;
+      chrome += labelBlock + (otherRows - 1) * columnGap;
     }
     if (subjectRows > 0) {
       addBandTopPad();
-      total += labelBlock + 40.0;
+      chrome += labelBlock + 40.0;
     }
-    return total;
+
+    return (
+      cellW: cellW,
+      contentH: contentH,
+      naturalH: naturalH,
+      jerseySize: jerseySize,
+      nameSize: fittedName,
+      numberedRows: numberedRows,
+      otherRows: otherRows,
+      jerseyRowCount: jerseyRowCount,
+      subjectRows: subjectRows,
+      chromeHeight: chrome,
+    );
   }
 
   static int? _jersey(Player player) {
@@ -3499,18 +3544,20 @@ class _NumberRoster extends StatelessWidget {
 
     final shortest = MediaQuery.sizeOf(context).shortestSide;
     final scale = (shortest / 1000.0).clamp(0.62, 1.0);
-    final numberSize = 26.0 * scale;
-    final nameSize = 13.0 * scale;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         // Thin even inset so tiles aren't flush against the pane edge.
         const horizontalPad = 4.0;
-        final innerWidth = constraints.maxWidth - horizontalPad * 2;
         final cols = columns.clamp(minColumns, maxColumns);
-        final cellW = cols <= 1
-            ? innerWidth
-            : (innerWidth - columnGap * (cols - 1)) / cols;
+        final metrics = layoutMetrics(
+          width: constraints.maxWidth,
+          columns: cols,
+          players: players,
+          includeOtherRow: includeOtherRow,
+          showSubjects: showSubjects,
+          scale: scale,
+        );
         final bands = <(String, List<Player>)>[
           for (final group in _chunk(numbered, cols))
             (_rangeLabel(group), group),
@@ -3522,16 +3569,21 @@ class _NumberRoster extends StatelessWidget {
           bands.add(('Other', const <Player>[]));
         }
 
-        const comfortableCell = 72.0;
-        final fit = (cellW / comfortableCell).clamp(0.72, 1.15);
-        final jerseySize = numberSize * fit;
-        final fittedName = nameSize * fit;
-        final squareH = (cellW / _aspectForCellWidth(cellW))
-            .clamp(40.0, maxCell);
-        // Name plus jersey have to fit. A short square was clipping the
-        // number off the bottom, so an edited jersey never appeared.
-        final contentH = (fittedName - 0.5) * 1.05 + 4 + jerseySize + 8;
-        final fittedH = squareH < contentH ? contentH : squareH;
+        // Grow jersey tiles into leftover panel height (compact Fit especially).
+        // Shrink toward contentH when the natural square would overflow.
+        var fittedH = metrics.naturalH;
+        if (constraints.hasBoundedHeight &&
+            constraints.maxHeight.isFinite &&
+            metrics.jerseyRowCount > 0) {
+          final fillH =
+              (constraints.maxHeight - metrics.chromeHeight - 1.0) /
+                  metrics.jerseyRowCount;
+          fittedH = fillH.clamp(metrics.contentH, maxCell);
+        }
+        final fontGrow =
+            (fittedH / metrics.naturalH).clamp(0.85, 1.45);
+        final jerseySize = metrics.jerseySize * fontGrow;
+        final fittedName = metrics.nameSize * fontGrow;
 
         Widget cellAt((String, List<Player>) band, int index) {
           final cellH = band.$1 == 'Other' ? 40.0 : fittedH;

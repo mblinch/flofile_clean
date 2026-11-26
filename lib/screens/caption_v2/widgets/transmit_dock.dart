@@ -188,6 +188,7 @@ class CaptionV2ActionRow extends StatelessWidget {
           tooltip: 'Save & Prev',
           icon: PhosphorIconsRegular.caretLeft,
           iconAtEnd: false,
+          primary: true,
           shortcut: showShortcuts ? _savePrevShortcut : null,
           padding: EdgeInsets.symmetric(horizontal: pad),
           onPressed: onSavePrevious,
@@ -1364,6 +1365,10 @@ class _NavButton extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                if (!iconAtEnd) ...[
+                  Icon(icon, size: 16, color: Colors.white),
+                  const SizedBox(width: 8),
+                ],
                 Text(label, style: _barLabel(Colors.white)),
                 if (iconAtEnd) ...[
                   const SizedBox(width: 8),
@@ -1551,27 +1556,27 @@ class _FtpGroup extends StatelessWidget {
             enabled: true,
             onTap: onHistory,
             builder: (hovered, pressed) {
-              final bg = pressed
-                  ? _kActionPressedBg
+              final gradient = pressed
+                  ? _kActionTealGradientPressed
                   : hovered
-                      ? FfTokens.nocturneHv
-                      : _kActionSecondaryBg;
-              final edge = pressed ? _kActionPressedEdge : _kActionHairline;
-              final color =
-                  hovered ? FfTokens.nocturneTx : FfTokens.nocturneT2;
+                      ? _kActionTealGradientHover
+                      : _kActionTealGradient;
+              final edge = hovered || pressed
+                  ? _kActionPrimaryEdgeHover
+                  : _kActionPrimaryEdge;
               return _BarShell(
                 height: _kActionRowHeight,
                 width: _kActionRowHeight,
                 padding: EdgeInsets.zero,
-                background: bg,
+                gradient: gradient,
                 outline: edge,
                 radius: 9,
                 pressed: pressed,
                 nudge: false,
-                child: Icon(
+                child: const Icon(
                   PhosphorIconsRegular.clockClockwise,
                   size: 16,
-                  color: color,
+                  color: Colors.white,
                 ),
               );
             },
@@ -1731,19 +1736,21 @@ class _FtpSendButton extends StatelessWidget {
       enabled: canSend,
       onTap: onPressed,
       builder: (hovered, pressed) {
-        final bg = pressed
-            ? _kActionPressedBg
+        final gradient = pressed
+            ? _kActionTealGradientPressed
             : hovered
-                ? FfTokens.nocturneHv
-                : _kActionSecondaryBg;
-        final edge = pressed ? _kActionPressedEdge : _kActionHairline;
+                ? _kActionTealGradientHover
+                : _kActionTealGradient;
+        final edge = hovered || pressed
+            ? _kActionPrimaryEdgeHover
+            : _kActionPrimaryEdge;
         // Avoid LayoutBuilder inside _BarTap — hover setState under
         // OverlayPortal/action-row rebuilds asserts debugNeedsLayout.
         return _BarShell(
           height: _kActionRowHeight,
           width: expand ? double.infinity : null,
           padding: const EdgeInsets.symmetric(horizontal: 13),
-          background: bg,
+          gradient: gradient,
           outline: edge,
           radius: 9,
           pressed: pressed,
@@ -1755,18 +1762,18 @@ class _FtpSendButton extends StatelessWidget {
               const Icon(
                 PhosphorIconsRegular.cloudArrowUp,
                 size: 16,
-                color: FfTokens.nocturneT2,
+                color: Colors.white,
               ),
               const SizedBox(width: 7),
               Text(
                 display,
                 maxLines: 1,
                 softWrap: false,
-                style: _barLabel(FfTokens.nocturneTx),
+                style: _barLabel(Colors.white),
               ),
               if (shortcut != null) ...[
                 const SizedBox(width: 7),
-                _ShortcutBadge(shortcut!),
+                _ShortcutBadge(shortcut!, onPrimary: true),
               ],
             ],
           ),

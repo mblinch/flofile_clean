@@ -15,6 +15,7 @@ import '../../services/admin_service.dart';
 import '../../services/verb_admin_choice.dart';
 import '../../services/auth_service.dart';
 import '../../services/mlb_api_service.dart';
+import '../../flo_layout_constants.dart';
 import '../../theme/ff_tokens.dart';
 import '../../widgets/admin_mode_toggle.dart';
 import '../../widgets/admin_screen.dart';
@@ -1568,10 +1569,16 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
             onFirebar: () => _openMobileFirebarSheet(),
             onGear: () => _TopChrome._openPreferences(context, _controller),
           )
+        else if (sessionActive)
+          _UnifiedTitleBar(
+            controller: _controller,
+            onResetSession: _controller.resetToStartup,
+            onToggleMobileLayout: _toggleMobileLayoutPreview,
+          )
         else
           _TopChrome(
-            controller: sessionActive ? _controller : null,
-            onResetSession: sessionActive ? _controller.resetToStartup : null,
+            controller: null,
+            onResetSession: null,
             onToggleMobileLayout: _toggleMobileLayoutPreview,
             title: title,
             sessionChrome: sessionChrome,
@@ -1862,10 +1869,21 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   ) {
     const pad = 10.0;
     final inner = math.max(0.0, workspaceWidth - pad * 2 - _gap);
-    final maxPhotoWidth = inner * 0.40;
-    final minPhotoWidth = math.min(350.0, maxPhotoWidth);
-    final defaultPhotoWidth =
-        (inner * 0.30).clamp(minPhotoWidth, maxPhotoWidth);
+    final preferred = inner * 0.30;
+    final double minPhotoWidth;
+    final double maxPhotoWidth;
+    final double defaultPhotoWidth;
+    if (floWindowIsCompact(MediaQuery.sizeOf(context))) {
+      // 1280×800: the preview column stays put. A few pixels of drag only.
+      const slack = 12.0;
+      defaultPhotoWidth = preferred;
+      minPhotoWidth = math.max(0.0, preferred - slack);
+      maxPhotoWidth = preferred + slack;
+    } else {
+      maxPhotoWidth = inner * 0.40;
+      minPhotoWidth = math.min(350.0, maxPhotoWidth);
+      defaultPhotoWidth = preferred.clamp(minPhotoWidth, maxPhotoWidth);
+    }
     final photoWidth =
         (_photoWidth ?? defaultPhotoWidth).clamp(minPhotoWidth, maxPhotoWidth);
     return Padding(
@@ -2089,6 +2107,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       multiWriteCount: multiWriteCount,
       highlightPhrases: c.firebarInsertedHighlights,
       verbHighlightPhrases: c.firebarInsertedVerbHighlights,
+      pinnedVerbPhrase: c.pinnedVerbDefinition?.label,
       provenanceSpans: c.captionProvenanceSpans,
       unmatchedTip: c.captionUnmatchedTip,
       captionHint: hasLiveCaption
@@ -2468,6 +2487,138 @@ class _WorkspaceResizeHandle extends StatelessWidget {
   }
 }
 
+/// Flutter controls drawn into the macOS unified title bar.
+class _UnifiedTitleBar extends StatelessWidget {
+  const _UnifiedTitleBar({
+    required this.controller,
+    required this.onResetSession,
+    this.onToggleMobileLayout,
+  });
+
+  final CaptionV2Controller controller;
+  final VoidCallback onResetSession;
+  final VoidCallback? onToggleMobileLayout;
+
+  static const _windowChannel = MethodChannel('window_control');
+
+  Future<void> _startDrag() async {
+    if (defaultTargetPlatform != TargetPlatform.macOS) return;
+    try {
+      await _windowChannel.invokeMethod<void>('startWindowDrag');
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    final trafficInset =
+        defaultTargetPlatform == TargetPlatform.macOS ? kFloTrafficLightInset : 12.0;
+    return ValueListenableBuilder<bool>(
+      valueListenable: AdminService.previewAsNonAdmin,
+      builder: (context, _, __) {
+        return AnimatedBuilder(
+          animation: controller,
+          builder: (context, _) {
+            return Material(
+              color: t.bg,
+              child: SizedBox(
+                height: kFloUnifiedTitleBarHeight,
+                child: Row(
+                  children: [
+                    SizedBox(width: trafficInset),
+                    _GameChip(
+                      controller: controller,
+                      tokens: t,
+                    ),
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onPanStart: (_) => unawaited(_startDrag()),
+                        child: const SizedBox.expand(),
+                      ),
+                    ),
+                    if (AdminService.isActuallyAdminSync() &&
+                        AdminService.isCurrentUserAdminSync()) ...[
+                      if (defaultTargetPlatform == TargetPlatform.macOS) ...[
+                        _AdminExportSizeButton(tokens: t, compact: true),
+                        const SizedBox(width: 4),
+                      ],
+                      if (onToggleMobileLayout != null) ...[
+                        _AdminMobileLayoutButton(
+                          tokens: t,
+                          compact: true,
+                          onToggle: onToggleMobileLayout!,
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                    ],
+                    _NewSessionButton(
+                      tokens: t,
+                      compact: true,
+                      onTap: () async {
+                        final startNew = await showAppConfirmDialog(
+                          context: context,
+                          title: 'New session',
+                          message:
+                              'Leave this caption session and start a new one?',
+                          cancelLabel: 'Cancel',
+                          confirmLabel: 'New session',
+                        );
+                        if (startNew == true) onResetSession();
+                      },
+                    ),
+                    const SizedBox(width: 4),
+                    if (AuthService.instance.isSignedIn)
+                      _SessionAvatar(
+                        tokens: t,
+                        admin: AdminService.isCurrentUserAdminSync(),
+                        onAdminClosed: () async {
+                          final sport = controller.sport;
+                          if (sport.trim().isNotEmpty && context.mounted) {
+                            await VerbAdminChoice.offer(
+                              context: context,
+                              sport: sport,
+                            );
+                          }
+                          await controller.reloadVerbCatalog();
+                          await controller.reloadCaptionStyle();
+                        },
+                      ),
+                    const SizedBox(width: 2),
+                    Material(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(9),
+                      child: InkWell(
+                        onTap: () =>
+                            _TopChrome._openPreferences(context, controller),
+                        borderRadius: BorderRadius.circular(9),
+                        hoverColor: t.hover,
+                        child: Tooltip(
+                          message: 'Options',
+                          child: SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: Icon(
+                              PhosphorIconsRegular.gearSix,
+                              size: 16,
+                              color: t.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
 class _TopChrome extends StatelessWidget {
   const _TopChrome({
     this.controller,
@@ -2495,14 +2646,16 @@ class _TopChrome extends StatelessWidget {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final c = controller;
     final headerTitle = title?.trim();
+    final trafficInset =
+        defaultTargetPlatform == TargetPlatform.macOS ? kFloTrafficLightInset : 10.0;
 
     if (sessionChrome) {
       return _buildSessionChrome(context, headerTitle);
     }
 
     return Container(
-      height: 36,
-      padding: const EdgeInsets.fromLTRB(10, 0, 8, 0),
+      height: kFloUnifiedTitleBarHeight,
+      padding: EdgeInsets.fromLTRB(trafficInset, 0, 8, 0),
       color: Colors.transparent,
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -2625,9 +2778,11 @@ class _TopChrome extends StatelessWidget {
 
   Widget _buildSessionChrome(BuildContext context, String? headerTitle) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    final trafficInset =
+        defaultTargetPlatform == TargetPlatform.macOS ? kFloTrafficLightInset : 12.0;
     return Container(
-      height: 56,
-      padding: const EdgeInsets.fromLTRB(20, 0, 14, 0),
+      height: kFloUnifiedTitleBarHeight,
+      padding: EdgeInsets.fromLTRB(trafficInset, 0, 10, 0),
       decoration: const BoxDecoration(
         color: FfTokens.nocturneBg,
         border: Border(bottom: BorderSide(color: FfTokens.nocturneLn)),
@@ -2641,7 +2796,7 @@ class _TopChrome extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 fontFamily: FfTokens.fontFamily,
-                fontSize: 16,
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
                 height: 1,
                 color: FfTokens.sessionTx,
@@ -2652,7 +2807,7 @@ class _TopChrome extends StatelessWidget {
               AdminService.isCurrentUserAdminSync()) ...[
             if (defaultTargetPlatform == TargetPlatform.macOS) ...[
               _AdminExportSizeButton(tokens: t, compact: true),
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
             ],
             if (onToggleMobileLayout != null) ...[
               _AdminMobileLayoutButton(
@@ -2660,7 +2815,7 @@ class _TopChrome extends StatelessWidget {
                 compact: true,
                 onToggle: onToggleMobileLayout!,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
             ],
           ],
           if (AdminService.isActuallyAdminSync())
@@ -2672,7 +2827,7 @@ class _TopChrome extends StatelessWidget {
               sessionChrome: true,
               onAdminClosed: () async {},
             ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 2),
           Material(
             color: Colors.transparent,
             borderRadius: BorderRadius.circular(9),
@@ -2683,11 +2838,11 @@ class _TopChrome extends StatelessWidget {
               child: const Tooltip(
                 message: 'Settings',
                 child: SizedBox(
-                  width: 36,
-                  height: 36,
+                  width: 28,
+                  height: 28,
                   child: Icon(
                     PhosphorIconsRegular.gearSix,
-                    size: 18,
+                    size: 16,
                     color: FfTokens.sessionT2,
                   ),
                 ),
@@ -2886,11 +3041,15 @@ class _GameChip extends StatelessWidget {
     required this.controller,
     required this.tokens,
     this.embedded = false,
+    this.compact = false,
   });
 
   final CaptionV2Controller controller;
   final FfTokens tokens;
   final bool embedded;
+
+  /// Matchup + search icon only — for the caption header.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -2903,7 +3062,7 @@ class _GameChip extends StatelessWidget {
     final venue = controller.venue.trim();
     final labelStyle = TextStyle(
       fontFamily: FfTokens.fontFamily,
-      fontSize: 13,
+      fontSize: compact ? 12 : 13,
       fontWeight: FontWeight.w400,
       height: 1,
       color: tokens.text,
@@ -2915,8 +3074,8 @@ class _GameChip extends StatelessWidget {
             : (away.isNotEmpty ? away : 'Game'));
     final sessionBits = <String>[
       matchup,
-      if (venue.isNotEmpty) venue,
-      _shortMonthDayYear(date),
+      if (!compact && venue.isNotEmpty) venue,
+      if (!compact) _shortMonthDayYear(date),
     ];
     final searchColor = enabled ? tokens.text : tokens.textTertiary;
 
@@ -2931,10 +3090,15 @@ class _GameChip extends StatelessWidget {
           onTap: enabled
               ? () => unawaited(_openGameGoogleSearch(controller))
               : null,
-          borderRadius: BorderRadius.circular(embedded ? 8 : 10),
+          borderRadius: BorderRadius.circular(embedded || compact ? 8 : 10),
           child: Container(
-            height: 32,
-            padding: EdgeInsets.fromLTRB(embedded ? 10 : 6, 0, embedded ? 6 : 8, 0),
+            height: compact ? 28 : 32,
+            padding: EdgeInsets.fromLTRB(
+              embedded ? 10 : (compact ? 6 : 6),
+              0,
+              embedded ? 6 : (compact ? 6 : 8),
+              0,
+            ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -2946,26 +3110,35 @@ class _GameChip extends StatelessWidget {
                   const SizedBox(width: 5),
                 ],
                 Text(sessionBits.join(' · '), style: labelStyle),
-                Text(
-                  ' · ',
-                  style: labelStyle.copyWith(color: tokens.textTertiary),
-                ),
-                PhosphorIcon(
-                  PhosphorIconsRegular.magnifyingGlass,
-                  size: 12,
-                  color: searchColor,
-                ),
-                const SizedBox(width: 3),
-                Text(
-                  'Search game info',
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    height: 1,
+                if (!compact) ...[
+                  Text(
+                    ' · ',
+                    style: labelStyle.copyWith(color: tokens.textTertiary),
+                  ),
+                  PhosphorIcon(
+                    PhosphorIconsRegular.magnifyingGlass,
+                    size: 12,
                     color: searchColor,
                   ),
-                ),
+                  const SizedBox(width: 3),
+                  Text(
+                    'Search game info',
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      height: 1,
+                      color: searchColor,
+                    ),
+                  ),
+                ] else ...[
+                  const SizedBox(width: 4),
+                  PhosphorIcon(
+                    PhosphorIconsRegular.magnifyingGlass,
+                    size: 12,
+                    color: searchColor,
+                  ),
+                ],
               ],
             ),
           ),
@@ -3177,7 +3350,7 @@ const _windowSizeOptions = <(String, String)>[
 
 String _windowSizeLabel(Size size) {
   if (size.width >= 1500 && size.height >= 950) return '1600 × 1000';
-  if (size.width < 1340 || size.height < 850) return '1280 × 800';
+  if (floWindowIsCompact(size)) return '1280 × 800';
   return '1400 × 900';
 }
 

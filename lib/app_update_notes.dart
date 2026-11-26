@@ -12,11 +12,9 @@ const String kAppUpdateNotesTitle = 'What’s new';
 const String kAppUpdateNotesBody = '''
 Here is what changed in this version.
 
-Players and verbs aA control: new Fit option sizes content to the box on screen.
+Caption V2 layout polish: Verb Index, drum picker, caption strip, and transmit dock refinements.
 
-Verb Index: ⌘-click pins again. Gear menus open beside the gear so they don’t cover the list.
-
-Fit respects the pinned-verb chip under the mode bar.
+Players and verbs aA Fit option still sizes content to the box on screen.
 
 This message shows one time after you update. Tap OK or outside the box to close it.
-''';
+'''

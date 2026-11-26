@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../caption_style/verb_sort_mode.dart';
+import '../../../flo_layout_constants.dart';
 import '../../../theme/ff_tokens.dart';
 import '../data/caption_v2_controller.dart';
 import '../data/effective_verb_catalog.dart';
@@ -818,11 +819,11 @@ class _VerbTextSizeControl extends StatelessWidget {
             onFit: onFit,
           );
         }
-        final step = controller.verbIndexFontStep.clamp(0, 2);
+        final size = controller.verbIndexFontSize;
         return AaTextSizeControl(
           height: 24,
-          canSmaller: step > 0,
-          canLarger: step < 2,
+          canSmaller: size > CaptionV2Controller.verbIndexFontSizeMin + 0.05,
+          canLarger: size < CaptionV2Controller.verbIndexFontSizeMax - 0.05,
           onSmaller: () => controller.nudgeVerbIndexFont(-1),
           onLarger: () => controller.nudgeVerbIndexFont(1),
           onFit: onFit,
@@ -1033,7 +1034,10 @@ class _VerbSettingsCard extends StatelessWidget {
       listenable: controller,
       builder: (context, _) {
         final listAll = controller.verbListAll;
-        final dens = controller.verbIndexDensity.clamp(0, 2);
+        final compactLock = floWindowIsCompact(MediaQuery.sizeOf(context));
+        final dens = compactLock
+            ? 0
+            : controller.verbIndexDensity.clamp(0, 2);
         final historyOn = controller.verbIndexShowHistory;
         final historyN = controller.verbIndexHistoryLimit.clamp(1, 10);
 
@@ -1144,8 +1148,10 @@ class _VerbSettingsCard extends StatelessWidget {
                                       3,
                                       2,
                                     ][i]),
-                                    onTap: () =>
-                                        controller.setVerbIndexDensity(i),
+                                    onTap: () {
+                                      if (compactLock) return;
+                                      controller.setVerbIndexDensity(i);
+                                    },
                                   ),
                               ],
                             ),

@@ -30,26 +30,25 @@ class AaTextSizeControl extends StatelessWidget {
   /// Total outer height (padding included). Match the search bar beside it.
   final double height;
 
-  static const double _pad = 2;
+  static const double _pad = 1;
 
   @override
   Widget build(BuildContext context) {
     final buttonSize = height - _pad * 2;
-    // Wider than tall so the A/A hits aren't cramped beside Expanded search.
-    final buttonWidth = (buttonSize + 6).clamp(22.0, 28.0);
-    final dividerInset = (buttonSize * 0.18).clamp(2.0, 5.0);
-    final smallA = height <= 24 ? 9.0 : 10.0;
-    final bigA = height <= 24 ? 13.0 : 15.0;
-    final fitLabel = height <= 24 ? 9.0 : 10.0;
+    // Compact hit targets — keep readable, cut unused side padding.
+    final buttonWidth = (buttonSize - 4).clamp(16.0, 20.0);
+    final dividerInset = (buttonSize * 0.22).clamp(2.0, 4.0);
+    final smallA = height <= 24 ? 8.0 : 9.0;
+    final bigA = height <= 24 ? 12.0 : 13.0;
+    final fitLabel = height <= 24 ? 10.5 : 11.5;
     final showFit = onFit != null;
-    // "Fit" needs a bit more width than a single A.
-    final fitWidth = showFit ? (buttonWidth + 10).clamp(32.0, 40.0) : 0.0;
+    final fitWidth = showFit ? (buttonWidth + 10).clamp(26.0, 30.0) : 0.0;
     return SizedBox(
       height: height,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: FfTokens.nocturneSunken,
-          borderRadius: BorderRadius.circular(height >= 30 ? 7 : 6),
+          borderRadius: BorderRadius.circular(height >= 30 ? 6 : 5),
         ),
         child: Padding(
           padding: const EdgeInsets.all(_pad),

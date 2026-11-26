@@ -43,10 +43,12 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     
     self.setFrame(NSRect(origin: windowOrigin, size: windowSize), display: true)
     
-    // Window appearance settings
-    self.titlebarAppearsTransparent = false
-    self.titleVisibility = .visible
-    self.title = "Quick Cap"
+    // Unified title bar: Flutter draws into the title-bar strip (traffic
+    // lights stay). Dart pads content left so controls clear the buttons.
+    self.styleMask.insert(.fullSizeContentView)
+    self.titlebarAppearsTransparent = true
+    self.titleVisibility = .hidden
+    self.title = "FloFile Beta"
     self.isMovableByWindowBackground = false
     
     // Enforce minimum supported resolution for the app UI.
@@ -158,15 +160,24 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     )
     windowControlChannel = channel
     channel.setMethodCallHandler { [weak self] call, result in
+      guard let self else {
+        result(FlutterError(code: "window_unavailable", message: nil, details: nil))
+        return
+      }
+
+      if call.method == "startWindowDrag" {
+        if let event = NSApp.currentEvent {
+          self.performDrag(with: event)
+        }
+        result(nil)
+        return
+      }
+
       guard call.method == "setContentSize",
             let args = call.arguments as? [String: Any],
             let width = (args["width"] as? NSNumber)?.doubleValue,
             let height = (args["height"] as? NSNumber)?.doubleValue else {
         result(FlutterMethodNotImplemented)
-        return
-      }
-      guard let self else {
-        result(FlutterError(code: "window_unavailable", message: nil, details: nil))
         return
       }
 

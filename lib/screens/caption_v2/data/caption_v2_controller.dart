@@ -555,8 +555,8 @@ class CaptionV2Controller extends ChangeNotifier {
   /// False keeps categories. True lists every verb once, A–Z.
   bool verbListAll = false;
 
-  /// Verb Index text size: 0→12 / 1→14 / 2→16.
-  int verbIndexFontStep = 1;
+  /// Verb Index type size in px. Manual A/A moves by 1. Fit uses 0.1px.
+  double verbIndexFontSize = 13;
 
   /// Verb Index density: 0 compact / 1 cozy / 2 comfortable.
   int verbIndexDensity = 1;
@@ -591,10 +591,9 @@ class CaptionV2Controller extends ChangeNotifier {
   static const int verbFontStepMin = -6;
   static const int verbFontStepMax = 12;
 
-  static const List<double> verbIndexFontSizes = [12, 14, 16];
-
-  double get verbIndexFontSize =>
-      verbIndexFontSizes[verbIndexFontStep.clamp(0, 2)];
+  /// Verb Index type range. Manual clicks step by 1px inside it.
+  static const double verbIndexFontSizeMin = 10;
+  static const double verbIndexFontSizeMax = 24;
 
   double get verbFontScale =>
       1 + verbFontStep * (verbFontStepPx / verbFontBasePx);
@@ -1625,15 +1624,16 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   Future<void> nudgeVerbIndexFont(int delta) async {
-    await setVerbIndexFontStep(verbIndexFontStep + delta);
+    await setVerbIndexFontSize(verbIndexFontSize + delta);
   }
 
-  Future<void> setVerbIndexFontStep(int step) async {
-    final next = step.clamp(0, 2);
-    if (next == verbIndexFontStep) return;
-    verbIndexFontStep = next;
+  Future<void> setVerbIndexFontSize(double size) async {
+    final clamped = size.clamp(verbIndexFontSizeMin, verbIndexFontSizeMax);
+    final next = (clamped * 10).round() / 10;
+    if ((next - verbIndexFontSize).abs() < 0.001) return;
+    verbIndexFontSize = next;
     notifyListeners();
-    await _prefs?.saveVerbIndexFontStep(next);
+    await _prefs?.saveVerbIndexFontSize(next);
   }
 
   Future<void> setVerbIndexDensity(int value) async {
@@ -3415,7 +3415,7 @@ class CaptionV2Controller extends ChangeNotifier {
     verbListAll = await _prefs!.getVerbListAll();
     verbFontStep = (await _prefs!.getVerbFontStep())
         .clamp(verbFontStepMin, verbFontStepMax);
-    verbIndexFontStep = await _prefs!.getVerbIndexFontStep();
+    verbIndexFontSize = await _prefs!.getVerbIndexFontSize();
     verbIndexDensity = await _prefs!.getVerbIndexDensity();
     verbIndexSortByCategory =
         (await _prefs!.getVerbIndexSort()) == 'category';

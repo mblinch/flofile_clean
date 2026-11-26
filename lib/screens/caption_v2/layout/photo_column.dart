@@ -2889,7 +2889,7 @@ class _ThumbnailToolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     final iconOnly = MediaQuery.sizeOf(context).width < 1100;
     return Container(
-      padding: const EdgeInsets.fromLTRB(8, 8, 6, 8),
+      padding: const EdgeInsets.fromLTRB(8, 5, 6, 5),
       child: Row(
         children: [
           _ThumbnailMenuTitle(label: 'Sort:', tokens: tokens),
@@ -2980,14 +2980,14 @@ class _ThumbnailMenuButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final button = InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(7),
+      borderRadius: BorderRadius.circular(6),
       child: Container(
-        height: 30,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
+        height: 24,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: tokens.sunken,
-          borderRadius: BorderRadius.circular(7),
+          borderRadius: BorderRadius.circular(6),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
