@@ -463,9 +463,13 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar>
                       ? Colors.transparent
                       : const Color(0xFF1E242A),
                   borderRadius: BorderRadius.circular(8),
-                  border: widget.embedded
-                      ? null
-                      : Border.all(color: borderColor),
+                  // Keep a 1px border when embedded (transparent) so activating
+                  // Firebar does not shrink this row under the shared shell.
+                  border: Border.all(
+                    color: widget.embedded
+                        ? Colors.transparent
+                        : borderColor,
+                  ),
                 ),
                 child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,

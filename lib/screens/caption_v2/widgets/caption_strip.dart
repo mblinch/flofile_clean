@@ -462,21 +462,34 @@ class _FirebarPeriodShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Overlay the orange ring so activating Firebar does not grow past the
+    // idle two-box footprint (period + Firebar).
     final shell = AnimatedContainer(
       key: shellKey,
       duration: const Duration(milliseconds: 150),
-      padding: active ? const EdgeInsets.fromLTRB(4, 4, 4, 4) : EdgeInsets.zero,
       decoration: BoxDecoration(
         color: active ? const Color(0xFF1E242A) : Colors.transparent,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: active
-              ? FfTokens.firebar.withValues(alpha: 0.7)
-              : Colors.transparent,
-          width: active ? 1 : 0,
-        ),
       ),
-      child: child,
+      child: Stack(
+        children: [
+          child,
+          if (active)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: FfTokens.firebar.withValues(alpha: 0.7),
+                      width: 1,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
     if (!active) return shell;
     return TapRegion(
