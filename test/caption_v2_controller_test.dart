@@ -1948,6 +1948,30 @@ void main() {
     expect(highlights.first.toLowerCase(), contains('matthews'));
   });
 
+  test('Firebar chips and caption fills stay off until Firebar opens', () {
+    final controller = CaptionV2Controller()
+      ..homeTeam = 'Toronto Blue Jays'
+      ..awayTeam = 'New York Yankees';
+    controller.selectPlayer(player('Auston Matthews', '34'), isHome: true);
+    controller.selectVerb('Single');
+
+    expect(controller.searchOpen, isFalse);
+    expect(controller.firebarCommitted, isEmpty);
+    expect(controller.firebarInsertedHighlights, isEmpty);
+    expect(controller.firebarInsertedVerbHighlights, isEmpty);
+    expect(
+      controller.captionProvenanceSpans.where((s) => s.background != null),
+      isEmpty,
+    );
+
+    controller.setSearchOpen(true);
+    expect(controller.firebarCommitted, isNotEmpty);
+    expect(
+      controller.captionProvenanceSpans.where((s) => s.background != null),
+      isNotEmpty,
+    );
+  });
+
   test('save with a player and no verb is refused', () async {
     final writer = _FakeCaptionWriter({'/one.jpg'});
     final controller = CaptionV2Controller(writer: writer)

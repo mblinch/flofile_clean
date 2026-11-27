@@ -1508,8 +1508,10 @@ class CaptionV2Controller extends ChangeNotifier {
       );
     }
 
-    final nameFill =
-        manualCaptionOverride == null ? captionPlayerHighlight : null;
+    // Colored entry fills are Firebar-only; tips still attach without a fill.
+    final nameFill = searchOpen && manualCaptionOverride == null
+        ? captionPlayerHighlight
+        : null;
     // One span for the whole subject clause ("Name #29 of the Team"), so the
     // fill is continuous through the jersey and "of the" instead of stopping
     // after the name.
@@ -1556,8 +1558,9 @@ class CaptionV2Controller extends ChangeNotifier {
       }
     }
 
-    final verbFill =
-        manualCaptionOverride == null ? captionVerbHighlight : null;
+    final verbFill = searchOpen && manualCaptionOverride == null
+        ? captionVerbHighlight
+        : null;
     if (customVerbPhrase.trim().isNotEmpty) {
       add(
         customVerbPhrase,
@@ -6239,6 +6242,12 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   void _syncFirebarToSelection({bool includeVerbs = true}) {
+    // Chips only exist while Firebar is open; board picks alone must not
+    // leave Firebar "entries" visible in the idle bar.
+    if (!searchOpen) {
+      _firebarCommitted.clear();
+      return;
+    }
     _firebarCommitted.removeWhere(
       (item) =>
           item.kind == FirebarResultKind.player ||
@@ -11763,20 +11772,24 @@ class CaptionV2Controller extends ChangeNotifier {
     }
     // Pinned verb alone waits for a player; a pinned player starts the caption.
     captionSelectionStarted = selectedPlayers.isNotEmpty;
-    _firebarCommitted
-        .removeWhere((item) => item.kind == FirebarResultKind.player);
-    if (pinnedPlayer != null) {
-      final playerChip = FirebarResult.player(
-        player: pinnedPlayer!.player,
-        isHome: pinnedPlayer!.isHome,
-      );
-      if (!_firebarCommitted.any((item) => item.key == playerChip.key)) {
-        _firebarCommitted.add(playerChip);
+    // Never park Firebar chips on photo land — only after Firebar is opened.
+    if (searchOpen) {
+      _firebarCommitted
+          .removeWhere((item) => item.kind == FirebarResultKind.player);
+      if (pinnedPlayer != null) {
+        final playerChip = FirebarResult.player(
+          player: pinnedPlayer!.player,
+          isHome: pinnedPlayer!.isHome,
+        );
+        if (!_firebarCommitted.any((item) => item.key == playerChip.key)) {
+          _firebarCommitted.add(playerChip);
+        }
       }
+      _firebarCommitted
+          .removeWhere((item) => item.kind == FirebarResultKind.verb);
+    } else {
+      _firebarCommitted.clear();
     }
-    // Never park verbs in Firebar on photo land — only after Firebar is opened.
-    _firebarCommitted
-        .removeWhere((item) => item.kind == FirebarResultKind.verb);
     if (pinnedVerb != null) {
       // A pinned favorite always comes back on the Favorites panel, even if
       // the user was browsing another category when they saved.

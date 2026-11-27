@@ -498,8 +498,9 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar>
                 Expanded(
                   child: Row(
                     children: [
-                      // Keep prior chips visible while H/V (or other) choices show.
-                      if (controller.firebarCommitted.isNotEmpty) ...[
+                      // Chips only while Firebar is armed (incl. H/V choices).
+                      if (active &&
+                          controller.firebarCommitted.isNotEmpty) ...[
                         Flexible(
                           flex: 3,
                           child: SingleChildScrollView(
