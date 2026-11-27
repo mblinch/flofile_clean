@@ -12,9 +12,9 @@ const String kAppUpdateNotesTitle = 'What’s new';
 const String kAppUpdateNotesBody = '''
 Here is what changed in this version.
 
-Caption V2 layout polish: Verb Index, drum picker, caption strip, and transmit dock refinements.
+Caption history: larger list thumbs, a hover preview that enlarges the same crop above the thumb, and a wider Recent Captions menu.
 
-Players and verbs aA Fit option still sizes content to the box on screen.
+Caption V2 polish continues across Verb Index, drum picker, and the transmit dock.
 
 This message shows one time after you update. Tap OK or outside the box to close it.
-'''
+''';

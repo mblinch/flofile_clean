@@ -1,8 +1,9 @@
-/// Verb Index filter bar: All · Faves · Frequent.
+/// Verb Index filter: All · Faves.
+/// [mostUsed] is legacy (Frequent tab removed); treat as [all] in the UI.
 enum VerbIndexFilterMode {
   all,
   faves,
-  mostUsed, // Frequent in the UI
+  mostUsed,
 }
 
 extension VerbIndexFilterModeStorage on VerbIndexFilterMode {

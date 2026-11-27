@@ -114,6 +114,9 @@ class PreferencesService {
   static const String _keyFavoriteVerbs = 'favorite_verbs';
   static const String _keyFavoriteVerbsBaseball =
       'favorite_verbs_baseball'; // Sport-specific favorites
+  static const String _keyFavoritePlayers = 'favorite_players';
+  static const String _keyFavoritePlayersBaseball =
+      'favorite_players_baseball'; // Sport-specific player favorites
   /// One-time clear of favorites that were seeded from app defaults.
   static const String _keyClearedDefaultFavoriteVerbs =
       'cleared_default_favorite_verbs_v1';
@@ -175,8 +178,6 @@ class PreferencesService {
   static const double captionTextSizeMax = 26;
   /// Verb panel layout: false is category cascade, true is one A–Z list.
   static const String _keyVerbListAll = 'verb_list_all';
-  /// Verb Index density: 0 compact / 1 cozy / 2 comfortable.
-  static const String _keyVerbIndexDensity = 'verb_index_density';
   /// Verb Index sort: "letter" (default) or "category".
   static const String _keyVerbIndexSort = 'verb_index_sort';
   /// Verb Index font step: 0→13px / 1→15px / 2→17px.
@@ -189,11 +190,14 @@ class PreferencesService {
   static const String _keyVerbIndexFilterMode = 'verb_index_filter_mode';
   /// When true, Faves / Most used hide non-matches instead of greying them.
   static const String _keyVerbIndexHideOthers = 'verb_index_hide_others';
-  /// How many recent history verbs to show (1–10, default 3).
+  /// How many recent history verbs to show (1–5, default 5).
   static const String _keyVerbIndexHistoryLimit = 'verb_index_history_limit';
   static const String _keyVerbIndexShowHistory = 'verb_index_show_history';
   /// Last 10 picked verb keys (newest first), JSON array.
   static const String _keyVerbIndexHistory = 'verb_index_history';
+  /// Last 5 user-built captions for one image folder (newest first).
+  /// JSON: `{ "folder": "<normalized path>", "entries": [ ... ] }`.
+  static const String _keyCaptionHistory = 'caption_v2_caption_history';
   /// Per-sport map of verb key → usage count (synced via user Firebase prefs).
   static const String _keyVerbUsageCounts = 'verb_usage_counts';
   static const String _keySportDefaultPrefix = 'sport_default_'; // Per-sport "Set as default" bundle
@@ -1188,6 +1192,39 @@ class PreferencesService {
     _afterLocalPreferencesChanged();
   }
 
+  // Favorite Players Preferences (sport-specific, user-chosen — syncs like verbs)
+  Future<Set<String>> getFavoritePlayers({String sport = 'baseball'}) async {
+    final prefs = await _getPrefs();
+    final key = _getFavoritePlayersKey(sport);
+    final playersJson = prefs.getString(key);
+    if (playersJson != null) {
+      try {
+        final List<dynamic> playersList = json.decode(playersJson);
+        return playersList.cast<String>().toSet();
+      } catch (e) {
+        print('Error parsing favorite players for $sport: $e');
+      }
+    }
+    return <String>{};
+  }
+
+  Future<void> saveFavoritePlayers(Set<String> players,
+      {String sport = 'baseball'}) async {
+    final prefs = await _getPrefs();
+    final key = _getFavoritePlayersKey(sport);
+    await prefs.setString(key, json.encode(players.toList()));
+    _afterLocalPreferencesChanged();
+  }
+
+  String _getFavoritePlayersKey(String sport) {
+    switch (sport.toLowerCase()) {
+      case 'baseball':
+        return _keyFavoritePlayersBaseball;
+      default:
+        return '${_keyFavoritePlayers}_${sport.toLowerCase()}';
+    }
+  }
+
   // Favorite Teams Preferences (sport-specific)
   Future<Set<String>> getFavoriteTeams({String sport = 'baseball'}) async {
     final prefs = await _getPrefs();
@@ -2129,17 +2166,6 @@ class PreferencesService {
     _afterLocalPreferencesChanged();
   }
 
-  Future<int> getVerbIndexDensity() async {
-    final prefs = await _getPrefs();
-    return (prefs.getInt(_keyVerbIndexDensity) ?? 1).clamp(0, 2);
-  }
-
-  Future<void> saveVerbIndexDensity(int value) async {
-    final prefs = await _getPrefs();
-    await prefs.setInt(_keyVerbIndexDensity, value.clamp(0, 2));
-    _afterLocalPreferencesChanged();
-  }
-
   Future<String> getVerbIndexSort() async {
     final prefs = await _getPrefs();
     // Letter (A–W) is the polish default; category remains optional.
@@ -2165,14 +2191,15 @@ class PreferencesService {
   Future<double> getVerbIndexFontSize() async {
     final prefs = await _getPrefs();
     final exact = prefs.getDouble(_keyVerbIndexFontSize);
-    if (exact != null) return exact.clamp(10.0, 24.0);
+    if (exact != null) return exact.clamp(12.0, 18.0);
     final step = await getVerbIndexFontStep();
-    return (10 + step).clamp(10, 24).toDouble();
+    // Legacy step table was 10–24; map into 12–18 (default 14).
+    return (10 + step).clamp(12, 18).toDouble();
   }
 
   Future<void> saveVerbIndexFontSize(double size) async {
     final prefs = await _getPrefs();
-    await prefs.setDouble(_keyVerbIndexFontSize, size.clamp(10.0, 24.0));
+    await prefs.setDouble(_keyVerbIndexFontSize, size.clamp(12.0, 18.0));
     _afterLocalPreferencesChanged();
   }
 
@@ -2257,13 +2284,13 @@ class PreferencesService {
   Future<int> getVerbIndexHistoryLimit() async {
     final prefs = await _getPrefs();
     final raw = prefs.getInt(_keyVerbIndexHistoryLimit);
-    if (raw == null) return 3;
-    return raw.clamp(1, 10);
+    if (raw == null) return 5;
+    return raw.clamp(1, 5);
   }
 
   Future<void> saveVerbIndexHistoryLimit(int value) async {
     final prefs = await _getPrefs();
-    await prefs.setInt(_keyVerbIndexHistoryLimit, value.clamp(1, 10));
+    await prefs.setInt(_keyVerbIndexHistoryLimit, value.clamp(1, 5));
     _afterLocalPreferencesChanged();
   }
 
@@ -2297,6 +2324,64 @@ class PreferencesService {
   Future<void> saveVerbIndexHistory(List<String> keys) async {
     final prefs = await _getPrefs();
     await prefs.setString(_keyVerbIndexHistory, json.encode(keys));
+    _afterLocalPreferencesChanged();
+  }
+
+  /// Caption history tied to [folderPath]. Empty / missing folder → no match.
+  Future<({String? folder, List<Map<String, dynamic>> entries})>
+      getCaptionHistory() async {
+    final prefs = await _getPrefs();
+    final raw = prefs.getString(_keyCaptionHistory);
+    if (raw == null || raw.isEmpty) {
+      return (folder: null, entries: const <Map<String, dynamic>>[]);
+    }
+    try {
+      final decoded = json.decode(raw);
+      // Legacy: bare list with no folder — treat as unmatched so a new session
+      // starts empty instead of leaking captions across shoots.
+      if (decoded is List) {
+        return (folder: null, entries: const <Map<String, dynamic>>[]);
+      }
+      if (decoded is! Map) {
+        return (folder: null, entries: const <Map<String, dynamic>>[]);
+      }
+      final map = Map<String, dynamic>.from(
+        decoded.map((key, value) => MapEntry(key.toString(), value)),
+      );
+      final folder = (map['folder'] ?? '').toString().trim();
+      final rawEntries = map['entries'];
+      if (rawEntries is! List) {
+        return (
+          folder: folder.isEmpty ? null : folder,
+          entries: const <Map<String, dynamic>>[],
+        );
+      }
+      return (
+        folder: folder.isEmpty ? null : folder,
+        entries: [
+          for (final item in rawEntries)
+            if (item is Map)
+              Map<String, dynamic>.from(
+                item.map((key, value) => MapEntry(key.toString(), value)),
+              ),
+        ],
+      );
+    } catch (_) {
+      return (folder: null, entries: const <Map<String, dynamic>>[]);
+    }
+  }
+
+  Future<void> saveCaptionHistory(
+    String folderPath,
+    List<Map<String, dynamic>> entries,
+  ) async {
+    final folder = folderPath.trim();
+    if (folder.isEmpty) return;
+    final prefs = await _getPrefs();
+    await prefs.setString(
+      _keyCaptionHistory,
+      json.encode({'folder': folder, 'entries': entries}),
+    );
     _afterLocalPreferencesChanged();
   }
 
@@ -2623,6 +2708,7 @@ class PreferencesService {
         'categoryOrder': await getCategoryOrder(sport: sport),
         'verbOrder': await getVerbOrder(sport: sport),
         'favoriteVerbs': (await getFavoriteVerbs(sport: sport)).toList(),
+        'favoritePlayers': (await getFavoritePlayers(sport: sport)).toList(),
         'favoriteTeams': (await getFavoriteTeams(sport: sport)).toList(),
         'customVerbWordings': await getCustomVerbWordings(sport: sport),
         'verbOverrides': await getVerbOverrides(sport: sport),
@@ -2650,6 +2736,7 @@ class PreferencesService {
       'verbUsageCounts': await getVerbUsageCounts(),
       'categoryOrder': await getCategoryOrder(),
       'favoriteVerbs': (await getFavoriteVerbs()).toList(),
+      'favoritePlayers': (await getFavoritePlayers()).toList(),
       'favoriteTeams': (await getFavoriteTeams()).toList(),
       'syncServerUrl': await getSyncServerUrl(),
       'syncAccountId': await getSyncAccountId(),
@@ -2755,6 +2842,12 @@ class PreferencesService {
         }
         if (data.containsKey('favoriteVerbs')) {
           await saveFavoriteVerbs(Set<String>.from(data['favoriteVerbs']), sport: sport);
+        }
+        if (data.containsKey('favoritePlayers')) {
+          await saveFavoritePlayers(
+            Set<String>.from(data['favoritePlayers']),
+            sport: sport,
+          );
         }
         if (data.containsKey('favoriteTeams')) {
           await saveFavoriteTeams(Set<String>.from(data['favoriteTeams']), sport: sport);
@@ -2872,6 +2965,11 @@ class PreferencesService {
     }
     if (preferences.containsKey('favoriteVerbs')) {
       await saveFavoriteVerbs(Set<String>.from(preferences['favoriteVerbs']));
+    }
+    if (preferences.containsKey('favoritePlayers')) {
+      await saveFavoritePlayers(
+        Set<String>.from(preferences['favoritePlayers']),
+      );
     }
     if (preferences.containsKey('favoriteTeams')) {
       await saveFavoriteTeams(Set<String>.from(preferences['favoriteTeams']));
@@ -3960,6 +4058,7 @@ class PreferencesService {
         'verbOrder': await getVerbOrder(sport: sport),
         // Personal — export for backup/sync only; publish paths strip these.
         'favoriteVerbs': (await getFavoriteVerbs(sport: sport)).toList(),
+        'favoritePlayers': (await getFavoritePlayers(sport: sport)).toList(),
         'favoriteTeams': (await getFavoriteTeams(sport: sport)).toList(),
         'customVerbWordings': await getCustomVerbWordings(sport: sport),
         'verbOverrides': await getVerbOverrides(sport: sport),

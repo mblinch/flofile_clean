@@ -1,21 +1,18 @@
+import 'dart:math' as math;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../caption_style/verb_index_filter_mode.dart';
-import '../../../flo_layout_constants.dart';
 import '../../../services/mlb_api_service.dart';
 import '../../../services/mac_spell_check_service.dart';
 import '../../../theme/ff_tokens.dart';
 import '../data/caption_v2_controller.dart';
 import '../data/effective_verb_catalog.dart';
-import '../widgets/aa_text_size_control.dart';
 import '../widgets/base_row.dart';
 import '../widgets/celebration_dropdown.dart';
 import '../widgets/custom_name_entry.dart';
-import '../widgets/pinned_player_bar.dart';
-import '../widgets/team_players_button.dart';
-import '../widgets/quiet_filter_field.dart';
 import '../widgets/rbi_row.dart';
 import '../widgets/verb_tile.dart';
 import 'caption_v2_verb_editor.dart';
@@ -78,14 +75,21 @@ class _DrumPickerState extends State<DrumPicker> {
   String? _homeLetterFilter;
   String? _awayLetterFilter;
   bool _numberMode = true;
-  /// Squares across each numbers-mode row. Fewer columns means larger squares.
-  late int _numberColumns;
-  bool? _wasCompactForNumberFit;
+  /// Grid columns — polish mock is fixed at 4; A/A adjusts tile height instead.
+  static const int _gridColumns = 4;
+  double _tileHeight = 44;
+  double _listRowHeight = 26;
+  double _jerseyFontSize = 20;
+  bool _groupByPosition = false;
+  bool _favoritesFilterOn = false;
+  final Set<String> _favoritePlayerKeys = {};
   bool _verbAccordionCollapsed = false;
   int? _appliedCascadeLimit;
   final Set<String> _extraOpenVerbCategories = {};
   final _homeFilter = TextEditingController();
   final _awayFilter = TextEditingController();
+  final _homeFilterFocus = FocusNode(debugLabel: 'Drum home roster filter');
+  final _awayFilterFocus = FocusNode(debugLabel: 'Drum away roster filter');
   final _verbFilter = TextEditingController();
   final _verbFilterFocus = FocusNode(debugLabel: 'Drum verb filter');
   final _verbIndexKey = GlobalKey<VerbIndexPanelState>();
@@ -96,6 +100,11 @@ class _DrumPickerState extends State<DrumPicker> {
   final _customVerbFocusNode = FocusNode(debugLabel: 'Drum custom verb');
   int _seenPlayerSearchClearGeneration = -1;
   int _verbMatchCount = 0;
+  Size? _lastVerbLaneSize;
+  bool _verbFitScheduled = false;
+  Size? _lastWindowSizeForPlayerFit;
+  Size? _lastRosterBodySize;
+  bool _playerFitScheduled = false;
 
   CaptionV2Controller get controller => widget.controller;
 
@@ -131,8 +140,6 @@ class _DrumPickerState extends State<DrumPicker> {
   @override
   void initState() {
     super.initState();
-    _numberColumns = widget.numberColumns ??
-        (widget.compactMobile ? 5 : _NumberRoster.defaultColumns);
     controller.addListener(_onController);
     _seenPlayerSearchClearGeneration = controller.playerSearchClearGeneration;
     _customVerbController.text = controller.customVerbPhrase;
@@ -146,11 +153,26 @@ class _DrumPickerState extends State<DrumPicker> {
     controller.removeListener(_onController);
     _homeFilter.dispose();
     _awayFilter.dispose();
+    _homeFilterFocus.dispose();
+    _awayFilterFocus.dispose();
     _customVerbController.dispose();
     _verbFilter.dispose();
     _verbFilterFocus.dispose();
     _customVerbFocusNode.dispose();
     super.dispose();
+  }
+
+  FocusNode _filterFocusFor(DrumLane lane) =>
+      lane == DrumLane.home ? _homeFilterFocus : _awayFilterFocus;
+
+  bool _isPlayerFavorite(Player player, {required bool isHome}) =>
+      controller.isPlayerFavorite(player, isHome: isHome);
+
+  Future<void> _togglePlayerFavorite(
+    Player player, {
+    required bool isHome,
+  }) {
+    return controller.togglePlayerFavorite(player, isHome: isHome);
   }
 
   void _onController() {
@@ -389,18 +411,26 @@ class _DrumPickerState extends State<DrumPicker> {
     return visible;
   }
 
-  void _stepNumberColumns(int delta) {
+  static const double _minTileHeight = 42;
+  static const double _maxTileHeight = 64;
+
+  void _stepTileHeight(int delta) {
     setState(() {
-      _numberColumns = (_numberColumns + delta).clamp(
-        _NumberRoster.minColumns,
-        _NumberRoster.maxColumns,
-      );
+      _tileHeight =
+          (_tileHeight + delta * 2).clamp(_minTileHeight, _maxTileHeight);
+      _jerseyFontSize = (_tileHeight * 0.48).clamp(17.0, 26.0);
     });
   }
 
-  /// Pick the fewest columns (largest squares) that still fit the taller
-  /// roster into the on-screen player box.
-  void _fitNumberColumns() {
+  void _stepListRowHeight(int delta) {
+    setState(() {
+      _listRowHeight = (_listRowHeight + delta * 2).clamp(20.0, 34.0);
+    });
+  }
+
+  /// Roster Polish autofit: grow/shrink tile or list-row height to fill the
+  /// body without scrolling (grid cols stay at 4).
+  void _fitRosterMetrics() {
     final homeBox =
         _homeRosterBodyKey.currentContext?.findRenderObject() as RenderBox?;
     final awayBox =
@@ -417,22 +447,58 @@ class _DrumPickerState extends State<DrumPicker> {
     final players = homePlayers.length >= awayPlayers.length
         ? homePlayers
         : awayPlayers;
-    final shortest = MediaQuery.sizeOf(context).shortestSide;
-    final scale = (shortest / 1000.0).clamp(0.62, 1.0);
-    final best = _NumberRoster.bestColumnsFor(
-      width: box.size.width,
-      height: box.size.height,
+    // Players/Team/Teammates under the boxes (26 + top gap + bottom pad).
+    const subjectDockH = 40.0;
+    final avail = box.size.height - subjectDockH;
+    if (avail <= 0 || players.isEmpty) return;
+
+    if (_numberMode) {
+      final cols = widget.numberColumns ??
+          (widget.compactMobile ? 5 : _gridColumns);
+      final tileRows = _RosterPolish.gridTileRows(
+        players: players,
+        columns: cols,
+        groupByPosition: _groupByPosition,
+        includeAddPlayer: !_groupByPosition,
+      );
+      if (tileRows <= 0) return;
+      // Position headers XOR range labels — never both.
+      final chrome = _groupByPosition
+          ? 2 * 16.0 + (tileRows - 1) * 3.0
+          : tileRows * 12.0 + (tileRows - 1) * 3.0;
+      // Prefer taller tiles; scroll rather than going pancake-flat.
+      final th =
+          ((avail - chrome) / tileRows).clamp(_minTileHeight, _maxTileHeight);
+      final nf = (th * 0.48).clamp(17.0, 26.0);
+      if ((th - _tileHeight).abs() < 0.5 &&
+          (nf - _jerseyFontSize).abs() < 0.5) {
+        return;
+      }
+      setState(() {
+        _tileHeight = th;
+        _jerseyFontSize = nf;
+      });
+      return;
+    }
+
+    final sections = _RosterPolish.sections(
       players: players,
-      includeOtherRow: true,
-      showSubjects: true,
-      scale: scale,
+      groupByPosition: _groupByPosition,
     );
-    if (best == _numberColumns) return;
-    setState(() => _numberColumns = best);
+    final rowCount = players.length;
+    if (rowCount <= 0) return;
+    // Section titles + inter-section gap.
+    const headerH = 16.0;
+    const sectionGap = 4.0;
+    final chrome = sections.length * headerH +
+        (sections.length > 1 ? (sections.length - 1) * sectionGap : 0);
+    final rh = ((avail - chrome) / rowCount).clamp(20.0, 34.0);
+    if ((rh - _listRowHeight).abs() < 0.5) return;
+    setState(() => _listRowHeight = rh);
   }
 
-  void _fitNumberColumnsWhenReady({int attempt = 0}) {
-    if (!_numberMode || !mounted) return;
+  void _fitRosterWhenReady({int attempt = 0}) {
+    if (!mounted) return;
     final homeBox =
         _homeRosterBodyKey.currentContext?.findRenderObject() as RenderBox?;
     final awayBox =
@@ -442,11 +508,32 @@ class _DrumPickerState extends State<DrumPicker> {
     if (!ready) {
       if (attempt >= 8) return;
       WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _fitNumberColumnsWhenReady(attempt: attempt + 1),
+        (_) => _fitRosterWhenReady(attempt: attempt + 1),
       );
       return;
     }
-    _fitNumberColumns();
+    _fitRosterMetrics();
+  }
+
+  void _schedulePlayerFit() {
+    if (_playerFitScheduled) return;
+    _playerFitScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _playerFitScheduled = false;
+      if (!mounted) return;
+      _fitRosterWhenReady();
+    });
+  }
+
+  void _onRosterBodySizeMaybeChanged(Size size) {
+    if (_lastRosterBodySize != null &&
+        (_lastRosterBodySize!.width - size.width).abs() < 0.5 &&
+        (_lastRosterBodySize!.height - size.height).abs() < 0.5) {
+      return;
+    }
+    final first = _lastRosterBodySize == null;
+    _lastRosterBodySize = size;
+    if (!first) _schedulePlayerFit();
   }
 
   Future<void> _fitVerbText() async {
@@ -465,15 +552,7 @@ class _DrumPickerState extends State<DrumPicker> {
     final available = box.size.height;
     if (available <= 0) return;
 
-    final dens = floVerbIndexDensity(
-      MediaQuery.sizeOf(context),
-      controller.verbIndexDensity,
-    );
-    final heightScale = switch (dens) {
-      0 => 0.88,
-      2 => 1.18,
-      _ => 1.0,
-    };
+    const heightScale = 1.0; // cozy
     final searching = _verbFilter.text.trim().isNotEmpty;
     final applyModeFilter = !searching;
     final byCategory = controller.verbIndexSortByCategory;
@@ -725,15 +804,13 @@ class _DrumPickerState extends State<DrumPicker> {
     if (controller.singleTeamMode && _armedLane == DrumLane.away) {
       _armedLane = DrumLane.verbs;
     }
-    final compact = floWindowIsCompact(MediaQuery.sizeOf(context));
-    final firstCompactPass = _wasCompactForNumberFit == null && compact;
-    final compactChanged =
-        _wasCompactForNumberFit != null && _wasCompactForNumberFit != compact;
-    _wasCompactForNumberFit = compact;
-    if (_numberMode && (firstCompactPass || compactChanged)) {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _fitNumberColumnsWhenReady(),
-      );
+    final window = MediaQuery.sizeOf(context);
+    final windowChanged =
+        _lastWindowSizeForPlayerFit != null && _lastWindowSizeForPlayerFit != window;
+    final firstWindow = _lastWindowSizeForPlayerFit == null;
+    _lastWindowSizeForPlayerFit = window;
+    if (firstWindow || windowChanged) {
+      _schedulePlayerFit();
     }
     final tokens = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final lanes = _laneChildren(tokens);
@@ -767,12 +844,12 @@ class _DrumPickerState extends State<DrumPicker> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Expanded(child: lanes.first),
-                          const SizedBox(width: 10),
+                          const SizedBox(width: 6),
                           Expanded(child: lanes.last),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 6),
                     SizedBox(height: 280, child: lanes[1]),
                   ],
                 );
@@ -786,7 +863,7 @@ class _DrumPickerState extends State<DrumPicker> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               for (var i = 0; i < lanes.length; i++) ...[
-                if (i > 0) const SizedBox(width: 8),
+                if (i > 0) const SizedBox(width: 6),
                 Expanded(
                   // 5.5 : 5 : 5 — flex is int-only, so 11 : 10 : 10.
                   flex: i == 1 ? 11 : 10,
@@ -827,81 +904,53 @@ class _DrumPickerState extends State<DrumPicker> {
   }
 
   Widget _verbTopLine(FfTokens tokens) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Match team PinnedPlayerBar height (28) so columns align.
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: SizedBox(
-            height: 27,
-            child: Row(
-              children: [
-                Expanded(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 118),
-                    child: QuietFilterField(
-                      controller: _verbFilter,
-                      focusNode: _verbFilterFocus,
-                      tokens: tokens,
-                      height: 27,
-                      hint: 'Search',
-                      fillColor: FfTokens.nocturneSunken,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w400,
-                      borderRadius: 8,
-                      iconSize: 14,
-                      iconColor: FfTokens.nocturneT3,
-                      showFocusBorder: true,
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 10),
-                      trailing: _verbMatchCount > 0
-                          ? Text(
-                              '$_verbMatchCount',
-                              style: const TextStyle(
-                                fontFamily: FfTokens.fontFamily,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: FfTokens.nocturneT3,
-                                fontFeatures: [FontFeature.tabularFigures()],
-                              ),
-                            )
-                          : null,
-                      onChanged: (_) {
-                        final query = _verbFilter.text.trim();
-                        setState(() {
-                          if (controller.verbListAll) {
-                            _verbMatchCount =
-                                query.isEmpty ? 0 : _verbs.length;
-                          }
-                        });
-                      },
-                      onKeyEvent: (node, event) {
-                        if (controller.verbListAll) {
-                          return _onAzListFilterKey(event);
-                        }
-                        final panel = _verbIndexKey.currentState;
-                        if (panel == null) return KeyEventResult.ignored;
-                        return panel.onFilterKey(node, event);
-                      },
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                VerbMenuTools(
-                  controller: controller,
-                  tokens: tokens,
-                  onFit: () {
-                    _fitVerbText();
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
+    return VerbIndexTopBar(
+      controller: controller,
+      filterController: _verbFilter,
+      filterFocusNode: _verbFilterFocus,
+      tokens: tokens,
+      onFilterChanged: (_) {
+        final query = _verbFilter.text.trim();
+        setState(() {
+          if (controller.verbListAll) {
+            _verbMatchCount = query.isEmpty ? 0 : _verbs.length;
+          }
+        });
+      },
+      onFilterKey: (node, event) {
+        if (controller.verbListAll) {
+          return _onAzListFilterKey(event);
+        }
+        final panel = _verbIndexKey.currentState;
+        if (panel == null) return KeyEventResult.ignored;
+        return panel.onFilterKey(node, event);
+      },
     );
+  }
+
+  int get _effectiveGridColumns =>
+      widget.numberColumns ?? (widget.compactMobile ? 5 : _gridColumns);
+
+  Future<void> _addRosterPlayer({required bool isHome}) async {
+    final result = await showCustomNameEntryDialog(
+      context: context,
+      teamLabel: isHome ? controller.homeAbbr : controller.awayAbbr,
+      title: 'Add player',
+      confirmLabel: 'Add',
+    );
+    if (result == null || !mounted) return;
+    final error = controller.addCustomPlayer(
+      isHome: isHome,
+      fullName: result.name,
+      jerseyNumber: result.jersey,
+    );
+    if (error != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error), duration: const Duration(seconds: 2)),
+      );
+      return;
+    }
+    _schedulePlayerFit();
   }
 
   Widget _rosterLane({
@@ -915,16 +964,10 @@ class _DrumPickerState extends State<DrumPicker> {
     final letterFilter =
         lane == DrumLane.home ? _homeLetterFilter : _awayLetterFilter;
     final visiblePlayers = _visiblePlayersFor(lane);
-    final selectedPlayer = players.isEmpty
-        ? null
-        : players[selectedIndex.clamp(0, players.length - 1)];
-    final visibleSelectedIndex = selectedPlayer == null
-        ? 0
-        : visiblePlayers.indexWhere(
-            (player) =>
-                player.fullName == selectedPlayer.fullName &&
-                player.jerseyNumber == selectedPlayer.jerseyNumber,
-          );
+    final pinnedHit = controller.pinnedPlayer;
+    final pinnedForLane = pinnedHit != null && pinnedHit.isHome == isHome
+        ? pinnedHit.player
+        : null;
 
     int rosterIndexOf(Player player) => players.indexWhere(
           (item) =>
@@ -932,143 +975,171 @@ class _DrumPickerState extends State<DrumPicker> {
               item.jerseyNumber == player.jerseyNumber,
         );
 
+    Widget subjectDock() => _RosterSubjectDock(
+          controller: controller,
+          isHome: isHome,
+          tokens: tokens,
+        );
+
     Widget playerList() {
-      final names = !_numberMode;
       return Expanded(
         key: lane == DrumLane.home ? _homeRosterBodyKey : _awayRosterBodyKey,
-        child: visiblePlayers.isEmpty
-            ? Center(
-                child: Text(
-                  _filterFor(lane).text.trim().isNotEmpty ||
-                          letterFilter != null
-                      ? 'No match'
-                      : 'No players',
-                  style: tokens.metaStyle.copyWith(
-                    color: tokens.text.withValues(alpha: 0.34),
-                  ),
-                ),
-              )
-            : _numberMode
-                ? _NumberRoster(
-                    players: visiblePlayers,
-                    columns: _numberColumns,
-                    includeOtherRow: true,
-                    tokens: tokens,
-                    playersSubjectSelected: controller.teamPlayersIsHome ==
-                            isHome &&
-                        controller.teamSubjectKind == TeamSubjectKind.players,
-                    teamNameSubjectSelected: controller.teamPlayersIsHome ==
-                            isHome &&
-                        controller.teamSubjectKind == TeamSubjectKind.name,
-                    teammatesSubjectSelected:
-                        controller.withTeammatesIsHome == isHome,
-                    onPlayersSubject: () => controller.toggleTeamSubject(
-                      isHome: isHome,
-                      kind: TeamSubjectKind.players,
-                    ),
-                    onTeamNameSubject: () => controller.toggleTeamSubject(
-                      isHome: isHome,
-                      kind: TeamSubjectKind.name,
-                    ),
-                    onTeammatesSubject: () => controller.toggleTeamSubject(
-                      isHome: isHome,
-                      kind: TeamSubjectKind.teammates,
-                    ),
-                    isSelected: (player) => controller.isPlayerSelected(
-                      player,
-                      isHome: lane == DrumLane.home,
-                    ),
-                    onCommit: (player) =>
-                        _commit(lane, rosterIndexOf(player)),
-                    onPin: (player) => controller.togglePlayerPin(
-                      player,
-                      isHome: lane == DrumLane.home,
-                    ),
-                    onSecondaryTap: (player, position) => _editRosterPlayer(
-                      context,
-                      player: player,
-                      isHome: lane == DrumLane.home,
-                      position: position,
-                    ),
+        child: NotificationListener<SizeChangedLayoutNotification>(
+          onNotification: (_) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              final box = (lane == DrumLane.home
+                      ? _homeRosterBodyKey
+                      : _awayRosterBodyKey)
+                  .currentContext
+                  ?.findRenderObject() as RenderBox?;
+              if (box != null && box.hasSize) {
+                _onRosterBodySizeMaybeChanged(box.size);
+              }
+            });
+            return false;
+          },
+          child: SizeChangedLayoutNotifier(
+            child: visiblePlayers.isEmpty
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: Center(
+                          child: Text(
+                            _filterFor(lane).text.trim().isNotEmpty ||
+                                    letterFilter != null
+                                ? 'No match'
+                                : 'No players',
+                            style: tokens.metaStyle.copyWith(
+                              color: tokens.text.withValues(alpha: 0.34),
+                            ),
+                          ),
+                        ),
+                      ),
+                      subjectDock(),
+                    ],
                   )
-                : names &&
-                        widget.mode == DrumPickerMode.scroll &&
-                        letterFilter != null
-                ? _FilteredPlayerList(
-                    letter: letterFilter,
-                    players: visiblePlayers,
-                    tokens: tokens,
-                    nameFor: controller.playerListName,
-                    isPinned: (player) => controller.isPlayerPinned(
-                      player,
-                      isHome: lane == DrumLane.home,
-                    ),
-                    onBack: () => setState(() {
-                      if (lane == DrumLane.home) {
-                        _homeLetterFilter = null;
-                      } else {
-                        _awayLetterFilter = null;
-                      }
-                    }),
-                    onSelect: (player) => _commit(lane, rosterIndexOf(player)),
-                    onPin: (player) => controller.togglePlayerPin(
-                      player,
-                      isHome: lane == DrumLane.home,
-                    ),
-                    onGoogle: (player) => openPlayerGoogleSearch(
-                      fullName: player.fullName,
-                      sportId: controller.sport,
-                    ),
-                    onReport: (player) => _reportRosterPlayer(
-                      player: player,
-                      isHome: lane == DrumLane.home,
-                    ),
-                    onEdit: (player, position) => _editRosterPlayer(
-                      context,
-                      player: player,
-                      isHome: lane == DrumLane.home,
-                      position: position,
-                    ),
-                  )
-                : _HoverPlayerList(
-                        laneKey: lane.name,
+                : _numberMode
+                    ? _PolishNumberRoster(
                         players: visiblePlayers,
-                        selectedIndex:
-                            visibleSelectedIndex < 0 ? 0 : visibleSelectedIndex,
-                        armed: _armedLane == lane,
+                        columns: _effectiveGridColumns,
+                        tileHeight: _tileHeight,
+                        jerseyFontSize: _jerseyFontSize,
+                        groupByPosition: _groupByPosition,
                         tokens: tokens,
-                        nameFor: controller.playerListName,
+                        footer: subjectDock(),
+                        favoritesMode: _favoritesFilterOn,
+                        isFavorite: (player) => _isPlayerFavorite(
+                          player,
+                          isHome: isHome,
+                        ),
                         isSelected: (player) => controller.isPlayerSelected(
                           player,
-                          isHome: lane == DrumLane.home,
+                          isHome: isHome,
                         ),
                         isPinned: (player) => controller.isPlayerPinned(
                           player,
-                          isHome: lane == DrumLane.home,
+                          isHome: isHome,
                         ),
-                        onTarget: (index) => _setIndex(
-                            lane, rosterIndexOf(visiblePlayers[index])),
-                        onCommit: (index) =>
-                            _commit(lane, rosterIndexOf(visiblePlayers[index])),
+                        onCommit: (player) =>
+                            _commit(lane, rosterIndexOf(player)),
                         onPin: (player) => controller.togglePlayerPin(
                           player,
-                          isHome: lane == DrumLane.home,
+                          isHome: isHome,
                         ),
-                        onGoogle: (player) => openPlayerGoogleSearch(
-                          fullName: player.fullName,
-                          sportId: controller.sport,
-                        ),
-                        onReport: (player) => _reportRosterPlayer(
-                          player: player,
-                          isHome: lane == DrumLane.home,
-                        ),
-                        onEditPlayer: (player, position) => _editRosterPlayer(
+                        onSecondaryTap: (player, position) =>
+                            _editRosterPlayer(
                           context,
                           player: player,
-                          isHome: lane == DrumLane.home,
+                          isHome: isHome,
                           position: position,
                         ),
-                      ),
+                        onAddPlayer: _groupByPosition
+                            ? null
+                            : () => _addRosterPlayer(isHome: isHome),
+                      )
+                    : letterFilter != null &&
+                            widget.mode == DrumPickerMode.scroll
+                        ? _FilteredPlayerList(
+                            letter: letterFilter,
+                            players: visiblePlayers,
+                            tokens: tokens,
+                            nameFor: controller.playerListName,
+                            footer: subjectDock(),
+                            isPinned: (player) => controller.isPlayerPinned(
+                              player,
+                              isHome: isHome,
+                            ),
+                            onBack: () => setState(() {
+                              if (lane == DrumLane.home) {
+                                _homeLetterFilter = null;
+                              } else {
+                                _awayLetterFilter = null;
+                              }
+                            }),
+                            onSelect: (player) =>
+                                _commit(lane, rosterIndexOf(player)),
+                            onPin: (player) => controller.togglePlayerPin(
+                              player,
+                              isHome: isHome,
+                            ),
+                            onGoogle: (player) => openPlayerGoogleSearch(
+                              fullName: player.fullName,
+                              sportId: controller.sport,
+                            ),
+                            onReport: (player) => _reportRosterPlayer(
+                              player: player,
+                              isHome: isHome,
+                            ),
+                            onEdit: (player, position) => _editRosterPlayer(
+                              context,
+                              player: player,
+                              isHome: isHome,
+                              position: position,
+                            ),
+                          )
+                        : _PolishListRoster(
+                            players: visiblePlayers,
+                            rowHeight: _listRowHeight,
+                            groupByPosition: _groupByPosition,
+                            sortByNumber:
+                                controller.rosterSort == RosterSortMode.number,
+                            tokens: tokens,
+                            footer: subjectDock(),
+                            favoritesMode: _favoritesFilterOn,
+                            isFavorite: (player) => _isPlayerFavorite(
+                              player,
+                              isHome: isHome,
+                            ),
+                            isSelected: (player) =>
+                                controller.isPlayerSelected(
+                              player,
+                              isHome: isHome,
+                            ),
+                            isPinned: (player) => controller.isPlayerPinned(
+                              player,
+                              isHome: isHome,
+                            ),
+                            onCommit: (player) =>
+                                _commit(lane, rosterIndexOf(player)),
+                            onPin: (player) => controller.togglePlayerPin(
+                              player,
+                              isHome: isHome,
+                            ),
+                            onSecondaryTap: (player, position) =>
+                                _editRosterPlayer(
+                              context,
+                              player: player,
+                              isHome: isHome,
+                              position: position,
+                            ),
+                            onCycleSort: () {
+                              controller.cycleRosterSortField();
+                              _schedulePlayerFit();
+                            },
+                          ),
+          ),
+        ),
       );
     }
 
@@ -1100,81 +1171,64 @@ class _DrumPickerState extends State<DrumPicker> {
       },
     );
 
+    final textSizeValue = _numberMode
+        ? _jerseyFontSize.round()
+        : _listRowHeight.round();
+
     return Column(
       children: [
-        PinnedPlayerBar(
-          controller: controller,
-          isHome: isHome,
-          tokens: tokens,
-          height: 28,
-          leading: Text(
-            title.toUpperCase(),
-            style: TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontWeight: FontWeight.w800,
-              fontSize: 13,
-              letterSpacing: 0.5,
-              height: 1,
-              color: tokens.text,
-            ),
-          ),
-          filter: QuietFilterField(
-            key: ValueKey('drum-search-${lane.name}'),
-            controller: _filterFor(lane),
-            tokens: tokens,
-            height: 24,
-            hint: '',
-            hideIconWhenFilled: true,
-            onChanged: (_) => _onRosterFilterChanged(lane),
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_numberMode)
-                _SquareSizeStepper(
-                  canShrink: _numberColumns < _NumberRoster.maxColumns,
-                  canGrow: _numberColumns > _NumberRoster.minColumns,
-                  onShrink: () => _stepNumberColumns(1),
-                  onGrow: () => _stepNumberColumns(-1),
-                  onFit: _fitNumberColumns,
-                )
-              else ...[
-                _GhostHeaderIcon(
-                  tooltip: 'Sort by number',
-                  tokens: tokens,
-                  label: controller.rosterSortFieldLabel(),
-                  onTap: controller.cycleRosterSortField,
-                ),
-                _GhostHeaderIcon(
-                  tooltip: controller.rosterSortAscending
-                      ? 'Ascending'
-                      : 'Descending',
-                  tokens: tokens,
-                  label: controller.rosterSortDirectionLabel(),
-                  onTap: controller.toggleRosterSortDirection,
-                ),
-              ],
-              PlayerGearMenu(
-                numberMode: _numberMode,
-                onNumbers: () => setState(() {
-                  _numberMode = true;
-                  _homeLetterFilter = null;
-                  _awayLetterFilter = null;
-                }),
-                onNames: () => setState(() {
-                  _numberMode = false;
-                }),
-                onEditTeam: widget.onEditRosters,
-                onReset: () {
-                  setState(() {
-                    _numberMode = true;
-                    _numberColumns = _NumberRoster.defaultColumns;
-                    _homeLetterFilter = null;
-                    _awayLetterFilter = null;
-                  });
-                },
-              ),
-            ],
+        _RosterTopBar(
+          abbr: title.toUpperCase(),
+          filterController: _filterFor(lane),
+          filterFocusNode: _filterFocusFor(lane),
+          pinnedPlayer: pinnedForLane,
+          favoritesOn: _favoritesFilterOn,
+          onFavoritesToggle: () =>
+              setState(() => _favoritesFilterOn = !_favoritesFilterOn),
+          onFilterChanged: (_) => _onRosterFilterChanged(lane),
+          onUnpin: pinnedForLane == null
+              ? null
+              : () => controller.togglePlayerPin(
+                    pinnedForLane,
+                    isHome: isHome,
+                  ),
+          onSelectPinned: pinnedForLane == null
+              ? null
+              : () => _commit(lane, rosterIndexOf(pinnedForLane)),
+          gear: PlayerGearMenu(
+            textSizeValue: textSizeValue,
+            canTextSmaller: _numberMode
+                ? _tileHeight > _minTileHeight
+                : _listRowHeight > 20,
+            canTextLarger: _numberMode
+                ? _tileHeight < _maxTileHeight
+                : _listRowHeight < 34,
+            onTextSmaller: () => _numberMode
+                ? _stepTileHeight(-1)
+                : _stepListRowHeight(-1),
+            onTextLarger: () => _numberMode
+                ? _stepTileHeight(1)
+                : _stepListRowHeight(1),
+            onTextFit: _schedulePlayerFit,
+            groupByPosition: _groupByPosition,
+            onGroupByPosition: (grouped) {
+              setState(() => _groupByPosition = grouped);
+              _schedulePlayerFit();
+            },
+            numberMode: _numberMode,
+            onNumbers: () {
+              setState(() {
+                _numberMode = true;
+                _homeLetterFilter = null;
+                _awayLetterFilter = null;
+              });
+              _schedulePlayerFit();
+            },
+            onNames: () {
+              setState(() => _numberMode = false);
+              _schedulePlayerFit();
+            },
+            onEditTeam: widget.onEditRosters,
           ),
         ),
         Expanded(
@@ -1185,12 +1239,6 @@ class _DrumPickerState extends State<DrumPicker> {
             ],
           ),
         ),
-        if (!_numberMode)
-          TeamPlayersButton(
-            controller: controller,
-            isHome: isHome,
-            tokens: tokens,
-          ),
       ],
     );
   }
@@ -1218,6 +1266,7 @@ class _DrumPickerState extends State<DrumPicker> {
     required Offset position,
   }) async {
     final pinned = controller.isPlayerPinned(player, isHome: isHome);
+    final favorite = _isPlayerFavorite(player, isHome: isHome);
     final action = await showCaptionV2PopupMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
@@ -1228,6 +1277,12 @@ class _DrumPickerState extends State<DrumPicker> {
       ),
       items: [
         PopupMenuItem(
+          value: 'favorite',
+          child: Text(
+            favorite ? 'Remove from Favorites' : 'Add to Favorites',
+          ),
+        ),
+        PopupMenuItem(
           value: 'pin',
           child: Text(pinned ? 'Unpin Player' : 'Pin Player'),
         ),
@@ -1237,6 +1292,10 @@ class _DrumPickerState extends State<DrumPicker> {
       ],
     );
     if (action == null || !context.mounted) return;
+    if (action == 'favorite') {
+      _togglePlayerFavorite(player, isHome: isHome);
+      return;
+    }
     if (action == 'pin') {
       controller.togglePlayerPin(player, isHome: isHome);
       return;
@@ -1295,14 +1354,28 @@ class _DrumPickerState extends State<DrumPicker> {
     setState(() => _verbIndex = 0);
   }
 
-  Widget _verbLane(FfTokens tokens) {
-    void selectPinnedVerb(EffectiveVerb verb) {
-      _arm(DrumLane.verbs);
-      controller.selectVerb(verb.key);
+  void _scheduleVerbFitOnLaneResize(BoxConstraints constraints) {
+    final size = Size(constraints.maxWidth, constraints.maxHeight);
+    if (_lastVerbLaneSize != null &&
+        (_lastVerbLaneSize!.width - size.width).abs() < 0.5 &&
+        (_lastVerbLaneSize!.height - size.height).abs() < 0.5) {
+      return;
     }
+    final first = _lastVerbLaneSize == null;
+    _lastVerbLaneSize = size;
+    if (first || _verbFitScheduled) return;
+    _verbFitScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _verbFitScheduled = false;
+      if (!mounted) return;
+      await _fitVerbText();
+    });
+  }
 
+  Widget _verbLane(FfTokens tokens) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        _scheduleVerbFitOnLaneResize(constraints);
         final showCustom = constraints.maxHeight >= 140;
         final selectedKey = controller.selectedVerb;
         final showRbi =
@@ -1311,122 +1384,101 @@ class _DrumPickerState extends State<DrumPicker> {
             selectedKey != null && controller.verbNeedsBase(selectedKey);
         final showCelebration = selectedKey != null &&
             controller.verbNeedsCelebration(selectedKey);
-        // Panel: 8px top/bottom, 6px gaps (header → filter → … → custom).
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            children: [
-              _verbTopLine(tokens),
-              Expanded(
-                child: controller.verbListAll
-                    ? _azListLane(
-                        tokens: tokens,
-                        onPinnedVerbTap: selectPinnedVerb,
-                      )
-                    : VerbIndexPanel(
-                        key: _verbIndexKey,
-                        controller: controller,
-                        filterController: _verbFilter,
-                        filterFocusNode: _verbFilterFocus,
-                        tokens: tokens,
-                        onMatchCountChanged: (count) {
-                          if (_verbMatchCount == count) return;
-                          setState(() => _verbMatchCount = count);
-                        },
-                        onVerbArmed: (verb) {
-                          _arm(DrumLane.verbs);
-                          final index =
-                              _verbs.indexWhere((v) => v.key == verb.key);
-                          if (index >= 0) {
-                            _setIndex(DrumLane.verbs, index);
-                          }
-                          // selectVerb already ran inside VerbIndexPanel._pick.
-                        },
-                        onToggleFavorite: _toggleVerbFavorite,
-                        onAddCustom: (raw) {
-                          controller.setCustomVerbPhrase(raw);
-                          _verbFilter.clear();
-                          setState(() => _verbMatchCount = 0);
-                        },
+        // Flush with roster lanes — same 36px top bar, no extra top pad, so
+        // the first jersey-range rule lines up with History.
+        return Column(
+          children: [
+            _verbTopLine(tokens),
+            Expanded(
+              child: controller.verbListAll
+                  ? _azListLane(tokens: tokens)
+                  : VerbIndexPanel(
+                      key: _verbIndexKey,
+                      controller: controller,
+                      filterController: _verbFilter,
+                      filterFocusNode: _verbFilterFocus,
+                      tokens: tokens,
+                      onMatchCountChanged: (count) {
+                        if (_verbMatchCount == count) return;
+                        setState(() => _verbMatchCount = count);
+                      },
+                      onVerbArmed: (verb) {
+                        _arm(DrumLane.verbs);
+                        final index =
+                            _verbs.indexWhere((v) => v.key == verb.key);
+                        if (index >= 0) {
+                          _setIndex(DrumLane.verbs, index);
+                        }
+                        // selectVerb already ran inside VerbIndexPanel._pick.
+                      },
+                      onToggleFavorite: _toggleVerbFavorite,
+                      onAddCustom: (raw) {
+                        controller.setCustomVerbPhrase(raw);
+                        _verbFilter.clear();
+                        setState(() => _verbMatchCount = 0);
+                      },
+                    ),
+            ),
+            if (showRbi || showBase || showCelebration)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (showRbi)
+                      RbiRow(
+                        value: controller.rbi,
+                        compact: true,
+                        homeRunStyle: selectedKey == 'Home Run',
+                        onChanged: controller.setRbi,
                       ),
+                    if (showBase)
+                      BaseRow(
+                        value: controller.selectedBase,
+                        compact: true,
+                        onChanged: controller.setSelectedBase,
+                      ),
+                    if (showCelebration)
+                      CelebrationDropdown(
+                        compact: true,
+                        reactions:
+                            controller.reactionOptionsFor(selectedKey!),
+                        celebrations: const <String>[],
+                        selected: controller.celebrationType,
+                        onChanged: controller.setCelebrationType,
+                      ),
+                  ],
+                ),
               ),
-              if (showRbi || showBase || showCelebration)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (showRbi)
-                        RbiRow(
-                          value: controller.rbi,
-                          compact: true,
-                          homeRunStyle: selectedKey == 'Home Run',
-                          onChanged: controller.setRbi,
-                        ),
-                      if (showBase)
-                        BaseRow(
-                          value: controller.selectedBase,
-                          compact: true,
-                          onChanged: controller.setSelectedBase,
-                        ),
-                      if (showCelebration)
-                        CelebrationDropdown(
-                          compact: true,
-                          reactions:
-                              controller.reactionOptionsFor(selectedKey!),
-                          celebrations: const <String>[],
-                          selected: controller.celebrationType,
-                          onChanged: controller.setCelebrationType,
-                        ),
-                    ],
-                  ),
+            if (showCustom)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 2, 4, 2),
+                child: _DrumCustomVerbField(
+                  textController: _customVerbController,
+                  focusNode: _customVerbFocusNode,
+                  tokens: tokens,
+                  pinned: controller.customVerbPinned,
+                  canUseLast:
+                      controller.lastCustomVerbPhrase.trim().isNotEmpty,
+                  onChanged: controller.setCustomVerbPhrase,
+                  onTogglePin: controller.toggleCustomVerbPin,
+                  onUseLast: controller.useLastCustomVerb,
                 ),
-              if (showCustom)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 6, 10, 0),
-                  child: _DrumCustomVerbField(
-                    textController: _customVerbController,
-                    focusNode: _customVerbFocusNode,
-                    tokens: tokens,
-                    pinned: controller.customVerbPinned,
-                    canUseLast:
-                        controller.lastCustomVerbPhrase.trim().isNotEmpty,
-                    onChanged: controller.setCustomVerbPhrase,
-                    onTogglePin: controller.toggleCustomVerbPin,
-                    onUseLast: controller.useLastCustomVerb,
-                  ),
-                ),
-            ],
-          ),
+              ),
+          ],
         );
       },
     );
   }
 
-  /// Simple list layout (Layout → A–Z): pinned + optional history + mode bar +
-  /// letter or category bands, honoring the same prefs as Index.
+  /// Simple list layout (Layout → A–Z): optional history + letter or category
+  /// bands. Pin lives in [VerbIndexTopBar] (same as Index) — no second pin row.
   Widget _azListLane({
     required FfTokens tokens,
-    required ValueChanged<EffectiveVerb> onPinnedVerbTap,
   }) {
-    final pinned = controller.pinnedVerbDefinition;
-    final pinnedSelected =
-        pinned != null && controller.selectedVerb == pinned.key;
-    final dens = floVerbIndexDensity(
-      MediaQuery.sizeOf(context),
-      controller.verbIndexDensity,
-    );
     final baseFont = 13 * controller.verbFontScale;
-    final fontSize = switch (dens) {
-      0 => baseFont * 0.92,
-      2 => baseFont * 1.08,
-      _ => baseFont,
-    };
-    final heightScale = switch (dens) {
-      0 => 0.88,
-      2 => 1.18,
-      _ => 1.0,
-    };
+    final fontSize = baseFont; // cozy
+    const heightScale = 1.0; // cozy
     final searching = _verbFilter.text.trim().isNotEmpty;
     final applyModeFilter = !searching;
     final byCategory = controller.verbIndexSortByCategory;
@@ -1447,27 +1499,7 @@ class _DrumPickerState extends State<DrumPicker> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _PinnedVerbSlot(
-          height: _VerbAccordion.pinnedBarHeight,
-          tokens: tokens,
-          controller: controller,
-          verb: pinned,
-          selected: pinnedSelected,
-          committed: pinnedSelected,
-          showRbi: false,
-          showBase: false,
-          showCelebration: false,
-          rbi: controller.rbi,
-          selectedBase: controller.selectedBase,
-          celebrationType: controller.celebrationType,
-          reactionOptions: const <String>[],
-          onTap: pinned == null ? null : () => onPinnedVerbTap(pinned),
-          onRbiChanged: controller.setRbi,
-          onBaseChanged: controller.setSelectedBase,
-          onCelebrationChanged: controller.setCelebrationType,
-        ),
-        if (history.isNotEmpty) ...[
-          const SizedBox(height: 3),
+        if (history.isNotEmpty)
           _AzHistoryStrip(
             verbs: history,
             tokens: tokens,
@@ -1479,15 +1511,6 @@ class _DrumPickerState extends State<DrumPicker> {
               controller.selectVerb(verb.key);
             },
           ),
-        ],
-        if (!searching) ...[
-          const SizedBox(height: 6),
-          VerbIndexModeBar(
-            controller: controller,
-            showPinned: false,
-          ),
-          const SizedBox(height: 6),
-        ],
         Expanded(
           key: _azListBodyKey,
           child: listVerbs.isEmpty && !searching
@@ -1561,7 +1584,10 @@ class _DrumPickerState extends State<DrumPicker> {
 
   List<EffectiveVerb> _azHistoryVerbs() {
     if (!controller.verbIndexShowHistory) return const [];
-    final limit = controller.verbIndexHistoryLimit.clamp(1, 10);
+    final limit = controller.verbIndexHistoryLimit.clamp(
+      1,
+      CaptionV2Controller.verbIndexHistoryLimitMax,
+    );
     final out = <EffectiveVerb>[];
     for (final key in controller.verbIndexHistory) {
       final verb = controller.verbDefinition(key);
@@ -1756,7 +1782,7 @@ class _DrumCustomVerbField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 21,
+      height: 26,
       padding: const EdgeInsets.fromLTRB(12, 0, 4, 0),
       decoration: BoxDecoration(
         color: FfTokens.nocturneSunken,
@@ -2419,7 +2445,7 @@ class _VerbRows extends StatefulWidget {
   final List<(String, List<EffectiveVerb>)>? bands;
   /// When true with letter/category bands, never split into two columns.
   final bool oneColumn;
-  /// Multiplies row height (Density: compact / cozy / comfortable).
+  /// Multiplies row height (fixed at cozy = 1.0).
   final double heightScale;
 
   @override
@@ -3160,8 +3186,11 @@ class _VerbAccordionRow extends StatelessWidget {
                     style: TextStyle(
                       fontFamily: FfTokens.fontFamily,
                       fontSize: fontSize,
-                      fontWeight:
-                          selected ? FontWeight.w600 : FontWeight.w500,
+                      fontWeight: FontWeight.w400,
+                      fontVariations: [
+                        const FontVariation('wght', 400),
+                        FontVariation('opsz', fontSize.clamp(14.0, 32.0)),
+                      ],
                       height: 1.05,
                       color: labelColor,
                     ),
@@ -3231,6 +3260,7 @@ class _FilteredPlayerList extends StatelessWidget {
     required this.nameFor,
     required this.onBack,
     required this.onSelect,
+    this.footer,
     this.isPinned,
     this.onPin,
     this.onGoogle,
@@ -3244,6 +3274,7 @@ class _FilteredPlayerList extends StatelessWidget {
   final String Function(Player) nameFor;
   final VoidCallback onBack;
   final ValueChanged<Player> onSelect;
+  final Widget? footer;
   final bool Function(Player)? isPinned;
   final ValueChanged<Player>? onPin;
   final ValueChanged<Player>? onGoogle;
@@ -3279,22 +3310,27 @@ class _FilteredPlayerList extends StatelessWidget {
           child: ListView.builder(
             key: const ValueKey('filtered-player-list'),
             padding: const EdgeInsets.symmetric(vertical: 2),
-            itemCount: players.length,
-            itemExtent: 22,
+            itemCount: players.length + (footer != null ? 1 : 0),
             itemBuilder: (context, index) {
+              if (footer != null && index == players.length) {
+                return footer!;
+              }
               final player = players[index];
-              return _HoverablePlayerActionsRow(
-                tokens: tokens,
-                jersey: player.jerseyNumber ?? '—',
-                name: nameFor(player),
-                pinned: isPinned?.call(player) ?? false,
-                onSelect: () => onSelect(player),
-                onPin: onPin == null ? null : () => onPin!(player),
-                onGoogle: onGoogle == null ? null : () => onGoogle!(player),
-                onReport: onReport == null ? null : () => onReport!(player),
-                onSecondaryTapDown: onEdit == null
-                    ? null
-                    : (details) => onEdit!(player, details.globalPosition),
+              return SizedBox(
+                height: 22,
+                child: _HoverablePlayerActionsRow(
+                  tokens: tokens,
+                  jersey: player.jerseyNumber ?? '—',
+                  name: nameFor(player),
+                  pinned: isPinned?.call(player) ?? false,
+                  onSelect: () => onSelect(player),
+                  onPin: onPin == null ? null : () => onPin!(player),
+                  onGoogle: onGoogle == null ? null : () => onGoogle!(player),
+                  onReport: onReport == null ? null : () => onReport!(player),
+                  onSecondaryTapDown: onEdit == null
+                      ? null
+                      : (details) => onEdit!(player, details.globalPosition),
+                ),
               );
             },
           ),
@@ -3304,180 +3340,55 @@ class _FilteredPlayerList extends StatelessWidget {
   }
 }
 
-class _NumberRoster extends StatelessWidget {
-  const _NumberRoster({
-    required this.players,
-    required this.columns,
-    required this.includeOtherRow,
-    required this.tokens,
-    this.playersSubjectSelected = false,
-    this.teamNameSubjectSelected = false,
-    this.teammatesSubjectSelected = false,
-    this.onPlayersSubject,
-    this.onTeamNameSubject,
-    this.onTeammatesSubject,
-    required this.isSelected,
-    required this.onCommit,
-    this.onPin,
-    this.onSecondaryTap,
-  });
 
-  final List<Player> players;
-  final int columns;
-  final bool includeOtherRow;
-  final FfTokens tokens;
-  final bool playersSubjectSelected;
-  final bool teamNameSubjectSelected;
-  final bool teammatesSubjectSelected;
-  final VoidCallback? onPlayersSubject;
-  final VoidCallback? onTeamNameSubject;
-  final VoidCallback? onTeammatesSubject;
-  final bool Function(Player player) isSelected;
-  final ValueChanged<Player> onCommit;
-  final ValueChanged<Player>? onPin;
-  final void Function(Player player, Offset globalPosition)? onSecondaryTap;
-
-  /// User-chosen squares across each row. Plus grows squares by dropping a column.
-  static const int minColumns = 4;
-  static const int defaultColumns = 6;
-  static const int maxColumns = 8;
-  static const double columnGap = 2.0;
-  static const double maxCell = 140.0;
-  /// Wider-than-tall aspect used at small sizes (W/H).
-  static const double smallAspect = 1.28;
-  /// Below this width → full rectangle; above → full square.
-  static const double rectBlendStart = 58.0;
-  static const double squareBlendEnd = 96.0;
-
-  static double _aspectForCellWidth(double cellW) {
-    if (cellW <= rectBlendStart) return smallAspect;
-    if (cellW >= squareBlendEnd) return 1.0;
-    final t = (cellW - rectBlendStart) / (squareBlendEnd - rectBlendStart);
-    return smallAspect + (1.0 - smallAspect) * t;
+/// Shared position grouping + autofit math for Roster Polish.
+class _RosterPolish {
+  static bool isGoalie(Player player) {
+    final pos = (player.position ?? '').toUpperCase().trim();
+    return pos == 'G' || pos == 'GK' || pos == 'GOALIE';
   }
 
-  /// Fewest columns (largest tiles) that still fit [height].
-  ///
-  /// Uses the minimum readable cell height so Fit can pick a wider tile even
-  /// when the natural square would overflow; [build] then grows cells to fill.
-  static int bestColumnsFor({
-    required double width,
-    required double height,
-    required List<Player> players,
-    required bool includeOtherRow,
-    required bool showSubjects,
-    required double scale,
-  }) {
-    var best = maxColumns;
-    for (var cols = minColumns; cols <= maxColumns; cols++) {
-      final metrics = layoutMetrics(
-        width: width,
-        columns: cols,
-        players: players,
-        includeOtherRow: includeOtherRow,
-        showSubjects: showSubjects,
-        scale: scale,
-      );
-      final needed = metrics.chromeHeight +
-          metrics.jerseyRowCount * metrics.contentH;
-      if (needed <= height + 2) {
-        best = cols;
-        break;
-      }
-      best = cols;
-    }
-    return best;
+  static bool isForward(Player player) {
+    final pos = (player.position ?? '').toUpperCase().trim();
+    return const {
+      'F',
+      'C',
+      'LW',
+      'RW',
+      'W',
+      'FW',
+      'FORWARD',
+      'CENTRE',
+      'CENTER',
+    }.contains(pos);
   }
 
-  /// Shared roster geometry for Fit estimates and [build].
-  static ({
-    double cellW,
-    double contentH,
-    double naturalH,
-    double jerseySize,
-    double nameSize,
-    int numberedRows,
-    int otherRows,
-    int jerseyRowCount,
-    int subjectRows,
-    double chromeHeight,
-  }) layoutMetrics({
-    required double width,
-    required int columns,
-    required List<Player> players,
-    required bool includeOtherRow,
-    required bool showSubjects,
-    required double scale,
-  }) {
-    const horizontalPad = 4.0;
-    final innerWidth = (width - horizontalPad * 2).clamp(1.0, width);
-    final cols = columns.clamp(minColumns, maxColumns);
-    final cellW =
-        cols <= 1 ? innerWidth : (innerWidth - columnGap * (cols - 1)) / cols;
-
-    final numbered = _sortedNumbered(players);
-    final other = [
-      for (final player in players)
-        if (!_isNumbered(player)) player,
-    ];
-    final numberedRows =
-        numbered.isEmpty ? 0 : (numbered.length / cols).ceil();
-    final otherRows = includeOtherRow && other.isNotEmpty
-        ? (other.length / cols).ceil().clamp(1, 1000)
-        : 0;
-    final subjectRows = showSubjects ? 1 : 0;
-    final jerseyRowCount = numberedRows + otherRows;
-
-    final numberSize = 26.0 * scale;
-    final nameSize = 13.0 * scale;
-    const comfortableCell = 72.0;
-    final fit = (cellW / comfortableCell).clamp(0.72, 1.15);
-    final jerseySize = numberSize * fit;
-    final fittedName = nameSize * fit;
-    final squareH =
-        (cellW / _aspectForCellWidth(cellW)).clamp(40.0, maxCell);
-    final contentH = (fittedName - 0.5) * 1.05 + 4 + jerseySize + 8;
-    final naturalH = squareH < contentH ? contentH : squareH;
-
-    // Pads + range labels + subject row; jersey cell heights are separate.
-    const labelBlock = 14.0;
-    var chrome = 4.0; // list bottom pad
-    var bandIndex = 0;
-    void addBandTopPad() {
-      if (bandIndex > 0) chrome += 4;
-      bandIndex++;
-    }
-
-    if (numberedRows > 0) {
-      for (var i = 0; i < numberedRows; i++) {
-        addBandTopPad();
-        chrome += labelBlock;
-      }
-    }
-    if (otherRows > 0) {
-      addBandTopPad();
-      chrome += labelBlock + (otherRows - 1) * columnGap;
-    }
-    if (subjectRows > 0) {
-      addBandTopPad();
-      chrome += labelBlock + 40.0;
-    }
-
-    return (
-      cellW: cellW,
-      contentH: contentH,
-      naturalH: naturalH,
-      jerseySize: jerseySize,
-      nameSize: fittedName,
-      numberedRows: numberedRows,
-      otherRows: otherRows,
-      jerseyRowCount: jerseyRowCount,
-      subjectRows: subjectRows,
-      chromeHeight: chrome,
-    );
+  static bool isDefense(Player player) {
+    final pos = (player.position ?? '').toUpperCase().trim();
+    return const {
+      'D',
+      'LD',
+      'RD',
+      'DEF',
+      'DEFENSE',
+      'DEFENCE',
+    }.contains(pos);
   }
 
-  static int? _jersey(Player player) {
+  static String lastName(Player player) {
+    final parts = player.fullName.trim().split(RegExp(r'\s+'));
+    if (parts.length < 2) return player.fullName.trim();
+    return parts.sublist(1).join(' ');
+  }
+
+  static String firstName(Player player) {
+    final first = player.firstName.trim();
+    if (first.isNotEmpty) return first;
+    final parts = player.fullName.trim().split(RegExp(r'\s+'));
+    return parts.isEmpty ? '' : parts.first;
+  }
+
+  static int? jersey(Player player) {
     var raw = player.jerseyNumber?.trim() ?? '';
     while (raw.startsWith('#')) {
       raw = raw.substring(1).trim();
@@ -3487,231 +3398,534 @@ class _NumberRoster extends StatelessWidget {
     return number;
   }
 
-  static String _lastName(Player player) {
-    final parts = player.fullName.trim().split(RegExp(r'\s+'));
-    if (parts.length < 2) return player.fullName;
-    return parts.sublist(1).join(' ');
-  }
-
-  static List<List<Player>> _chunk(List<Player> players, int perRow) {
-    if (players.isEmpty) return const [];
-    final out = <List<Player>>[];
-    for (var i = 0; i < players.length; i += perRow) {
-      final end = i + perRow;
-      out.add(players.sublist(i, end > players.length ? players.length : end));
+  static List<({String title, List<Player> players})> sections({
+    required List<Player> players,
+    required bool groupByPosition,
+  }) {
+    if (!groupByPosition) {
+      return [(title: 'All players', players: List<Player>.from(players))];
+    }
+    final forwards = <Player>[];
+    final defenseGoalies = <Player>[];
+    final other = <Player>[];
+    for (final player in players) {
+      if (isForward(player)) {
+        forwards.add(player);
+      } else if (isDefense(player) || isGoalie(player)) {
+        defenseGoalies.add(player);
+      } else {
+        other.add(player);
+      }
+    }
+    if (forwards.isEmpty && defenseGoalies.isEmpty) {
+      return [(title: 'All players', players: List<Player>.from(players))];
+    }
+    final out = <({String title, List<Player> players})>[];
+    if (forwards.isNotEmpty) {
+      out.add((title: 'Forwards', players: forwards));
+    }
+    if (defenseGoalies.isNotEmpty) {
+      out.add((title: 'Defense · Goalies', players: defenseGoalies));
+    }
+    if (other.isNotEmpty) {
+      out.add((title: 'Other', players: other));
     }
     return out;
   }
 
-  static bool _isNumbered(Player player) {
-    final number = _jersey(player);
-    return number != null && number >= 0 && number <= 99;
+  static int gridTileRows({
+    required List<Player> players,
+    required int columns,
+    required bool groupByPosition,
+    required bool includeAddPlayer,
+  }) {
+    final cols = columns.clamp(1, 12);
+    final secs = sections(players: players, groupByPosition: groupByPosition);
+    var rows = 0;
+    for (final section in secs) {
+      final numbered = section.players.where((p) => jersey(p) != null).length;
+      final other = section.players.length - numbered;
+      if (numbered > 0) rows += (numbered / cols).ceil();
+      if (other > 0) rows += (other / cols).ceil();
+    }
+    if (includeAddPlayer && !groupByPosition) rows += 1;
+    return rows;
   }
 
-  static int _compareNumbered(Player a, Player b) {
-    final byNumber = _jersey(a)!.compareTo(_jersey(b)!);
-    if (byNumber != 0) return byNumber;
-    return a.fullName.compareTo(b.fullName);
+  static List<Player> sortPlayers(
+    List<Player> players, {
+    required bool byNumber,
+  }) {
+    final out = List<Player>.from(players);
+    out.sort((a, b) {
+      if (byNumber) {
+        final an = jersey(a);
+        final bn = jersey(b);
+        if (an != null && bn != null && an != bn) return an.compareTo(bn);
+        if (an != null && bn == null) return -1;
+        if (an == null && bn != null) return 1;
+      }
+      return lastName(a).toLowerCase().compareTo(lastName(b).toLowerCase());
+    });
+    return out;
   }
 
-  /// Label a full row from the jerseys actually in it, e.g. "3–22".
-  static String _rangeLabel(List<Player> group) {
-    var min = _jersey(group.first)!;
+  /// Dense number-sorted rows with a range label from the jerseys in that row
+  /// (e.g. "8–28"). Fills every column — no empty decade gaps.
+  static List<({String title, List<Player> players})> numberSortedRows({
+    required List<Player> players,
+    required int columns,
+  }) {
+    final cols = columns.clamp(1, 12);
+    final numbered = <Player>[];
+    final other = <Player>[];
+    for (final player in sortPlayers(players, byNumber: true)) {
+      if (jersey(player) != null) {
+        numbered.add(player);
+      } else {
+        other.add(player);
+      }
+    }
+    final out = <({String title, List<Player> players})>[];
+    for (var i = 0; i < numbered.length; i += cols) {
+      final end = i + cols > numbered.length ? numbered.length : i + cols;
+      final row = numbered.sublist(i, end);
+      out.add((title: _rangeLabel(row), players: row));
+    }
+    if (other.isNotEmpty) {
+      out.add((title: 'No number', players: other));
+    }
+    return out;
+  }
+
+  static String _rangeLabel(List<Player> row) {
+    var min = jersey(row.first)!;
     var max = min;
-    for (final player in group) {
-      final number = _jersey(player)!;
-      if (number < min) min = number;
-      if (number > max) max = number;
+    for (final player in row) {
+      final n = jersey(player)!;
+      if (n < min) min = n;
+      if (n > max) max = n;
     }
     if (min == max) return '$min';
     return '$min–$max';
   }
+}
 
-  /// Numbered players, lowest jersey first.
-  static List<Player> _sortedNumbered(List<Player> players) {
-    final numbered = [for (final player in players) if (_isNumbered(player)) player];
-    numbered.sort(_compareNumbered);
-    return numbered;
-  }
+class _PolishNumberRoster extends StatelessWidget {
+  const _PolishNumberRoster({
+    required this.players,
+    required this.columns,
+    required this.tileHeight,
+    required this.jerseyFontSize,
+    required this.groupByPosition,
+    required this.tokens,
+    required this.isSelected,
+    required this.isPinned,
+    required this.onCommit,
+    this.footer,
+    this.onPin,
+    this.onSecondaryTap,
+    this.onAddPlayer,
+    this.favoritesMode = false,
+    this.isFavorite,
+  });
+
+  final List<Player> players;
+  final int columns;
+  final double tileHeight;
+  final double jerseyFontSize;
+  final bool groupByPosition;
+  final FfTokens tokens;
+  final bool Function(Player player) isSelected;
+  final bool Function(Player player) isPinned;
+  final ValueChanged<Player> onCommit;
+  final Widget? footer;
+  final ValueChanged<Player>? onPin;
+  final void Function(Player player, Offset globalPosition)? onSecondaryTap;
+  final bool favoritesMode;
+  final bool Function(Player player)? isFavorite;
+  final VoidCallback? onAddPlayer;
 
   @override
   Widget build(BuildContext context) {
-    final numbered = _sortedNumbered(players);
-    final other = [for (final player in players) if (!_isNumbered(player)) player]
-      ..sort((a, b) => a.fullName.compareTo(b.fullName));
+    final cols = columns.clamp(1, 12);
+    // Position headers XOR number-range labels — never both.
+    if (groupByPosition) {
+      final sections = _RosterPolish.sections(
+        players: players,
+        groupByPosition: true,
+      );
+      return ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
+          children: [
+            for (var i = 0; i < sections.length; i++) ...[
+              _RosterSectionHeader(
+                title: sections[i].title,
+                tokens: tokens,
+                topPad: i == 0 ? 0 : 4,
+              ),
+              _PolishTileGrid(
+                players: _RosterPolish.sortPlayers(
+                  sections[i].players,
+                  byNumber: true,
+                ),
+                columns: cols,
+                tileHeight: tileHeight,
+                jerseyFontSize: jerseyFontSize,
+                tokens: tokens,
+                isSelected: isSelected,
+                isPinned: isPinned,
+                favoritesMode: favoritesMode,
+                isFavorite: isFavorite,
+                onCommit: onCommit,
+                onPin: onPin,
+                onSecondaryTap: onSecondaryTap,
+              ),
+            ],
+            if (footer != null) footer!,
+          ],
+        ),
+      );
+    }
 
-    final showSubjects = onPlayersSubject != null;
-
-    final shortest = MediaQuery.sizeOf(context).shortestSide;
-    final scale = (shortest / 1000.0).clamp(0.62, 1.0);
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Thin even inset so tiles aren't flush against the pane edge.
-        const horizontalPad = 4.0;
-        final cols = columns.clamp(minColumns, maxColumns);
-        final metrics = layoutMetrics(
-          width: constraints.maxWidth,
-          columns: cols,
-          players: players,
-          includeOtherRow: includeOtherRow,
-          showSubjects: showSubjects,
-          scale: scale,
-        );
-        final bands = <(String, List<Player>)>[
-          for (final group in _chunk(numbered, cols))
-            (_rangeLabel(group), group),
-        ];
-        if (includeOtherRow && other.isNotEmpty) {
-          bands.add(('No number', other));
-        }
-        if (showSubjects) {
-          bands.add(('Other', const <Player>[]));
-        }
-
-        // Grow jersey tiles into leftover panel height (compact Fit especially).
-        // Shrink toward contentH when the natural square would overflow.
-        var fittedH = metrics.naturalH;
-        if (constraints.hasBoundedHeight &&
-            constraints.maxHeight.isFinite &&
-            metrics.jerseyRowCount > 0) {
-          final fillH =
-              (constraints.maxHeight - metrics.chromeHeight - 1.0) /
-                  metrics.jerseyRowCount;
-          fittedH = fillH.clamp(metrics.contentH, maxCell);
-        }
-        final fontGrow =
-            (fittedH / metrics.naturalH).clamp(0.85, 1.45);
-        final jerseySize = metrics.jerseySize * fontGrow;
-        final fittedName = metrics.nameSize * fontGrow;
-
-        Widget cellAt((String, List<Player>) band, int index) {
-          final cellH = band.$1 == 'Other' ? 40.0 : fittedH;
-          if (index >= band.$2.length) {
-            final subject = index - band.$2.length;
-            final playersButton = subject == 0;
-            final teamNameButton = subject == 1;
-            return _TeamSubjectCell(
-              label: playersButton
-                  ? 'Players'
-                  : teamNameButton
-                      ? 'Team name'
-                      : 'Teammates',
-              icon: playersButton
-                  ? PhosphorIconsRegular.usersThree
-                  : teamNameButton
-                      ? PhosphorIconsRegular.shield
-                      : PhosphorIconsRegular.users,
-              selected: playersButton
-                  ? playersSubjectSelected
-                  : teamNameButton
-                      ? teamNameSubjectSelected
-                      : teammatesSubjectSelected,
-              onTap: playersButton
-                  ? onPlayersSubject!
-                  : teamNameButton
-                      ? onTeamNameSubject!
-                      : onTeammatesSubject!,
-            );
-          }
-          final player = band.$2[index];
-          return _NumberCell(
-            key: ValueKey(
-              '${player.playerId ?? player.fullName}|${player.jerseyNumber ?? ''}',
+    final rows = _RosterPolish.numberSortedRows(
+      players: players,
+      columns: cols,
+    );
+    return ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
+        children: [
+          for (var i = 0; i < rows.length; i++) ...[
+            _RosterRangeLabel(
+              title: rows[i].title,
+              tokens: tokens,
+              isFirst: i == 0,
             ),
-            player: player,
-            lastName: _lastName(player),
-            selected: isSelected(player),
-            tokens: tokens,
-            width: double.infinity,
-            height: cellH,
-            nameSize: fittedName,
-            jerseySize: jerseySize,
-            onTap: () => onCommit(player),
-            onPin: onPin == null ? null : () => onPin!(player),
-            onSecondaryTap: onSecondaryTap == null
-                ? null
-                : (position) => onSecondaryTap!(player, position),
-          );
-        }
-
-        return ScrollConfiguration(
-          behavior:
-              ScrollConfiguration.of(context).copyWith(scrollbars: false),
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(
-              horizontalPad,
-              0,
-              horizontalPad,
-              4,
+            _PolishTileGrid(
+              players: rows[i].players,
+              columns: cols,
+              tileHeight: tileHeight,
+              jerseyFontSize: jerseyFontSize,
+              tokens: tokens,
+              isSelected: isSelected,
+              isPinned: isPinned,
+              favoritesMode: favoritesMode,
+              isFavorite: isFavorite,
+              onCommit: onCommit,
+              onPin: onPin,
+              onSecondaryTap: onSecondaryTap,
+              onAddPlayer: i == rows.length - 1 ? onAddPlayer : null,
             ),
-            children: [
-              for (var i = 0; i < bands.length; i++) ...[
-                Padding(
-                  padding: EdgeInsets.only(top: i == 0 ? 0 : 4, bottom: 4),
-                  child: Row(
-                    children: [
-                      Text(
-                        bands[i].$1,
-                        style: TextStyle(
-                          fontFamily: FfTokens.fontFamily,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.6,
-                          color: tokens.textTertiary,
-                          height: 1,
+          ],
+          if (footer != null) footer!,
+        ],
+      ),
+    );
+  }
+}
+
+class _PolishTileGrid extends StatelessWidget {
+  const _PolishTileGrid({
+    required this.players,
+    required this.columns,
+    required this.tileHeight,
+    required this.jerseyFontSize,
+    required this.tokens,
+    required this.isSelected,
+    required this.isPinned,
+    required this.onCommit,
+    this.onPin,
+    this.onSecondaryTap,
+    this.onAddPlayer,
+    this.favoritesMode = false,
+    this.isFavorite,
+  });
+
+  final List<Player> players;
+  final int columns;
+  final double tileHeight;
+  final double jerseyFontSize;
+  final FfTokens tokens;
+  final bool Function(Player player) isSelected;
+  final bool Function(Player player) isPinned;
+  final ValueChanged<Player> onCommit;
+  final ValueChanged<Player>? onPin;
+  final void Function(Player player, Offset globalPosition)? onSecondaryTap;
+  final VoidCallback? onAddPlayer;
+  final bool favoritesMode;
+  final bool Function(Player player)? isFavorite;
+
+  @override
+  Widget build(BuildContext context) {
+    final cells = <Widget>[
+      for (final player in players)
+        _PolishGridTile(
+          key: ValueKey(
+            '${player.playerId ?? player.fullName}|${player.jerseyNumber ?? ''}',
+          ),
+          player: player,
+          height: tileHeight,
+          jerseyFontSize: jerseyFontSize,
+          selected: isSelected(player),
+          pinned: isPinned(player),
+          favorite: isFavorite?.call(player) ?? false,
+          favoritesMode: favoritesMode,
+          tokens: tokens,
+          onTap: () => onCommit(player),
+          onPin: onPin == null ? null : () => onPin!(player),
+          onSecondaryTap: onSecondaryTap == null
+              ? null
+              : (position) => onSecondaryTap!(player, position),
+        ),
+      if (onAddPlayer != null)
+        _PolishAddPlayerTile(
+          height: tileHeight,
+          tokens: tokens,
+          onTap: onAddPlayer!,
+        ),
+    ];
+    final rowCount = cells.isEmpty ? 0 : (cells.length / columns).ceil();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var row = 0; row < rowCount; row++) ...[
+          if (row > 0) const SizedBox(height: 3),
+          SizedBox(
+            height: tileHeight,
+            child: Row(
+              children: [
+                for (var col = 0; col < columns; col++) ...[
+                  if (col > 0) const SizedBox(width: 3),
+                  Expanded(
+                    child: row * columns + col < cells.length
+                        ? cells[row * columns + col]
+                        : const SizedBox.shrink(),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _PolishGridTile extends StatefulWidget {
+  const _PolishGridTile({
+    super.key,
+    required this.player,
+    required this.height,
+    required this.jerseyFontSize,
+    required this.selected,
+    required this.pinned,
+    required this.tokens,
+    required this.onTap,
+    this.onPin,
+    this.onSecondaryTap,
+    this.favorite = false,
+    this.favoritesMode = false,
+  });
+
+  final Player player;
+  final double height;
+  final double jerseyFontSize;
+  final bool selected;
+  final bool pinned;
+  final bool favorite;
+  final bool favoritesMode;
+  final FfTokens tokens;
+  final VoidCallback onTap;
+  final VoidCallback? onPin;
+  final ValueChanged<Offset>? onSecondaryTap;
+
+  @override
+  State<_PolishGridTile> createState() => _PolishGridTileState();
+}
+
+class _PolishGridTileState extends State<_PolishGridTile> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = widget.selected || widget.pinned;
+    final goalie = _RosterPolish.isGoalie(widget.player);
+    final fill = selected
+        ? FfTokens.nocturneAccentSoft
+        : (_hovered ? const Color(0xFF2A3138) : const Color(0xFF232A31));
+    final border = selected
+        ? FfTokens.nocturneAccentEdge
+        : const Color(0x0DE8EEF4);
+    final nameColor =
+        selected ? const Color(0xFF9FC3D6) : FfTokens.nocturneT2;
+    final favGlow = widget.favoritesMode && widget.favorite;
+    final numberColor = favGlow
+        ? FfTokens.gold
+        : (selected ? Colors.white : const Color(0xFFF2F6FA));
+    final last = _RosterPolish.lastName(widget.player).toUpperCase();
+    final jersey = widget.player.jerseyNumber?.trim();
+    final jerseyLabel =
+        (jersey == null || jersey.isEmpty) ? '—' : jersey;
+    final faded = widget.favoritesMode && !widget.favorite;
+
+    final tile = MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: CmdClick(
+        onTap: widget.onTap,
+        onCmdTap: widget.onPin,
+        onSecondaryTapDown: widget.onSecondaryTap == null
+            ? null
+            : (details) => widget.onSecondaryTap!(details.globalPosition),
+        child: Stack(
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              height: widget.height,
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                color: fill,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: border, width: 1),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x0DFFFFFF),
+                    blurRadius: 0,
+                    offset: Offset(0, 1),
+                  ),
+                ],
+              ),
+              clipBehavior: Clip.hardEdge,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _FittingLastName(
+                    text: last,
+                    color: nameColor,
+                  ),
+                  Text(
+                    jerseyLabel,
+                    maxLines: 1,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: widget.jerseyFontSize,
+                      fontWeight: FontWeight.w800,
+                      height: 1.05,
+                      color: numberColor,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                      shadows: [
+                        Shadow(
+                          color: favGlow
+                              ? const Color(0x8CE8C547)
+                              : numberColor.withValues(alpha: 0.35),
+                          blurRadius: favGlow ? 8 : (selected ? 10 : 6),
                         ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (widget.pinned)
+              const Positioned(
+                right: 2,
+                top: 2,
+                child: PhosphorIcon(
+                  PhosphorIconsFill.pushPin,
+                  size: 9,
+                  color: FfTokens.accentHover,
+                ),
+              ),
+            if (goalie)
+              Positioned(
+                right: 2,
+                bottom: 2,
+                child: Opacity(
+                  opacity: 0.7,
+                  child: Container(
+                    width: 10,
+                    height: 10,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: FfTokens.nocturneAccentEdge,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                    child: const Text(
+                      'G',
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        height: 1,
+                        color: Colors.white,
                       ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Container(height: 1, color: tokens.divider),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-                Builder(
-                  builder: (context) {
-                    final band = bands[i];
-                    final isOther = band.$1 == 'Other';
-                    final subjectCount = isOther && showSubjects ? 3 : 0;
-                    final count = band.$2.length + subjectCount;
-                    // Other: one row of 3 equal subject buttons (Players / Team
-                    // name / Teammates). Number bands keep jersey square columns.
-                    final bandCols = isOther ? 3 : cols;
-                    final gap = isOther ? 4.0 : columnGap;
-                    final rowCount =
-                        count == 0 ? 0 : (count / bandCols).ceil();
-                    final rowH = isOther ? 40.0 : fittedH;
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (var row = 0; row < rowCount; row++) ...[
-                          if (row > 0) SizedBox(height: gap),
-                          SizedBox(
-                            height: rowH,
-                            child: Row(
-                              children: [
-                                for (var col = 0; col < bandCols; col++) ...[
-                                  if (col > 0) SizedBox(width: gap),
-                                  Expanded(
-                                    child: row * bandCols + col < count
-                                        ? cellAt(
-                                            band,
-                                            row * bandCols + col,
-                                          )
-                                        : const SizedBox.shrink(),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ],
-                      ],
-                    );
-                  },
-                ),
-              ],
-            ],
+              ),
+          ],
+        ),
+      ),
+    );
+    if (faded) return Opacity(opacity: 0.32, child: tile);
+    return tile;
+  }
+}
+
+class _FittingLastName extends StatelessWidget {
+  const _FittingLastName({
+    required this.text,
+    required this.color,
+  });
+
+  final String text;
+  final Color color;
+
+  static const double _baseSize = 8.5;
+  static const double _minSize = 5.5;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxW = constraints.maxWidth;
+        const style = TextStyle(
+          fontFamily: FfTokens.labelFamily,
+          fontSize: _baseSize,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.3,
+          height: 1.15,
+        );
+        final painter = TextPainter(
+          text: TextSpan(text: text, style: style),
+          maxLines: 1,
+          textDirection: TextDirection.ltr,
+        )..layout();
+        var size = _baseSize;
+        if (maxW > 0 && painter.width > maxW) {
+          size = (_baseSize * maxW / painter.width).clamp(_minSize, _baseSize);
+        }
+        return Text(
+          text,
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.clip,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontFamily: FfTokens.labelFamily,
+            fontSize: size,
+            fontWeight: FontWeight.w500,
+            letterSpacing: size < _baseSize ? 0.15 : 0.3,
+            height: 1.15,
+            color: color,
           ),
         );
       },
@@ -3719,8 +3933,1249 @@ class _NumberRoster extends StatelessWidget {
   }
 }
 
-class _TeamSubjectCell extends StatefulWidget {
-  const _TeamSubjectCell({
+class _PolishAddPlayerTile extends StatefulWidget {
+  const _PolishAddPlayerTile({
+    required this.height,
+    required this.tokens,
+    required this.onTap,
+  });
+
+  final double height;
+  final FfTokens tokens;
+  final VoidCallback onTap;
+
+  @override
+  State<_PolishAddPlayerTile> createState() => _PolishAddPlayerTileState();
+}
+
+class _PolishAddPlayerTileState extends State<_PolishAddPlayerTile> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        _hovered ? widget.tokens.text : widget.tokens.textTertiary;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Container(
+          height: widget.height,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(
+              color: color.withValues(alpha: _hovered ? 0.3 : 0.14),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              PhosphorIcon(PhosphorIconsRegular.plus, size: 15, color: color),
+              const SizedBox(height: 2),
+              Text(
+                'Player',
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                  height: 1,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PolishListRoster extends StatelessWidget {
+  const _PolishListRoster({
+    required this.players,
+    required this.rowHeight,
+    required this.groupByPosition,
+    required this.sortByNumber,
+    required this.tokens,
+    required this.isSelected,
+    required this.isPinned,
+    required this.onCommit,
+    this.footer,
+    this.onPin,
+    this.onSecondaryTap,
+    this.onCycleSort,
+    this.favoritesMode = false,
+    this.isFavorite,
+  });
+
+  final List<Player> players;
+  final double rowHeight;
+  final bool groupByPosition;
+  final bool sortByNumber;
+  final FfTokens tokens;
+  final bool Function(Player player) isSelected;
+  final bool Function(Player player) isPinned;
+  final ValueChanged<Player> onCommit;
+  final Widget? footer;
+  final ValueChanged<Player>? onPin;
+  final void Function(Player player, Offset globalPosition)? onSecondaryTap;
+  final VoidCallback? onCycleSort;
+  final bool favoritesMode;
+  final bool Function(Player player)? isFavorite;
+
+  @override
+  Widget build(BuildContext context) {
+    final sections = _RosterPolish.sections(
+      players: players,
+      groupByPosition: groupByPosition,
+    );
+    return ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(2, 0, 2, 0),
+        children: [
+          for (var i = 0; i < sections.length; i++) ...[
+            _RosterSectionHeader(
+              title: sections[i].title,
+              tokens: tokens,
+              topPad: i == 0 ? 0 : 4,
+              trailing: i == 0 && onCycleSort != null
+                  ? _RosterSortChip(
+                      sortByNumber: sortByNumber,
+                      tokens: tokens,
+                      onTap: onCycleSort!,
+                    )
+                  : null,
+            ),
+            for (final player in _RosterPolish.sortPlayers(
+              sections[i].players,
+              byNumber: sortByNumber,
+            ))
+              _PolishListRow(
+                player: player,
+                height: rowHeight,
+                selected: isSelected(player),
+                pinned: isPinned(player),
+                favorite: isFavorite?.call(player) ?? false,
+                favoritesMode: favoritesMode,
+                tokens: tokens,
+                onTap: () => onCommit(player),
+                onPin: onPin == null ? null : () => onPin!(player),
+                onSecondaryTap: onSecondaryTap == null
+                    ? null
+                    : (position) => onSecondaryTap!(player, position),
+              ),
+          ],
+          if (footer != null) footer!,
+        ],
+      ),
+    );
+  }
+}
+
+class _PolishListRow extends StatefulWidget {
+  const _PolishListRow({
+    required this.player,
+    required this.height,
+    required this.selected,
+    required this.pinned,
+    required this.tokens,
+    required this.onTap,
+    this.onPin,
+    this.onSecondaryTap,
+    this.favorite = false,
+    this.favoritesMode = false,
+  });
+
+  final Player player;
+  final double height;
+  final bool selected;
+  final bool pinned;
+  final bool favorite;
+  final bool favoritesMode;
+  final FfTokens tokens;
+  final VoidCallback onTap;
+  final VoidCallback? onPin;
+  final ValueChanged<Offset>? onSecondaryTap;
+
+  @override
+  State<_PolishListRow> createState() => _PolishListRowState();
+}
+
+class _PolishListRowState extends State<_PolishListRow> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = widget.selected || widget.pinned;
+    final goalie = _RosterPolish.isGoalie(widget.player);
+    final first = _RosterPolish.firstName(widget.player);
+    final last = _RosterPolish.lastName(widget.player);
+    final jersey = widget.player.jerseyNumber?.trim();
+    final jerseyLabel =
+        (jersey == null || jersey.isEmpty) ? '—' : jersey;
+    // Scale type with autofit row height (base design is 26px).
+    final scale = (widget.height / 26.0).clamp(0.78, 1.25);
+    final jerseySize = 14.0 * scale;
+    final nameSize = 13.5 * scale;
+    final favGlow = widget.favoritesMode && widget.favorite;
+    final faded = widget.favoritesMode && !widget.favorite;
+    final jerseyColor = favGlow ? FfTokens.gold : const Color(0xFFF2F6FA);
+
+    final row = MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: CmdClick(
+        onTap: widget.onTap,
+        onCmdTap: widget.onPin,
+        onSecondaryTapDown: widget.onSecondaryTap == null
+            ? null
+            : (details) => widget.onSecondaryTap!(details.globalPosition),
+        child: Stack(
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 100),
+              height: widget.height,
+              margin: const EdgeInsets.symmetric(horizontal: 2),
+              padding: const EdgeInsets.fromLTRB(4, 0, 8, 0),
+              decoration: BoxDecoration(
+                color: selected
+                    ? FfTokens.nocturneAccentSoft
+                    : (_hovered
+                        ? const Color(0x0FE8EEF4)
+                        : Colors.transparent),
+                borderRadius: BorderRadius.circular(7),
+                border: selected
+                    ? Border.all(color: FfTokens.nocturneAccentEdge)
+                    : null,
+              ),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 26,
+                    child: Text(
+                      jerseyLabel,
+                      textAlign: TextAlign.right,
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: jerseySize,
+                        fontWeight: FontWeight.w800,
+                        height: 1,
+                        color: jerseyColor,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                        shadows: [
+                          Shadow(
+                            color: favGlow
+                                ? const Color(0x8CE8C547)
+                                : Colors.white.withValues(
+                                    alpha: selected ? 0.55 : 0.35,
+                                  ),
+                            blurRadius: favGlow ? 8 : (selected ? 10 : 6),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          if (first.isNotEmpty)
+                            TextSpan(
+                              text: '$first ',
+                              style: TextStyle(
+                                fontFamily: FfTokens.fontFamily,
+                                fontSize: nameSize,
+                                fontWeight: FontWeight.w400,
+                                height: 1,
+                                color: FfTokens.nocturneT2,
+                              ),
+                            ),
+                          TextSpan(
+                            text: last,
+                            style: TextStyle(
+                              fontFamily: FfTokens.fontFamily,
+                              fontSize: nameSize,
+                              fontWeight: FontWeight.w500,
+                              height: 1,
+                              color: selected
+                                  ? Colors.white
+                                  : FfTokens.nocturneTx,
+                            ),
+                          ),
+                        ],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (goalie)
+                    Opacity(
+                      opacity: 0.7,
+                      child: Container(
+                        margin: const EdgeInsets.only(left: 8),
+                        width: 10 * scale,
+                        height: 10 * scale,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: FfTokens.nocturneAccentEdge,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                        child: Text(
+                          'G',
+                          style: TextStyle(
+                            fontFamily: FfTokens.fontFamily,
+                            fontSize: 10 * scale,
+                            fontWeight: FontWeight.w800,
+                            height: 1,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (widget.pinned)
+              Positioned(
+                right: 5,
+                top: 3,
+                child: Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: FfTokens.accentHover,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: const Color(0xFF181D22),
+                      width: 2,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (faded) return Opacity(opacity: 0.32, child: row);
+    return row;
+  }
+}
+
+class _RosterSectionHeader extends StatelessWidget {
+  const _RosterSectionHeader({
+    required this.title,
+    required this.tokens,
+    this.topPad = 0,
+    this.trailing,
+  });
+
+  final String title;
+  final FfTokens tokens;
+  final double topPad;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(top: topPad, bottom: 2, left: 2, right: 2),
+      child: Row(
+        children: [
+          Text(
+            title.toUpperCase(),
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.8,
+              height: 1.2,
+              color: tokens.textTertiary,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Container(
+              height: 1,
+              color: tokens.text.withValues(alpha: 0.08),
+            ),
+          ),
+          if (trailing != null) ...[
+            const SizedBox(width: 6),
+            trailing!,
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Compact jersey-range label above each dense number row (e.g. "8–28").
+class _RosterRangeLabel extends StatelessWidget {
+  const _RosterRangeLabel({
+    required this.title,
+    required this.tokens,
+    this.isFirst = false,
+  });
+
+  final String title;
+  final FfTokens tokens;
+
+  /// First row sits flush under the top bar (aligned with verb History).
+  final bool isFirst;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = Text(
+      title,
+      style: TextStyle(
+        fontFamily: FfTokens.fontFamily,
+        fontSize: 9.5,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.4,
+        height: 1,
+        color: tokens.textTertiary,
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
+    );
+    final rule = Container(
+      height: 1,
+      color: tokens.text.withValues(alpha: 0.06),
+    );
+
+    // First rule pins to the content top — same Y as History's top edge.
+    if (isFirst) {
+      return Padding(
+        padding: const EdgeInsets.only(left: 2, right: 2, bottom: 2),
+        child: SizedBox(
+          height: 11,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              label,
+              const SizedBox(width: 6),
+              Expanded(child: rule),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 2, bottom: 1, left: 2, right: 2),
+      child: SizedBox(
+        height: 12,
+        child: Row(
+          children: [
+            label,
+            const SizedBox(width: 6),
+            Expanded(child: rule),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RosterSortChip extends StatefulWidget {
+  const _RosterSortChip({
+    required this.sortByNumber,
+    required this.tokens,
+    required this.onTap,
+  });
+
+  final bool sortByNumber;
+  final FfTokens tokens;
+  final VoidCallback onTap;
+
+  @override
+  State<_RosterSortChip> createState() => _RosterSortChipState();
+}
+
+class _RosterSortChipState extends State<_RosterSortChip> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        _hovered ? widget.tokens.text : widget.tokens.textSecondary;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Container(
+          height: 18,
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          decoration: BoxDecoration(
+            color: FfTokens.nocturneHv,
+            borderRadius: BorderRadius.circular(5),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                widget.sortByNumber ? '#' : 'A–Z',
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  height: 1,
+                  color: color,
+                ),
+              ),
+              const SizedBox(width: 3),
+              PhosphorIcon(
+                PhosphorIconsBold.arrowDown,
+                size: 9,
+                color: color,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Roster panel top bar — TOR · 🔍 · ☆ · | pin | · ⚙
+class _RosterTopBar extends StatefulWidget {
+  const _RosterTopBar({
+    required this.abbr,
+    required this.filterController,
+    required this.filterFocusNode,
+    required this.favoritesOn,
+    required this.onFavoritesToggle,
+    required this.onFilterChanged,
+    required this.gear,
+    this.pinnedPlayer,
+    this.onUnpin,
+    this.onSelectPinned,
+  });
+
+  final String abbr;
+  final TextEditingController filterController;
+  final FocusNode filterFocusNode;
+  final bool favoritesOn;
+  final VoidCallback onFavoritesToggle;
+  final ValueChanged<String> onFilterChanged;
+  final Widget gear;
+  final Player? pinnedPlayer;
+  final VoidCallback? onUnpin;
+  final VoidCallback? onSelectPinned;
+
+  static const double barHeight = 36;
+
+  @override
+  State<_RosterTopBar> createState() => _RosterTopBarState();
+}
+
+class _RosterTopBarState extends State<_RosterTopBar>
+    with SingleTickerProviderStateMixin {
+  static const _expandMs = Duration(milliseconds: 220);
+  static const _ease = Cubic(0.2, 0.8, 0.2, 1);
+
+  bool _searchOpen = false;
+  bool _searchHovered = false;
+  bool _favHovered = false;
+  late final AnimationController _expand;
+
+  @override
+  void initState() {
+    super.initState();
+    _expand = AnimationController(vsync: this, duration: _expandMs);
+    widget.filterController.addListener(_onFilterText);
+    widget.filterFocusNode.addListener(_onFilterFocus);
+    if (widget.filterController.text.isNotEmpty ||
+        widget.filterFocusNode.hasFocus) {
+      _searchOpen = true;
+      _expand.value = 1;
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.filterController.removeListener(_onFilterText);
+    widget.filterFocusNode.removeListener(_onFilterFocus);
+    _expand.dispose();
+    super.dispose();
+  }
+
+  void _onFilterText() {
+    widget.onFilterChanged(widget.filterController.text);
+    if (widget.filterController.text.isNotEmpty && !_searchOpen) {
+      _openSearch(requestFocus: false);
+    }
+    setState(() {});
+  }
+
+  void _onFilterFocus() {
+    if (widget.filterFocusNode.hasFocus) {
+      if (!_searchOpen) _openSearch(requestFocus: false);
+    } else if (widget.filterController.text.isEmpty) {
+      Future<void>.delayed(const Duration(milliseconds: 120), () {
+        if (!mounted) return;
+        if (!widget.filterFocusNode.hasFocus &&
+            widget.filterController.text.isEmpty) {
+          _closeSearch();
+        }
+      });
+    }
+  }
+
+  void _openSearch({bool requestFocus = true}) {
+    if (_searchOpen && _expand.value == 1) {
+      if (requestFocus) widget.filterFocusNode.requestFocus();
+      return;
+    }
+    setState(() => _searchOpen = true);
+    _expand.forward();
+    if (requestFocus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.filterFocusNode.requestFocus();
+      });
+    }
+  }
+
+  void _closeSearch() {
+    widget.filterController.clear();
+    widget.filterFocusNode.unfocus();
+    _expand.reverse().whenComplete(() {
+      if (mounted) setState(() => _searchOpen = false);
+    });
+    setState(() {});
+  }
+
+  KeyEventResult _onSearchKey(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.escape) {
+      _closeSearch();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final searchVisible = _searchOpen || _expand.value > 0;
+    final pinned = widget.pinnedPlayer;
+    final hideChrome = searchVisible;
+
+    return SizedBox(
+      height: _RosterTopBar.barHeight,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: LayoutBuilder(
+            builder: (context, constraints) {
+              // Team label ~40px; gear 26 + gap → search spans the middle.
+              const gearReserve = 30.0;
+              final teamW = _measureTeamWidth(widget.abbr);
+              final searchLeft = teamW;
+              final searchFullW = math.max(
+                28.0,
+                constraints.maxWidth - searchLeft - gearReserve,
+              );
+              return Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(left: 6),
+                        child: Text(
+                          widget.abbr,
+                          style: const TextStyle(
+                            fontFamily: FfTokens.fontFamily,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.3,
+                            height: 1,
+                            color: Colors.white,
+                            decoration: TextDecoration.none,
+                          ),
+                        ),
+                      ),
+                      IgnorePointer(
+                        ignoring: hideChrome,
+                        child: Opacity(
+                          opacity: hideChrome ? 0 : 1,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _RosterIconButton(
+                                width: 26,
+                                height: 26,
+                                hovered: _searchHovered,
+                                onHover: (v) =>
+                                    setState(() => _searchHovered = v),
+                                onTap: () => _openSearch(),
+                                tooltip: 'Search players',
+                                child: PhosphorIcon(
+                                  PhosphorIconsRegular.magnifyingGlass,
+                                  size: 14,
+                                  color: _searchHovered
+                                      ? FfTokens.nocturneTx
+                                      : FfTokens.nocturneT2,
+                                ),
+                              ),
+                              const _RosterVSep(tight: true),
+                              _RosterIconButton(
+                                width: 26,
+                                height: 26,
+                                hovered: _favHovered || widget.favoritesOn,
+                                active: widget.favoritesOn,
+                                activeColor: const Color(0x1FE8C547),
+                                onHover: (v) =>
+                                    setState(() => _favHovered = v),
+                                onTap: widget.onFavoritesToggle,
+                                tooltip: 'Favorite players',
+                                child: PhosphorIcon(
+                                  widget.favoritesOn
+                                      ? PhosphorIconsFill.star
+                                      : PhosphorIconsRegular.star,
+                                  size: 14,
+                                  color: widget.favoritesOn
+                                      ? FfTokens.gold
+                                      : (_favHovered
+                                          ? FfTokens.nocturneTx
+                                          : FfTokens.nocturneT2),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      IgnorePointer(
+                        ignoring: hideChrome,
+                        child: Opacity(
+                          opacity: hideChrome ? 0 : 1,
+                          child: const _RosterVSep(),
+                        ),
+                      ),
+                      Expanded(
+                        child: AnimatedOpacity(
+                          duration: const Duration(milliseconds: 150),
+                          opacity: hideChrome ? 0 : 1,
+                          child: IgnorePointer(
+                            ignoring: hideChrome,
+                            child: Align(
+                              alignment: pinned == null
+                                  ? Alignment.center
+                                  : Alignment.centerLeft,
+                              child: _RosterPinSlot(
+                                player: pinned,
+                                onSelect: widget.onSelectPinned,
+                                onUnpin: widget.onUnpin,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      IgnorePointer(
+                        ignoring: hideChrome,
+                        child: Opacity(
+                          opacity: hideChrome ? 0 : 1,
+                          child: const _RosterVSep(),
+                        ),
+                      ),
+                      widget.gear,
+                    ],
+                  ),
+                  if (searchVisible)
+                    Positioned(
+                      left: searchLeft,
+                      top: 5,
+                      height: 26,
+                      child: AnimatedBuilder(
+                        animation: _expand,
+                        builder: (context, child) {
+                          final t = _ease.transform(_expand.value);
+                          final w = 28 + (searchFullW - 28) * t;
+                          return SizedBox(
+                            width: w,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(7),
+                              child: OverflowBox(
+                                alignment: Alignment.centerLeft,
+                                maxWidth: searchFullW,
+                                minWidth: searchFullW,
+                                child: SizedBox(
+                                  width: searchFullW,
+                                  child: child,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                        child: _RosterExpandingSearch(
+                          controller: widget.filterController,
+                          focusNode: widget.filterFocusNode,
+                          onKeyEvent: _onSearchKey,
+                          onClose: _closeSearch,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+        ),
+      ),
+    );
+  }
+
+  double _measureTeamWidth(String abbr) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: abbr,
+        style: const TextStyle(
+          fontFamily: FfTokens.fontFamily,
+          fontSize: 15,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.3,
+        ),
+      ),
+      maxLines: 1,
+      textDirection: TextDirection.ltr,
+    )..layout();
+    return painter.width + 6 + 2; // left pad + breathing room
+  }
+}
+
+class _RosterVSep extends StatelessWidget {
+  const _RosterVSep({this.tight = false});
+
+  final bool tight;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: tight ? 1 : 3),
+      child: const SizedBox(
+        width: 1,
+        height: 18,
+        child: ColoredBox(color: Color(0x1EE8EEF4)), // .12
+      ),
+    );
+  }
+}
+
+class _RosterIconButton extends StatelessWidget {
+  const _RosterIconButton({
+    required this.width,
+    required this.height,
+    required this.hovered,
+    required this.onHover,
+    required this.onTap,
+    required this.child,
+    this.tooltip,
+    this.active = false,
+    this.activeColor,
+  });
+
+  final double width;
+  final double height;
+  final bool hovered;
+  final ValueChanged<bool> onHover;
+  final VoidCallback onTap;
+  final Widget child;
+  final String? tooltip;
+  final bool active;
+  final Color? activeColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = active
+        ? (activeColor ?? FfTokens.nocturneHv)
+        : (hovered ? FfTokens.nocturneHv : Colors.transparent);
+    final button = MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => onHover(true),
+      onExit: (_) => onHover(false),
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          width: width,
+          height: height,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(7),
+          ),
+          child: child,
+        ),
+      ),
+    );
+    if (tooltip == null) return button;
+    return Tooltip(
+      message: tooltip!,
+      waitDuration: const Duration(milliseconds: 400),
+      child: button,
+    );
+  }
+}
+
+class _RosterExpandingSearch extends StatelessWidget {
+  const _RosterExpandingSearch({
+    required this.controller,
+    required this.focusNode,
+    required this.onKeyEvent,
+    required this.onClose,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final KeyEventResult Function(FocusNode, KeyEvent) onKeyEvent;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: FfTokens.nocturneSunken,
+        borderRadius: BorderRadius.circular(7),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x594A7A96), // rgba(74,122,150,.35)
+            blurRadius: 0,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: SizedBox(
+        height: 26,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 7),
+          child: Row(
+            children: [
+              const PhosphorIcon(
+                PhosphorIconsRegular.magnifyingGlass,
+                size: 14,
+                color: FfTokens.nocturneT2,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Focus(
+                  onKeyEvent: onKeyEvent,
+                  child: TextField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    style: const TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w400,
+                      color: FfTokens.nocturneTx,
+                      height: 1,
+                    ),
+                    cursorColor: FfTokens.nocturneAc,
+                    cursorHeight: 13,
+                    decoration: const InputDecoration(
+                      isCollapsed: true,
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.zero,
+                      hintText: 'Search players',
+                      hintStyle: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
+                        color: FfTokens.nocturneT3,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Tooltip(
+                message: 'Close (Esc)',
+                waitDuration: const Duration(milliseconds: 400),
+                child: _RosterSearchClose(onTap: onClose),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RosterSearchClose extends StatefulWidget {
+  const _RosterSearchClose({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  State<_RosterSearchClose> createState() => _RosterSearchCloseState();
+}
+
+class _RosterSearchCloseState extends State<_RosterSearchClose> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 80),
+          width: 18,
+          height: 18,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: _hovered ? const Color(0x14E8EEF4) : Colors.transparent,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: PhosphorIcon(
+            PhosphorIconsRegular.x,
+            size: 11,
+            color: _hovered ? FfTokens.nocturneTx : const Color(0xFF6A6E73),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RosterPinSlot extends StatefulWidget {
+  const _RosterPinSlot({
+    this.player,
+    this.onSelect,
+    this.onUnpin,
+  });
+
+  final Player? player;
+  final VoidCallback? onSelect;
+  final VoidCallback? onUnpin;
+
+  @override
+  State<_RosterPinSlot> createState() => _RosterPinSlotState();
+}
+
+class _RosterPinSlotState extends State<_RosterPinSlot> {
+  bool _closeHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final player = widget.player;
+    if (player == null) {
+      return const SizedBox(
+        height: 24,
+        width: double.infinity,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            PhosphorIcon(
+              PhosphorIconsRegular.pushPin,
+              size: 12,
+              color: FfTokens.pinnedHint,
+            ),
+            SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                'CMD+Click to pin player',
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  height: 1,
+                  color: FfTokens.pinnedHint,
+                  decoration: TextDecoration.none,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final jersey = player.jerseyNumber?.trim();
+    final jerseyLabel =
+        (jersey == null || jersey.isEmpty) ? '—' : jersey;
+    final last = _RosterPolish.lastName(player);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0x1F4A7A96), // .12
+        borderRadius: BorderRadius.circular(6),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x4D4A7A96), // .30
+            blurRadius: 0,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: SizedBox(
+        height: 22,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(7, 0, 2, 0),
+          child: Row(
+            children: [
+              const PhosphorIcon(
+                PhosphorIconsFill.pushPin,
+                size: 11,
+                color: FfTokens.accentHover,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                jerseyLabel,
+                style: const TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  height: 1,
+                  color: Colors.white,
+                  decoration: TextDecoration.none,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                  shadows: [
+                    Shadow(
+                      color: Color(0xCC5A8EAB),
+                      blurRadius: 6,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 5),
+              Expanded(
+                child: GestureDetector(
+                  onTap: widget.onSelect,
+                  behavior: HitTestBehavior.opaque,
+                  child: Text(
+                    last,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      height: 1,
+                      color: Colors.white,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                ),
+              ),
+              Tooltip(
+                message: 'Unpin',
+                waitDuration: const Duration(milliseconds: 400),
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  onEnter: (_) => setState(() => _closeHovered = true),
+                  onExit: (_) => setState(() => _closeHovered = false),
+                  child: GestureDetector(
+                    onTap: widget.onUnpin,
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: Center(
+                        child: PhosphorIcon(
+                          PhosphorIconsRegular.x,
+                          size: 11,
+                          color: _closeHovered
+                              ? FfTokens.nocturneTx
+                              : const Color(0xFF6A6E73),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+class _RosterSubjectDock extends StatelessWidget {
+  const _RosterSubjectDock({
+    required this.controller,
+    required this.isHome,
+    required this.tokens,
+  });
+
+  final CaptionV2Controller controller;
+  final bool isHome;
+  final FfTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    final playersOn = controller.teamPlayersIsHome == isHome &&
+        controller.teamSubjectKind == TeamSubjectKind.players;
+    final teamOn = controller.teamPlayersIsHome == isHome &&
+        controller.teamSubjectKind == TeamSubjectKind.name;
+    final teammatesOn = controller.withTeammatesIsHome == isHome;
+    // Match _DrumCustomVerbField height (26). Gap above separates from last player.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 12, 4, 2),
+      child: Container(
+        height: 26,
+        padding: const EdgeInsets.all(1),
+        decoration: BoxDecoration(
+          color: FfTokens.nocturneSf,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: tokens.text.withValues(alpha: 0.08)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: _SubjectDockButton(
+                label: 'Players',
+                icon: PhosphorIconsRegular.usersThree,
+                selected: playersOn,
+                onTap: () => controller.toggleTeamSubject(
+                  isHome: isHome,
+                  kind: TeamSubjectKind.players,
+                ),
+              ),
+            ),
+            Expanded(
+              child: _SubjectDockButton(
+                label: 'Team',
+                icon: PhosphorIconsRegular.shield,
+                selected: teamOn,
+                onTap: () => controller.toggleTeamSubject(
+                  isHome: isHome,
+                  kind: TeamSubjectKind.name,
+                ),
+              ),
+            ),
+            Expanded(
+              child: _SubjectDockButton(
+                label: 'Teammates',
+                icon: PhosphorIconsRegular.users,
+                selected: teammatesOn,
+                onTap: () => controller.toggleTeamSubject(
+                  isHome: isHome,
+                  kind: TeamSubjectKind.teammates,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SubjectDockButton extends StatefulWidget {
+  const _SubjectDockButton({
     required this.label,
     required this.icon,
     required this.selected,
@@ -3733,211 +5188,56 @@ class _TeamSubjectCell extends StatefulWidget {
   final VoidCallback onTap;
 
   @override
-  State<_TeamSubjectCell> createState() => _TeamSubjectCellState();
+  State<_SubjectDockButton> createState() => _SubjectDockButtonState();
 }
 
-class _TeamSubjectCellState extends State<_TeamSubjectCell> {
-  bool _hovered = false;
-  bool _pressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final selected = widget.selected;
-    final pressed = _pressed || selected;
-    final Color fill;
-    final Color border;
-    final Color iconColor;
-    if (pressed) {
-      fill = FfTokens.nocturneAccentSoft;
-      border = FfTokens.nocturneAccentEdge;
-      iconColor = FfTokens.accentHover;
-    } else if (_hovered) {
-      fill = FfTokens.nocturneHv;
-      border = FfTokens.nocturneLn;
-      iconColor = FfTokens.accentHover;
-    } else {
-      fill = FfTokens.nocturneSf;
-      border = FfTokens.nocturneLn;
-      iconColor = FfTokens.nocturneT2;
-    }
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() {
-        _hovered = false;
-        _pressed = false;
-      }),
-      child: GestureDetector(
-        onTapDown: (_) => setState(() => _pressed = true),
-        onTapUp: (_) => setState(() => _pressed = false),
-        onTapCancel: () => setState(() => _pressed = false),
-        onTap: widget.onTap,
-        child: SizedBox(
-          height: 40,
-          width: double.infinity,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            decoration: BoxDecoration(
-              color: fill,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: border, width: 1),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                PhosphorIcon(
-                  widget.icon,
-                  size: 14,
-                  color: iconColor,
-                ),
-                const SizedBox(width: 5),
-                Flexible(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      widget.label,
-                      maxLines: 1,
-                      softWrap: false,
-                      style: const TextStyle(
-                        fontFamily: FfTokens.labelFamily,
-                        fontSize: 12,
-                        height: 1,
-                        fontWeight: FontWeight.w600,
-                        color: FfTokens.nocturneTx,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _NumberCell extends StatefulWidget {
-  const _NumberCell({
-    super.key,
-    required this.player,
-    required this.lastName,
-    required this.selected,
-    required this.tokens,
-    required this.width,
-    required this.height,
-    required this.nameSize,
-    required this.jerseySize,
-    required this.onTap,
-    this.onPin,
-    this.onSecondaryTap,
-  });
-
-  final Player player;
-  final String lastName;
-  final bool selected;
-  final FfTokens tokens;
-  final double width;
-  final double height;
-  final double nameSize;
-  final double jerseySize;
-  final VoidCallback onTap;
-  final VoidCallback? onPin;
-  final ValueChanged<Offset>? onSecondaryTap;
-
-  @override
-  State<_NumberCell> createState() => _NumberCellState();
-}
-
-class _NumberCellState extends State<_NumberCell> {
+class _SubjectDockButtonState extends State<_SubjectDockButton> {
   bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    final tokens = widget.tokens;
     final selected = widget.selected;
-    final hovering = _hovered;
-    final fill = selected
-        ? tokens.text
-        : (hovering ? tokens.hover : tokens.sunken);
-    final nameColor = selected
-        ? tokens.bg.withValues(alpha: 0.7)
-        : tokens.textSecondary;
-    final numberColor = selected ? tokens.bg : tokens.text;
-    final name = widget.lastName.toUpperCase();
-
+    final color = selected || _hovered
+        ? FfTokens.nocturneTx
+        : FfTokens.nocturneT2;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: CmdClick(
+      child: GestureDetector(
         onTap: widget.onTap,
-        onCmdTap: widget.onPin,
-        onSecondaryTapDown: widget.onSecondaryTap == null
-            ? null
-            : (details) => widget.onSecondaryTap!(details.globalPosition),
-        child: SizedBox(
-          height: widget.height,
-          width: widget.width,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
-            decoration: BoxDecoration(
-              color: fill,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  name,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 100),
+          height: 24,
+          decoration: BoxDecoration(
+            color: selected
+                ? FfTokens.nocturneAccentSoft
+                : (_hovered ? FfTokens.nocturneHv : Colors.transparent),
+            borderRadius: BorderRadius.circular(5),
+            border: selected
+                ? Border.all(color: FfTokens.nocturneAccentEdge)
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              PhosphorIcon(widget.icon, size: 12, color: color),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  widget.label,
                   maxLines: 1,
-                  softWrap: false,
                   overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontFamily: FfTokens.labelFamily,
-                    fontSize: widget.nameSize - 0.5,
-                    height: 1.05,
-                    letterSpacing: 0.2,
-                    fontWeight: FontWeight.w700,
-                    color: nameColor,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  widget.player.jerseyNumber ?? '—',
-                  maxLines: 1,
-                  textAlign: TextAlign.center,
                   style: TextStyle(
                     fontFamily: FfTokens.fontFamily,
-                    fontSize: widget.jerseySize,
-                    fontWeight: FontWeight.w800,
-                    height: 1.0,
-                    letterSpacing: -1.2,
-                    color: numberColor,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                    shadows: [
-                      Shadow(
-                        color: numberColor.withValues(alpha: 0.75),
-                        blurRadius: 6,
-                      ),
-                      Shadow(
-                        color: numberColor.withValues(alpha: 0.4),
-                        blurRadius: 16,
-                      ),
-                    ],
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    height: 1,
+                    color: color,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -4431,29 +5731,54 @@ class _PinnedHintBar extends StatelessWidget {
 class PlayerGearMenu extends StatefulWidget {
   const PlayerGearMenu({
     this.numberMode,
+    this.groupByPosition,
     this.onNumbers,
     this.onNames,
+    this.onGroupByPosition,
     this.onEditTeam,
     this.onReset,
+    this.textSizeValue,
+    this.canTextSmaller,
+    this.canTextLarger,
+    this.onTextSmaller,
+    this.onTextLarger,
+    this.onTextFit,
   });
 
   /// Null hides the layout rows and leaves Edit rosters.
   final bool? numberMode;
+  final bool? groupByPosition;
   final VoidCallback? onNumbers;
   final VoidCallback? onNames;
+  final ValueChanged<bool>? onGroupByPosition;
   final VoidCallback? onEditTeam;
   final VoidCallback? onReset;
+
+  /// Compact Roster Top Bar gear: text size · group by · view.
+  final int? textSizeValue;
+  final bool? canTextSmaller;
+  final bool? canTextLarger;
+  final VoidCallback? onTextSmaller;
+  final VoidCallback? onTextLarger;
+  final VoidCallback? onTextFit;
 
   @override
   State<PlayerGearMenu> createState() => _PlayerGearMenuState();
 }
 
 class _PlayerGearMenuState extends State<PlayerGearMenu> {
-  static const _menuWidth = 280.0;
+  static const _menuWidth = 272.0;
+  static const _legacyMenuWidth = 280.0;
+
+  bool get _compactRosterMenu =>
+      widget.textSizeValue != null &&
+      widget.onTextSmaller != null &&
+      widget.onTextLarger != null;
 
   OverlayEntry? _entry;
   bool _open = false;
   bool _hovered = false;
+  bool _textFitOn = false;
 
   bool get _layout => widget.numberMode != null;
 
@@ -4497,17 +5822,36 @@ class _PlayerGearMenuState extends State<PlayerGearMenu> {
     if (box == null || !box.hasSize || overlayBox == null || !overlayBox.hasSize) {
       return;
     }
+    final menuW = _compactRosterMenu ? _menuWidth : _legacyMenuWidth;
     final origin = overlayBox.globalToLocal(box.localToGlobal(Offset.zero));
     final overlaySize = overlayBox.size;
     const gap = 8.0;
-    // Prefer opening to the right of the gear so the popover doesn't cover
-    // the player list. Fall back to the left when the window is too tight.
+    // Compact roster gear: open above, right-aligned to the gear.
+    // Flip below only when there isn't room. Legacy: prefer beside/below.
+    final preferLeft = origin.dx + box.size.width - menuW;
     final rightLeft = origin.dx + box.size.width + gap;
-    final leftLeft = origin.dx - gap - _menuWidth;
-    final maxLeft = overlaySize.width - 8 - _menuWidth;
-    final opensRight = rightLeft <= maxLeft;
-    final left = (opensRight ? rightLeft : leftLeft)
+    final leftLeft = origin.dx - gap - menuW;
+    final maxLeft = overlaySize.width - 8 - menuW;
+    final opensRight = !_compactRosterMenu && rightLeft <= maxLeft;
+    final left = (opensRight
+            ? rightLeft
+            : (_compactRosterMenu ? preferLeft : leftLeft))
         .clamp(8.0, maxLeft < 8 ? 8.0 : maxLeft);
+    final gearTop = origin.dy;
+    final gearBottom = origin.dy + box.size.height;
+    // Rough menu height (header + up to 3 rows + edit) for flip decision.
+    const estimatedH = 220.0;
+    final opensAbove =
+        _compactRosterMenu && gearTop - gap - estimatedH >= 8;
+    final double? top;
+    final double? bottom;
+    if (_compactRosterMenu) {
+      top = opensAbove ? null : gearBottom + gap;
+      bottom = opensAbove ? gearTop - gap : null;
+    } else {
+      top = origin.dy;
+      bottom = null;
+    }
 
     _entry = OverlayEntry(
       builder: (menuContext) {
@@ -4521,9 +5865,10 @@ class _PlayerGearMenuState extends State<PlayerGearMenu> {
             ),
             CustomSingleChildLayout(
               delegate: _GearMenuBeside(
-                top: origin.dy,
+                top: top,
+                bottom: bottom,
                 left: left,
-                width: _menuWidth,
+                width: menuW,
               ),
               child: Focus(
                 autofocus: true,
@@ -4540,21 +5885,60 @@ class _PlayerGearMenuState extends State<PlayerGearMenu> {
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () {},
-                    child: _PlayerGearCard(
-                      numberMode: widget.numberMode,
-                      onNumbers: widget.onNumbers,
-                      onNames: widget.onNames,
-                      onEditTeam: widget.onEditTeam == null
-                          ? null
-                          : () {
-                              final edit = widget.onEditTeam;
-                              _close();
-                              edit?.call();
+                    child: _compactRosterMenu
+                        ? _RosterGearCard(
+                            opensAbove: opensAbove,
+                            textSizeValue: widget.textSizeValue!,
+                            textFitOn: _textFitOn,
+                            canTextSmaller: widget.canTextSmaller ?? true,
+                            canTextLarger: widget.canTextLarger ?? true,
+                            onTextSmaller: () {
+                              _textFitOn = false;
+                              widget.onTextSmaller!();
+                              _entry?.markNeedsBuild();
                             },
-                      showReset: false,
-                      onReset: widget.onReset,
-                      onClose: _close,
-                    ),
+                            onTextLarger: () {
+                              _textFitOn = false;
+                              widget.onTextLarger!();
+                              _entry?.markNeedsBuild();
+                            },
+                            onTextFit: widget.onTextFit == null
+                                ? null
+                                : () {
+                                    _textFitOn = !_textFitOn;
+                                    if (_textFitOn) widget.onTextFit!();
+                                    _entry?.markNeedsBuild();
+                                  },
+                            groupByPosition: widget.groupByPosition ?? false,
+                            onGroupByPosition: widget.onGroupByPosition,
+                            numberMode: widget.numberMode ?? true,
+                            onNumbers: widget.onNumbers,
+                            onNames: widget.onNames,
+                            onEditTeam: widget.onEditTeam == null
+                                ? null
+                                : () {
+                                    final edit = widget.onEditTeam;
+                                    _close();
+                                    edit?.call();
+                                  },
+                          )
+                        : _PlayerGearCard(
+                            numberMode: widget.numberMode,
+                            groupByPosition: widget.groupByPosition,
+                            onNumbers: widget.onNumbers,
+                            onNames: widget.onNames,
+                            onGroupByPosition: widget.onGroupByPosition,
+                            onEditTeam: widget.onEditTeam == null
+                                ? null
+                                : () {
+                                    final edit = widget.onEditTeam;
+                                    _close();
+                                    edit?.call();
+                                  },
+                            showReset: false,
+                            onReset: widget.onReset,
+                            onClose: _close,
+                          ),
                   ),
                 ),
               ),
@@ -4569,8 +5953,13 @@ class _PlayerGearMenuState extends State<PlayerGearMenu> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_layout && widget.onEditTeam == null) return const SizedBox.shrink();
+    if (!_layout &&
+        widget.onEditTeam == null &&
+        !_compactRosterMenu) {
+      return const SizedBox.shrink();
+    }
     final active = _open || _hovered;
+    final size = _compactRosterMenu ? 26.0 : 24.0;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       hitTestBehavior: HitTestBehavior.opaque,
@@ -4581,17 +5970,644 @@ class _PlayerGearMenuState extends State<PlayerGearMenu> {
         onTap: _toggle,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 80),
-          width: 24,
-          height: 24,
+          width: size,
+          height: size,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: active ? FfTokens.nocturneHv : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(7),
           ),
           child: PhosphorIcon(
             PhosphorIconsRegular.gearSix,
             size: 14,
-            color: active ? FfTokens.nocturneTx : FfTokens.nocturneT3,
+            color: active ? FfTokens.nocturneTx : FfTokens.nocturneT2,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact roster gear — View · Group by · Text size · Edit.
+class _RosterGearCard extends StatelessWidget {
+  const _RosterGearCard({
+    required this.textSizeValue,
+    required this.textFitOn,
+    required this.canTextSmaller,
+    required this.canTextLarger,
+    required this.onTextSmaller,
+    required this.onTextLarger,
+    required this.groupByPosition,
+    required this.numberMode,
+    this.opensAbove = true,
+    this.onTextFit,
+    this.onGroupByPosition,
+    this.onNumbers,
+    this.onNames,
+    this.onEditTeam,
+  });
+
+  /// Caret on the bottom edge when opened above; top edge when flipped below.
+  final bool opensAbove;
+  final int textSizeValue;
+  final bool textFitOn;
+  final bool canTextSmaller;
+  final bool canTextLarger;
+  final VoidCallback onTextSmaller;
+  final VoidCallback onTextLarger;
+  final VoidCallback? onTextFit;
+  final bool groupByPosition;
+  final bool numberMode;
+  final ValueChanged<bool>? onGroupByPosition;
+  final VoidCallback? onNumbers;
+  final VoidCallback? onNames;
+  final VoidCallback? onEditTeam;
+
+  static const _controlW = 150.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final showGroup = onGroupByPosition != null;
+    final showView = onNumbers != null && onNames != null;
+
+    return Padding(
+      // Leave room for the caret diamond toward the gear.
+      padding: EdgeInsets.only(
+        top: opensAbove ? 0 : 5,
+        bottom: opensAbove ? 5 : 0,
+      ),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E242A),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x24E8EEF4), // .14
+                  blurRadius: 0,
+                  spreadRadius: 1,
+                ),
+                BoxShadow(
+                  color: Color(0x8C000000), // .55
+                  blurRadius: 44,
+                  offset: Offset(0, 18),
+                ),
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(8, 8, 8, 4),
+                    child: Text(
+                      'ROSTER',
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.84, // .08em
+                        color: Color(0xFF6A6E73),
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                  ),
+                  if (showView)
+                    _RosterGearRow(
+                      label: 'View',
+                      trailing: SizedBox(
+                        width: _controlW,
+                        child: _RosterSegPills(
+                          left: 'Grid',
+                          right: 'List',
+                          leftIcon: PhosphorIconsRegular.squaresFour,
+                          rightIcon: PhosphorIconsRegular.list,
+                          rightSelected: !numberMode,
+                          onLeft: onNumbers!,
+                          onRight: onNames!,
+                        ),
+                      ),
+                    ),
+                  if (showGroup)
+                    _RosterGearRow(
+                      label: 'Group by',
+                      trailing: SizedBox(
+                        width: _controlW,
+                        child: _RosterSegPills(
+                          left: 'Number',
+                          right: 'Position',
+                          rightSelected: groupByPosition,
+                          onLeft: () => onGroupByPosition!(false),
+                          onRight: () => onGroupByPosition!(true),
+                        ),
+                      ),
+                    ),
+                  _RosterGearRow(
+                    label: 'Text size',
+                    trailing: SizedBox(
+                      width: _controlW,
+                      child: _RosterTextSizeStepper(
+                        value: textSizeValue,
+                        fitOn: textFitOn,
+                        canSmaller: canTextSmaller,
+                        canLarger: canTextLarger,
+                        onSmaller: onTextSmaller,
+                        onLarger: onTextLarger,
+                        onFit: onTextFit,
+                      ),
+                    ),
+                  ),
+                  if (onEditTeam != null) ...[
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      child: ColoredBox(
+                        color: Color(0x14E8EEF4), // .08
+                        child: SizedBox(height: 1),
+                      ),
+                    ),
+                    _RosterGearAction(
+                      icon: PhosphorIconsRegular.pencilSimple,
+                      label: 'Edit rosters',
+                      onTap: onEditTeam!,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          // Caret on the edge toward the gear (bottom when above).
+          Positioned(
+            right: 10,
+            top: opensAbove ? null : -5,
+            bottom: opensAbove ? -5 : null,
+            child: Transform.rotate(
+              angle: math.pi / 4,
+              child: Container(
+                width: 9,
+                height: 9,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E242A),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0x24E8EEF4),
+                      offset: opensAbove
+                          ? const Offset(1, 1)
+                          : const Offset(-1, -1),
+                      blurRadius: 0,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RosterGearRow extends StatelessWidget {
+  const _RosterGearRow({
+    required this.label,
+    required this.trailing,
+  });
+
+  final String label;
+  final Widget trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 36),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFFE8EEF4),
+                  decoration: TextDecoration.none,
+                ),
+              ),
+            ),
+            trailing,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RosterGearAction extends StatefulWidget {
+  const _RosterGearAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  State<_RosterGearAction> createState() => _RosterGearActionState();
+}
+
+class _RosterGearActionState extends State<_RosterGearAction> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 80),
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            color: _hovered ? const Color(0xFF262D35) : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              PhosphorIcon(
+                widget.icon,
+                size: 15,
+                color: const Color(0xFF959AA0),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                widget.label,
+                style: const TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFFE8EEF4),
+                  decoration: TextDecoration.none,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Segmented track for Group by / View — equal-width pills, fixed outer width.
+class _RosterSegPills extends StatelessWidget {
+  const _RosterSegPills({
+    required this.left,
+    required this.right,
+    required this.rightSelected,
+    required this.onLeft,
+    required this.onRight,
+    this.leftIcon,
+    this.rightIcon,
+  });
+
+  final String left;
+  final String right;
+  final IconData? leftIcon;
+  final IconData? rightIcon;
+  final bool rightSelected;
+  final VoidCallback onLeft;
+  final VoidCallback onRight;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFF151A1E),
+        borderRadius: BorderRadius.circular(7),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14E8EEF4), // inset approx via outer stroke
+            blurRadius: 0,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(2),
+        child: SizedBox(
+          height: 24,
+          child: Row(
+            children: [
+              Expanded(
+                child: _RosterSegPill(
+                  label: left,
+                  icon: leftIcon,
+                  selected: !rightSelected,
+                  onTap: onLeft,
+                ),
+              ),
+              const SizedBox(width: 2),
+              Expanded(
+                child: _RosterSegPill(
+                  label: right,
+                  icon: rightIcon,
+                  selected: rightSelected,
+                  onTap: onRight,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RosterSegPill extends StatefulWidget {
+  const _RosterSegPill({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.icon,
+  });
+
+  final String label;
+  final IconData? icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  State<_RosterSegPill> createState() => _RosterSegPillState();
+}
+
+class _RosterSegPillState extends State<_RosterSegPill> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = widget.selected;
+    final ink = selected
+        ? Colors.white
+        : (_hovered ? const Color(0xFFE8EEF4) : const Color(0xFF959AA0));
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          height: 24,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFF20313C) : Colors.transparent,
+            borderRadius: BorderRadius.circular(5),
+            boxShadow: selected
+                ? const [
+                    BoxShadow(
+                      color: Color(0xFF3A6076),
+                      blurRadius: 0,
+                      spreadRadius: 1,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.icon != null) ...[
+                PhosphorIcon(widget.icon!, size: 14, color: ink),
+                const SizedBox(width: 5),
+              ],
+              Flexible(
+                child: Text(
+                  widget.label,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.clip,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    height: 1,
+                    color: ink,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RosterTextSizeStepper extends StatelessWidget {
+  const _RosterTextSizeStepper({
+    required this.value,
+    required this.fitOn,
+    required this.canSmaller,
+    required this.canLarger,
+    required this.onSmaller,
+    required this.onLarger,
+    this.onFit,
+  });
+
+  final int value;
+  final bool fitOn;
+  final bool canSmaller;
+  final bool canLarger;
+  final VoidCallback onSmaller;
+  final VoidCallback onLarger;
+  final VoidCallback? onFit;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFF151A1E),
+        borderRadius: BorderRadius.circular(7),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14E8EEF4),
+            blurRadius: 0,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: SizedBox(
+        height: 28,
+        child: Row(
+          children: [
+            _RosterAaBtn(
+              label: 'A',
+              fontSize: 10,
+              enabled: canSmaller || fitOn,
+              onTap: onSmaller,
+            ),
+            Expanded(
+              child: Text(
+                fitOn ? 'Auto' : '$value',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFFE8EEF4),
+                  decoration: TextDecoration.none,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+            _RosterAaBtn(
+              label: 'A',
+              fontSize: 15,
+              enabled: canLarger || fitOn,
+              onTap: onLarger,
+            ),
+            if (onFit != null) ...[
+              const SizedBox(
+                width: 1,
+                height: 28,
+                child: ColoredBox(color: Color(0x1AE8EEF4)), // .10
+              ),
+              _RosterFitBtn(
+                selected: fitOn,
+                onTap: onFit!,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RosterFitBtn extends StatefulWidget {
+  const _RosterFitBtn({
+    required this.selected,
+    required this.onTap,
+  });
+
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  State<_RosterFitBtn> createState() => _RosterFitBtnState();
+}
+
+class _RosterFitBtnState extends State<_RosterFitBtn> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = widget.selected;
+    final color = selected
+        ? Colors.white
+        : (_hovered ? Colors.white : const Color(0xFF959AA0));
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 80),
+          height: 28,
+          padding: const EdgeInsets.symmetric(horizontal: 9),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected
+                ? const Color(0xFF20313C)
+                : (_hovered ? const Color(0xFF262D35) : Colors.transparent),
+            borderRadius: const BorderRadius.horizontal(
+              right: Radius.circular(7),
+            ),
+          ),
+          child: Text(
+            'Fit',
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              height: 1,
+              color: color,
+              decoration: TextDecoration.none,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RosterAaBtn extends StatefulWidget {
+  const _RosterAaBtn({
+    required this.label,
+    required this.fontSize,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final String label;
+  final double fontSize;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  State<_RosterAaBtn> createState() => _RosterAaBtnState();
+}
+
+class _RosterAaBtnState extends State<_RosterAaBtn> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.enabled;
+    final color = !enabled
+        ? const Color(0xFF959AA0).withValues(alpha: 0.45)
+        : (_hovered ? Colors.white : const Color(0xFF959AA0));
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      onEnter: enabled ? (_) => setState(() => _hovered = true) : null,
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: enabled ? widget.onTap : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 80),
+          width: 26,
+          height: 28,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: _hovered && enabled
+                ? const Color(0xFF262D35)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(7),
+          ),
+          child: Text(
+            widget.label,
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: widget.fontSize,
+              fontWeight: FontWeight.w700,
+              height: 1,
+              color: color,
+              decoration: TextDecoration.none,
+            ),
           ),
         ),
       ),
@@ -4601,12 +6617,17 @@ class _PlayerGearMenuState extends State<PlayerGearMenu> {
 
 class _GearMenuBeside extends SingleChildLayoutDelegate {
   _GearMenuBeside({
-    required this.top,
+    this.top,
+    this.bottom,
     required this.left,
     required this.width,
-  });
+  }) : assert(top != null || bottom != null);
 
-  final double top;
+  /// Top edge of the menu when opening below / beside.
+  final double? top;
+
+  /// Bottom edge of the menu when opening above the gear.
+  final double? bottom;
   final double left;
   final double width;
 
@@ -4623,9 +6644,9 @@ class _GearMenuBeside extends SingleChildLayoutDelegate {
 
   @override
   Offset getPositionForChild(Size size, Size childSize) {
-    var y = top;
-    if (y < 8) y = 8;
     final maxTop = size.height - 8 - childSize.height;
+    var y = bottom != null ? bottom! - childSize.height : top!;
+    if (y < 8) y = 8;
     if (y > maxTop) y = maxTop < 8 ? 8.0 : maxTop;
     var x = left;
     final maxLeft = size.width - 8 - childSize.width;
@@ -4637,6 +6658,7 @@ class _GearMenuBeside extends SingleChildLayoutDelegate {
   @override
   bool shouldRelayout(covariant _GearMenuBeside oldDelegate) {
     return top != oldDelegate.top ||
+        bottom != oldDelegate.bottom ||
         left != oldDelegate.left ||
         width != oldDelegate.width;
   }
@@ -4645,8 +6667,10 @@ class _GearMenuBeside extends SingleChildLayoutDelegate {
 class _PlayerGearCard extends StatelessWidget {
   const _PlayerGearCard({
     required this.numberMode,
+    required this.groupByPosition,
     required this.onNumbers,
     required this.onNames,
+    required this.onGroupByPosition,
     required this.onEditTeam,
     required this.showReset,
     required this.onReset,
@@ -4654,8 +6678,10 @@ class _PlayerGearCard extends StatelessWidget {
   });
 
   final bool? numberMode;
+  final bool? groupByPosition;
   final VoidCallback? onNumbers;
   final VoidCallback? onNames;
+  final ValueChanged<bool>? onGroupByPosition;
   final VoidCallback? onEditTeam;
   final bool showReset;
   final VoidCallback? onReset;
@@ -4665,6 +6691,7 @@ class _PlayerGearCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final showLayout = numberMode != null;
     final show = numberMode == false ? _PlayerShow.names : _PlayerShow.numbers;
+    final showGroup = groupByPosition != null && onGroupByPosition != null;
 
     return DecoratedBox(
       decoration: const BoxDecoration(
@@ -4740,6 +6767,31 @@ class _PlayerGearCard extends StatelessWidget {
                 ),
               ),
             ],
+            if (showGroup) ...[
+              const SizedBox(height: 2),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Ordering:',
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: FfTokens.nocturneTx,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _GroupSegments(
+                      grouped: groupByPosition!,
+                      onChanged: onGroupByPosition!,
+                    ),
+                  ],
+                ),
+              ),
+            ],
             if (showReset || onEditTeam != null) ...[
               const SizedBox(height: 2),
               const Padding(
@@ -4780,6 +6832,47 @@ class _PlayerGearCard extends StatelessWidget {
 }
 
 enum _PlayerShow { numbers, names }
+
+class _GroupSegments extends StatelessWidget {
+  const _GroupSegments({
+    required this.grouped,
+    required this.onChanged,
+  });
+
+  final bool grouped;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 28,
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: FfTokens.nocturneBg,
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: FfTokens.nocturneLn2),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _ShowSegment(
+              label: 'By Position',
+              selected: grouped,
+              onTap: () => onChanged(true),
+            ),
+          ),
+          Expanded(
+            child: _ShowSegment(
+              label: 'By Number',
+              selected: !grouped,
+              onTap: () => onChanged(false),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 /// Joined Numbers / Names control, same pattern as the
 /// caption-strip Half / Quarter toggle.
@@ -5109,106 +7202,6 @@ class _GearLinkState extends State<_GearLink> {
                 ),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SquareSizeStepper extends StatelessWidget {
-  const _SquareSizeStepper({
-    required this.canShrink,
-    required this.canGrow,
-    required this.onShrink,
-    required this.onGrow,
-    this.onFit,
-  });
-
-  final bool canShrink;
-  final bool canGrow;
-  final VoidCallback onShrink;
-  final VoidCallback onGrow;
-  final VoidCallback? onFit;
-
-  @override
-  Widget build(BuildContext context) {
-    return AaTextSizeControl(
-      height: 24,
-      canSmaller: canShrink,
-      canLarger: canGrow,
-      onSmaller: onShrink,
-      onLarger: onGrow,
-      onFit: onFit,
-    );
-  }
-}
-
-class _GhostHeaderIcon extends StatefulWidget {
-  const _GhostHeaderIcon({
-    super.key,
-    required this.tooltip,
-    required this.tokens,
-    required this.onTap,
-    this.icon,
-    this.label,
-    this.active = false,
-  });
-
-  final String tooltip;
-  final FfTokens tokens;
-  final VoidCallback onTap;
-  final IconData? icon;
-  final String? label;
-  final bool active;
-
-  @override
-  State<_GhostHeaderIcon> createState() => _GhostHeaderIconState();
-}
-
-class _GhostHeaderIconState extends State<_GhostHeaderIcon> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = _hovered || widget.active
-        ? widget.tokens.text
-        : widget.tokens.textSecondary;
-    return Tooltip(
-      message: widget.tooltip,
-      waitDuration: const Duration(milliseconds: 400),
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        cursor: SystemMouseCursors.click,
-        hitTestBehavior: HitTestBehavior.opaque,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            height: 24,
-            constraints: const BoxConstraints(minWidth: 14, minHeight: 24),
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: _hovered ? widget.tokens.hover : Colors.transparent,
-              borderRadius: BorderRadius.circular(5),
-            ),
-            child: widget.icon != null
-                ? PhosphorIcon(widget.icon!, size: 12, color: color)
-                : Text(
-                    widget.label ?? '',
-                    maxLines: 1,
-                    softWrap: false,
-                    style: TextStyle(
-                      fontFamily: FfTokens.fontFamily,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      height: 1,
-                      color: color,
-                    ),
-                  ),
           ),
         ),
       ),

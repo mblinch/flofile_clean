@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
 import '../../../caption_style/verb_index_filter_mode.dart';
-import '../../../flo_layout_constants.dart';
 import '../../../theme/ff_tokens.dart';
 import '../caption_v2_shortcuts.dart';
 import '../data/caption_v2_controller.dart';
@@ -19,39 +18,80 @@ const _kEase = Cubic(0.2, 0.8, 0.2, 1);
 const _kPillMs = Duration(milliseconds: 90);
 const _kUiMs = Duration(milliseconds: 220);
 const _kHoldMs = Duration(milliseconds: 900);
-const _kColorMs = Duration(milliseconds: 200);
-
 const _kVerbInk = Color(0xFFD8DEE4);
 const _kDimVerb = Color(0xFF454C52);
 const _kDimLetter = Color(0xFF2F363C);
 const _kFilterDim = Color(0xFF5A6168);
 const _kDot = Color(0xFF3A4148);
+/// Inter-verb separator circle diameter.
+const _kSepDotSize = 5.0;
 const _kMatch = Color(0xFFE8763A);
 const _kPill = Color(0xFF2F363C);
 const _kSelectedFill = Color(0xFF20313C);
 const _kSelectedEdge = Color(0xFF3A6076);
 const _kGold = Color(0xFFE8C547);
 const _kGoldInk = Color(0xFF1A1606);
-const _kFaveLetter = Color(0xFF4A7A96);
-const _kFaveWash = Color(0x145A8EAB); // list wash
-/// Cooler / deeper teal for Most used (distinct from Faves).
-const _kMostWash = Color(0x163A6076); // list wash
-const _kMostLetter = Color(0xFF4A7A96);
+/// Index letter ink — matches roster jersey numbers.
+const _kLetterInk = Color(0xFFF2F6FA);
 const _kDivider = Color(0x0FE8EEF4); // ~.06
-/// Inner height of Faves / Frequent pills and the History strip row.
-const _kModeTrackInnerH = 21.0;
 const _kHoverWash = Color(0x0FE8EEF4); // rgba(232,238,244,.06)
 const _kHomeRow = 'asdfjkl';
 
 /// Shared letter/icon column + gap for History and letter rows.
-/// Polish 2: grid 28px / 14px, list inset 10, row left pad 6.
+/// Header Fix: grid 28px / 14px, list inset 10, row left pad 6.
 const _kLetterColW = 28.0;
 const _kLetterColGap = 14.0;
 const _kListSidePad = 10.0;
 const _kRowSidePad = 6.0;
-const _kSectionGap = 6.0;
+/// Match player-lane header height ([_RosterTopBar.barHeight] = 36).
+const _kTopBarH = 36.0;
 
 const _kFiller = {'to', 'the', 'a', 'off', 'in', 'of', 'on'};
+
+/// Index letters + verb chips on Inter. Chips at weight 300 / opsz 22
+/// (between text and display — a bit less crunchy than opsz 14).
+/// `inherit: false` so Theme/DefaultTextStyle can't re-bold chips.
+TextStyle _verbIndexTextStyle({
+  required double fontSize,
+  required Color color,
+  FontWeight weight = FontWeight.w300,
+  double height = 1,
+  double? letterSpacing,
+  bool thinFace = false,
+  List<Shadow>? shadows,
+}) {
+  final wght = weight.value.toDouble();
+  return TextStyle(
+    inherit: false,
+    fontFamily: FfTokens.fontFamily,
+    fontSize: fontSize,
+    fontWeight: FontWeight.w400,
+    height: height,
+    letterSpacing: letterSpacing,
+    color: color,
+    shadows: shadows,
+    decoration: TextDecoration.none,
+    fontVariations: [
+      FontVariation('wght', thinFace ? 300.0 : wght),
+      FontVariation('opsz', thinFace ? 22.0 : fontSize.clamp(14.0, 32.0)),
+    ],
+  );
+}
+
+/// Soft text glow for index letters — same recipe as roster jersey numbers.
+List<Shadow> _letterGlow({
+  required bool gold,
+  required bool emphasized,
+}) {
+  return [
+    Shadow(
+      color: gold
+          ? const Color(0x8CE8C547)
+          : Colors.white.withValues(alpha: emphasized ? 0.55 : 0.35),
+      blurRadius: gold ? 8 : (emphasized ? 10 : 6),
+    ),
+  ];
+}
 
 class VerbIndexDensityMetrics {
   const VerbIndexDensityMetrics({
@@ -64,31 +104,14 @@ class VerbIndexDensityMetrics {
   final double pad;
   final double gap;
 
-  factory VerbIndexDensityMetrics.from(int density, double fontSize) {
-    // Verb column gap is fixed at 20px (Polish 2 --cg).
-    // Cozy (1): 13px → 20px lh so A–W fits a ~540px panel.
-    const gap = 20.0;
-    switch (density.clamp(0, 2)) {
-      case 0:
-        return VerbIndexDensityMetrics(
-          lineHeight: fontSize + 5,
-          pad: 2,
-          gap: gap,
-        );
-      case 2:
-        return VerbIndexDensityMetrics(
-          lineHeight: fontSize + 10,
-          pad: 2,
-          gap: gap,
-        );
-      case 1:
-      default:
-        return VerbIndexDensityMetrics(
-          lineHeight: fontSize + 7,
-          pad: 2,
-          gap: gap,
-        );
-    }
+  /// Cozy spacing for the verb index (lh ≈ fs+5 so A–W fits).
+  factory VerbIndexDensityMetrics.from(double fontSize) {
+    // Verb column gap is fixed at 20px (--cg).
+    return VerbIndexDensityMetrics(
+      lineHeight: fontSize + 5,
+      pad: 1,
+      gap: 20,
+    );
   }
 
   /// Chip highlight pad each side (padding:0 6px; margin:0 -6px).
@@ -97,8 +120,76 @@ class VerbIndexDensityMetrics {
   /// Wrap spacing so text-to-text distance equals [gap] (padding cancels).
   double get wrapSpacing => math.max(2, gap - chipPad * 2);
 
-  /// Dot left inset matching `.w::before{left:calc(6px - var(--cg)/2 - 1.5px)}`.
-  double get sepDotLeft => chipPad - gap / 2 - 1.5;
+  /// Dot left inset so the circle is centered in the gap between chips.
+  double get sepDotLeft => chipPad - gap / 2 - _kSepDotSize / 2;
+}
+
+/// How many wrap rows [verbs] need at [fontSize] inside [wrapWidth].
+int estimateVerbWrapLines({
+  required List<EffectiveVerb> verbs,
+  required double fontSize,
+  required VerbIndexDensityMetrics dens,
+  required double wrapWidth,
+  required TextScaler textScaler,
+}) {
+  if (verbs.isEmpty) return 1;
+  final style = _verbIndexTextStyle(
+    fontSize: fontSize,
+    color: _kVerbInk,
+    thinFace: true,
+  );
+  var lines = 1;
+  var x = 0.0;
+  const chrome = VerbIndexDensityMetrics.chipPad * 2 + 2;
+  for (var i = 0; i < verbs.length; i++) {
+    final painter = TextPainter(
+      text: TextSpan(text: verbs[i].label, style: style),
+      textDirection: TextDirection.ltr,
+      textScaler: textScaler,
+      maxLines: 1,
+    )..layout();
+    final chipW = painter.width + chrome;
+    if (i == 0) {
+      x = chipW;
+      continue;
+    }
+    final next = x + dens.wrapSpacing + chipW;
+    if (next > wrapWidth + 0.5) {
+      lines++;
+      x = chipW;
+    } else {
+      x = next;
+    }
+  }
+  return lines;
+}
+
+/// Largest type ≤ [preferredFs] that keeps history verbs within [maxLines].
+double historyFontToFit({
+  required List<EffectiveVerb> verbs,
+  required double preferredFs,
+  required double wrapWidth,
+  required TextScaler textScaler,
+  double minFs = 11,
+  int maxLines = 3,
+}) {
+  if (verbs.isEmpty || wrapWidth < 1) return preferredFs;
+  final steps = math.max(0, ((preferredFs - minFs) * 10).round());
+  for (var i = 0; i <= steps; i++) {
+    final fs = preferredFs - i / 10.0;
+    final dens = VerbIndexDensityMetrics.from(fs);
+    if (estimateVerbWrapLines(
+          verbs: verbs,
+          fontSize: fs,
+          dens: dens,
+          wrapWidth: wrapWidth,
+          textScaler: textScaler,
+        ) <=
+        maxLines) {
+      return fs;
+    }
+  }
+  return minFs;
 }
 
 class VerbMatchScore {
@@ -209,7 +300,6 @@ class VerbIndexPanelState extends State<VerbIndexPanel> {
   Timer? _holdTimer;
   int _dotsTick = 0;
   double? _lastFs;
-  int? _lastDensity;
   VerbIndexFilterMode? _lastFilterMode;
   bool _lastHideOthers = false;
   bool _dotsScheduled = false;
@@ -217,21 +307,39 @@ class VerbIndexPanelState extends State<VerbIndexPanel> {
 
   CaptionV2Controller get c => widget.controller;
 
-  bool? _wasCompact;
-
-  int get _density =>
-      floVerbIndexDensity(MediaQuery.sizeOf(context), c.verbIndexDensity);
+  Size? _lastWindowSize;
+  Size? _lastListSize;
+  bool _fitScheduled = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final compact = floWindowIsCompact(MediaQuery.sizeOf(context));
-    final changed = _wasCompact != null && _wasCompact != compact;
-    _wasCompact = compact;
+    final window = MediaQuery.sizeOf(context);
+    final changed = _lastWindowSize != null && _lastWindowSize != window;
+    _lastWindowSize = window;
     if (!changed) return;
+    _scheduleFitToBox();
+  }
+
+  void _scheduleFitToBox() {
+    if (_fitScheduled) return;
+    _fitScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fitScheduled = false;
       if (mounted) fitToBox();
     });
+  }
+
+  void _onListSizeMaybeChanged(Size size) {
+    if (_lastListSize != null &&
+        (_lastListSize!.width - size.width).abs() < 0.5 &&
+        (_lastListSize!.height - size.height).abs() < 0.5) {
+      return;
+    }
+    final first = _lastListSize == null;
+    _lastListSize = size;
+    // Initial layout already fits via [_fitWhenReady]; only re-fit on change.
+    if (!first) _scheduleFitToBox();
   }
 
   @override
@@ -280,7 +388,10 @@ class VerbIndexPanelState extends State<VerbIndexPanel> {
   Future<void> fitToBox() async {
     if (!_scroll.hasClients || !mounted) return;
     final size = _fitSizeFromChips();
-    if (size == null || (size - c.verbIndexFontSize).abs() < 0.05) return;
+    if (size == null) return;
+    // Remember Fit so aA stepping can return to this size.
+    c.rememberVerbIndexFitFontSize(size);
+    if ((size - c.verbIndexFontSize).abs() < 0.05) return;
     VerbIndexPanelState.suppressMotion = true;
     try {
       await c.setVerbIndexFontSize(size);
@@ -329,7 +440,6 @@ class VerbIndexPanelState extends State<VerbIndexPanel> {
     final fromFont = c.verbIndexFontSize;
     double simulate(double fontSize) => _estimateIndexListHeight(
           fontSize: fontSize,
-          density: _density,
           contentWidth: contentW,
           groups: groups,
           categoryMode: c.verbIndexSortByCategory,
@@ -352,10 +462,14 @@ class VerbIndexPanelState extends State<VerbIndexPanel> {
     }
     const min = CaptionV2Controller.verbIndexFontSizeMin;
     const max = CaptionV2Controller.verbIndexFontSizeMax;
+    const preferred = CaptionV2Controller.verbIndexFontSizeDefault;
     final steps = ((max - min) * 10).round();
     for (var i = steps; i >= 0; i--) {
       final size = min + i / 10.0;
-      if (simulate(size) <= budget + 0.5) return size;
+      if (simulate(size) <= budget + 0.5) {
+        // Fill the box up to the design default; aA can still go larger.
+        return math.min(size, preferred);
+      }
     }
     return min;
   }
@@ -375,13 +489,14 @@ class VerbIndexPanelState extends State<VerbIndexPanel> {
       if (chipBottom == null || bottom > chipBottom) chipBottom = bottom;
     }
     if (chipBottom == null) return null;
-    // Chip sits 5px above the row's bottom edge.
-    return listBottom - chipBottom - 5;
+    // Chip sits [pad] above the row's bottom edge.
+    return listBottom -
+        chipBottom -
+        VerbIndexDensityMetrics.from(c.verbIndexFontSize).pad;
   }
 
   double _estimateIndexListHeight({
     required double fontSize,
-    required int density,
     required double contentWidth,
     required List<(String, List<EffectiveVerb>)> groups,
     required bool categoryMode,
@@ -389,11 +504,10 @@ class VerbIndexPanelState extends State<VerbIndexPanel> {
     Map<String, double>? measuredWidths,
     double measuredFont = 0,
   }) {
-    final dens = VerbIndexDensityMetrics.from(density, fontSize);
-    final twoCol = contentWidth >= 420;
+    final dens = VerbIndexDensityMetrics.from(fontSize);
     final columns = verbLetterBandColumns(
       groups,
-      columnCount: twoCol ? 2 : 1,
+      columnCount: 1,
     );
     final colGap = columns.length > 1 ? 12.0 : 0.0;
     final colW = columns.length > 1
@@ -435,7 +549,7 @@ class VerbIndexPanelState extends State<VerbIndexPanel> {
     Map<String, double>? measuredWidths,
     double measuredFont = 0,
   }) {
-    const verticalPad = 7.0; // 2 top + 5 bottom
+    const verticalPad = 2.0; // 1 top + 1 bottom
     final sideL = categoryMode ? 8.0 : _kRowSidePad;
     var wrapW = columnWidth - sideL;
     var headerH = 0.0;
@@ -467,19 +581,28 @@ class VerbIndexPanelState extends State<VerbIndexPanel> {
     double measuredFont = 0,
   }) {
     if (verbs.isEmpty) return 1;
-    final style = TextStyle(
-      fontFamily: FfTokens.fontFamily,
+    // Prefer live chip widths when Fit is iterating font sizes.
+    if (measuredWidths == null || measuredFont <= 0) {
+      return estimateVerbWrapLines(
+        verbs: verbs,
+        fontSize: fontSize,
+        dens: dens,
+        wrapWidth: wrapWidth,
+        textScaler: textScaler,
+      );
+    }
+    final style = _verbIndexTextStyle(
       fontSize: fontSize,
-      fontWeight: FontWeight.w400,
-      height: 1,
+      color: _kVerbInk,
+      thinFace: true,
     );
     var lines = 1;
     var x = 0.0;
     const chrome = VerbIndexDensityMetrics.chipPad * 2 + 2;
     for (var i = 0; i < verbs.length; i++) {
-      final measured = measuredWidths?[verbs[i].key];
+      final measured = measuredWidths[verbs[i].key];
       final double chipW;
-      if (measured != null && measuredFont > 0) {
+      if (measured != null) {
         final textW = math.max(0.0, measured - chrome);
         chipW = textW * (fontSize / measuredFont) + chrome;
       } else {
@@ -571,9 +694,9 @@ class VerbIndexPanelState extends State<VerbIndexPanel> {
     }
     var list = byKey.values.toList()
       ..sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
+    // Faves (star): hide non-favorites entirely.
     if (applyHideOthers &&
-        c.verbIndexHideOthers &&
-        c.verbIndexFilterMode != VerbIndexFilterMode.all) {
+        c.verbIndexFilterMode == VerbIndexFilterMode.faves) {
       list = [
         for (final verb in list)
           if (_verbMatchesFilter(verb)) verb,
@@ -727,16 +850,13 @@ class VerbIndexPanelState extends State<VerbIndexPanel> {
 
   void _scheduleDots({bool force = false}) {
     final fs = c.verbIndexFontSize;
-    final dens = _density;
     final filter = c.verbIndexFilterMode;
     final hide = c.verbIndexHideOthers;
     final changed = _lastFs != fs ||
-        _lastDensity != dens ||
         _lastFilterMode != filter ||
         _lastHideOthers != hide;
     if (!force && !changed) return;
     _lastFs = fs;
-    _lastDensity = dens;
     _lastFilterMode = filter;
     _lastHideOthers = hide;
     if (_dotsScheduled) return;
@@ -795,6 +915,7 @@ class VerbIndexPanelState extends State<VerbIndexPanel> {
     widget.onVerbArmed(verb);
 
     widget.filterController.clear();
+    widget.filterFocusNode.unfocus();
     _recomputeMatches();
     _setFocus(verb.key, keyboard: false);
     _holdTimer?.cancel();
@@ -867,7 +988,7 @@ class VerbIndexPanelState extends State<VerbIndexPanel> {
       }
     }
 
-    // F cycles All → Faves → Frequent (not while the search field is focused).
+    // F toggles All ↔ Faves (not while the search field is focused).
     if (!meta &&
         !alt &&
         !HardwareKeyboard.instance.isShiftPressed &&
@@ -992,7 +1113,10 @@ class VerbIndexPanelState extends State<VerbIndexPanel> {
 
   List<EffectiveVerb> _historyVerbs() {
     if (!c.verbIndexShowHistory) return const [];
-    final limit = c.verbIndexHistoryLimit.clamp(1, 10);
+    final limit = c.verbIndexHistoryLimit.clamp(
+      1,
+      CaptionV2Controller.verbIndexHistoryLimitMax,
+    );
     final out = <EffectiveVerb>[];
     for (final key in c.verbIndexHistory) {
       final verb = c.verbDefinition(key);
@@ -1140,7 +1264,7 @@ class VerbIndexPanelState extends State<VerbIndexPanel> {
       listenable: c,
       builder: (context, _) {
         final fs = c.verbIndexFontSize;
-        final dens = VerbIndexDensityMetrics.from(_density, fs);
+        final dens = VerbIndexDensityMetrics.from(fs);
         final searching = widget.filterController.text.trim().isNotEmpty;
         final verbs = _allVerbs();
         final groups = c.verbIndexSortByCategory
@@ -1167,45 +1291,17 @@ class VerbIndexPanelState extends State<VerbIndexPanel> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (!searching) ...[
-                    const SizedBox(height: _kSectionGap),
-                    VerbIndexModeBar(controller: c),
-                    if (c.verbIndexShowHistory) ...[
-                      const SizedBox(height: _kSectionGap),
-                      _HistoryBlock(
-                        verbs: _historyVerbs(),
-                        dens: dens,
-                        selectedKey: c.selectedVerb,
-                        pinnedKey: c.pinnedVerb,
-                        focusKey: _focusKey,
-                        dotsTick: _dotsTick,
-                        onPick: _pick,
-                        onContextMenu: _showVerbContextMenu,
-                        onToggleFavorite: (v) =>
-                            widget.onToggleFavorite(v.key),
-                        onTogglePin: (v) => c.toggleVerbPin(v.key),
-                      ),
-                    ],
-                    // Gap before letter list.
-                    const SizedBox(height: _kSectionGap),
-                  ],
                   Expanded(
-                    child: AnimatedContainer(
-                      duration: _kColorMs,
-                      curve: _kEase,
-                      // Subtle teal wash so filter modes read as active.
-                      color: !searching
-                          ? switch (c.verbIndexFilterMode) {
-                              VerbIndexFilterMode.faves => _kFaveWash,
-                              VerbIndexFilterMode.mostUsed => _kMostWash,
-                              VerbIndexFilterMode.all => Colors.transparent,
-                            }
-                          : Colors.transparent,
-                      child: NotificationListener<SizeChangedLayoutNotification>(
+                    child: NotificationListener<SizeChangedLayoutNotification>(
                       onNotification: (_) {
                         _scheduleDots(force: true);
                         WidgetsBinding.instance.addPostFrameCallback((_) {
                           _updateScrollFade();
+                          final box = _listKey.currentContext
+                              ?.findRenderObject() as RenderBox?;
+                          if (box != null && box.hasSize) {
+                            _onListSizeMaybeChanged(box.size);
+                          }
                         });
                         return false;
                       },
@@ -1213,199 +1309,221 @@ class VerbIndexPanelState extends State<VerbIndexPanel> {
                         child: RepaintBoundary(
                           key: _listKey,
                           child: Stack(
-                          children: [
-                            // Pill behind verbs — keyboard focus only (hover uses chip wash).
-                            if (_pillRect != null && _keyboardMode)
-                              AnimatedPositioned(
-                                duration: _pillSnap ? Duration.zero : _kPillMs,
-                                curve: _kEase,
-                                left: _pillRect!.left,
-                                top: _pillRect!.top,
-                                width: _pillRect!.width,
-                                height: _pillRect!.height,
+                            children: [
+                              // Pill behind verbs — keyboard focus only.
+                              if (_pillRect != null && _keyboardMode)
+                                AnimatedPositioned(
+                                  duration:
+                                      _pillSnap ? Duration.zero : _kPillMs,
+                                  curve: _kEase,
+                                  left: _pillRect!.left,
+                                  top: _pillRect!.top,
+                                  width: _pillRect!.width,
+                                  height: _pillRect!.height,
+                                  child: IgnorePointer(
+                                    child: AnimatedOpacity(
+                                      duration:
+                                          const Duration(milliseconds: 60),
+                                      opacity: _pillVisible ? 1 : 0,
+                                      child: DecoratedBox(
+                                        decoration: BoxDecoration(
+                                          color: _kPill,
+                                          borderRadius:
+                                              BorderRadius.circular(7),
+                                          boxShadow: [
+                                            const BoxShadow(
+                                              color: Color(0x1AE8EEF4),
+                                              blurRadius: 0,
+                                              spreadRadius: 1,
+                                            ),
+                                            if (_keyboardMode)
+                                              BoxShadow(
+                                                color: FfTokens.accentHover
+                                                    .withValues(alpha: 1),
+                                                blurRadius: 0,
+                                                spreadRadius: 1.5,
+                                              ),
+                                            if (_keyboardMode)
+                                              BoxShadow(
+                                                color: FfTokens.nocturneAc
+                                                    .withValues(alpha: 0.20),
+                                                blurRadius: 0,
+                                                spreadRadius: 3,
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              Positioned.fill(
+                                child: ScrollConfiguration(
+                                  behavior: ScrollConfiguration.of(context)
+                                      .copyWith(scrollbars: false),
+                                  child: ListView(
+                                    controller: _scroll,
+                                    padding: const EdgeInsets.fromLTRB(
+                                      _kListSidePad,
+                                      0,
+                                      _kListSidePad,
+                                      2,
+                                    ),
+                                    children: [
+                                      if (!searching &&
+                                          c.verbIndexShowHistory)
+                                        _HistoryBlock(
+                                          verbs: _historyVerbs(),
+                                          dens: dens,
+                                          fs: fs,
+                                          selectedKey: c.selectedVerb,
+                                          pinnedKey: c.pinnedVerb,
+                                          focusKey: _focusKey,
+                                          dotsTick: _dotsTick,
+                                          onPick: _pick,
+                                          onContextMenu:
+                                              _showVerbContextMenu,
+                                          onToggleFavorite: (v) =>
+                                              widget.onToggleFavorite(v.key),
+                                          onTogglePin: (v) =>
+                                              c.toggleVerbPin(v.key),
+                                        ),
+                                      if (searching && _matchKeys.isEmpty)
+                                        _EmptyMatches(
+                                          query: widget.filterController.text
+                                              .trim(),
+                                          onAdd: () {
+                                            final raw = widget
+                                                .filterController.text
+                                                .trim();
+                                            if (raw.isNotEmpty) {
+                                              widget.onAddCustom?.call(raw);
+                                            }
+                                          },
+                                        )
+                                      else if (verbs.isEmpty &&
+                                          c.verbIndexFilterMode ==
+                                              VerbIndexFilterMode.faves)
+                                        const Padding(
+                                          padding: EdgeInsets.fromLTRB(
+                                            12,
+                                            28,
+                                            12,
+                                            12,
+                                          ),
+                                          child: Text(
+                                            'No favorites yet — right-click a verb to add one',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontFamily: FfTokens.fontFamily,
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w500,
+                                              color: FfTokens.nocturneT3,
+                                            ),
+                                          ),
+                                        )
+                                      else if (verbs.isEmpty &&
+                                          c.verbIndexFilterMode ==
+                                              VerbIndexFilterMode.mostUsed)
+                                        const Padding(
+                                          padding: EdgeInsets.fromLTRB(
+                                            12,
+                                            28,
+                                            12,
+                                            12,
+                                          ),
+                                          child: Text(
+                                            'No usage yet — save captions to rank verbs',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontFamily: FfTokens.fontFamily,
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w500,
+                                              color: FfTokens.nocturneT3,
+                                            ),
+                                          ),
+                                        )
+                                      else if (verbs.isNotEmpty ||
+                                          searching)
+                                        _VerbIndexGroupGrid(
+                                          groups: groups,
+                                          categoryMode:
+                                              c.verbIndexSortByCategory,
+                                          dens: dens,
+                                          fs: fs,
+                                          filterMode: searching
+                                              ? VerbIndexFilterMode.all
+                                              : c.verbIndexFilterMode,
+                                          selectedKey: c.selectedVerb,
+                                          pinnedKey: c.pinnedVerb,
+                                          focusKey: _focusKey,
+                                          hoveredKey: _hoveredKey,
+                                          hoveredGroup: _hoveredGroup,
+                                          searching: searching,
+                                          scores: _scores,
+                                          altHints: _altHints,
+                                          altBuf: _altBuf,
+                                          codes: codes,
+                                          pressing: _pressing,
+                                          keyFor: _keyFor,
+                                          dotsTick: _dotsTick,
+                                          tierFor: c.verbMostUsedTier,
+                                          onHoverGroup: (g) => setState(
+                                            () => _hoveredGroup = g,
+                                          ),
+                                          onHoverVerb: (k) {
+                                            setState(() {
+                                              _hoveredKey = k;
+                                              _keyboardMode = false;
+                                            });
+                                            _movePillTo(null);
+                                          },
+                                          onLeaveVerb: () {
+                                            setState(
+                                                () => _hoveredKey = null);
+                                            if (!_keyboardMode) {
+                                              _movePillTo(null);
+                                            }
+                                          },
+                                          onPick: _pick,
+                                          onToggleFavorite: (v) =>
+                                              widget.onToggleFavorite(v.key),
+                                          onTogglePin: (v) =>
+                                              c.toggleVerbPin(v.key),
+                                          onContextMenu:
+                                              _showVerbContextMenu,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              Positioned(
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                height: 16,
                                 child: IgnorePointer(
                                   child: AnimatedOpacity(
-                                    duration: const Duration(milliseconds: 60),
-                                    opacity: _pillVisible ? 1 : 0,
-                                    child: DecoratedBox(
+                                    duration: _kUiMs,
+                                    opacity: _canScrollDown ? 1 : 0,
+                                    child: const DecoratedBox(
                                       decoration: BoxDecoration(
-                                        color: _kPill,
-                                        borderRadius: BorderRadius.circular(7),
-                                        boxShadow: [
-                                          const BoxShadow(
-                                            color: Color(0x1AE8EEF4),
-                                            blurRadius: 0,
-                                            spreadRadius: 1,
-                                          ),
-                                          if (_keyboardMode)
-                                            BoxShadow(
-                                              color: FfTokens.accentHover
-                                                  .withValues(alpha: 1),
-                                              blurRadius: 0,
-                                              spreadRadius: 1.5,
-                                            ),
-                                          if (_keyboardMode)
-                                            BoxShadow(
-                                              color: FfTokens.nocturneAc
-                                                  .withValues(alpha: 0.20),
-                                              blurRadius: 0,
-                                              spreadRadius: 3,
-                                            ),
-                                        ],
+                                        gradient: LinearGradient(
+                                          begin: Alignment.topCenter,
+                                          end: Alignment.bottomCenter,
+                                          colors: [
+                                            Color(0x00181D22),
+                                            Color(0xFF181D22),
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
                               ),
-                            Positioned.fill(
-                              child: ScrollConfiguration(
-                                behavior: ScrollConfiguration.of(context)
-                                    .copyWith(scrollbars: false),
-                                child: ListView(
-                                  controller: _scroll,
-                                  padding: EdgeInsets.fromLTRB(
-                                    _kListSidePad,
-                                    searching ? 8 : 0,
-                                    _kListSidePad,
-                                    2,
-                                  ),
-                                  children: [
-                                    if (searching && _matchKeys.isEmpty)
-                                      _EmptyMatches(
-                                        query: widget.filterController.text
-                                            .trim(),
-                                        onAdd: () {
-                                          final raw = widget
-                                              .filterController.text
-                                              .trim();
-                                          if (raw.isNotEmpty) {
-                                            widget.onAddCustom?.call(raw);
-                                          }
-                                        },
-                                      )
-                                    else if (verbs.isEmpty &&
-                                        c.verbIndexFilterMode ==
-                                            VerbIndexFilterMode.faves)
-                                      const Padding(
-                                        padding: EdgeInsets.fromLTRB(
-                                          12,
-                                          28,
-                                          12,
-                                          12,
-                                        ),
-                                        child: Text(
-                                          'No favorites yet — right-click a verb to add one',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            fontFamily: FfTokens.fontFamily,
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w500,
-                                            color: FfTokens.nocturneT3,
-                                          ),
-                                        ),
-                                      )
-                                    else if (verbs.isEmpty &&
-                                        c.verbIndexFilterMode ==
-                                            VerbIndexFilterMode.mostUsed)
-                                      const Padding(
-                                        padding: EdgeInsets.fromLTRB(
-                                          12,
-                                          28,
-                                          12,
-                                          12,
-                                        ),
-                                        child: Text(
-                                          'No usage yet — save captions to rank verbs',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            fontFamily: FfTokens.fontFamily,
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w500,
-                                            color: FfTokens.nocturneT3,
-                                          ),
-                                        ),
-                                      )
-                                    else
-                                      _VerbIndexGroupGrid(
-                                        groups: groups,
-                                        categoryMode:
-                                            c.verbIndexSortByCategory,
-                                        dens: dens,
-                                        fs: fs,
-                                        filterMode: searching
-                                            ? VerbIndexFilterMode.all
-                                            : c.verbIndexFilterMode,
-                                        selectedKey: c.selectedVerb,
-                                        pinnedKey: c.pinnedVerb,
-                                        focusKey: _focusKey,
-                                        hoveredKey: _hoveredKey,
-                                        hoveredGroup: _hoveredGroup,
-                                        searching: searching,
-                                        scores: _scores,
-                                        altHints: _altHints,
-                                        altBuf: _altBuf,
-                                        codes: codes,
-                                        pressing: _pressing,
-                                        keyFor: _keyFor,
-                                        dotsTick: _dotsTick,
-                                        tierFor: c.verbMostUsedTier,
-                                        onHoverGroup: (g) => setState(
-                                          () => _hoveredGroup = g,
-                                        ),
-                                        onHoverVerb: (k) {
-                                          setState(() {
-                                            _hoveredKey = k;
-                                            _keyboardMode = false;
-                                          });
-                                          // Mouse hover uses chip wash; pill is keyboard-only.
-                                          _movePillTo(null);
-                                        },
-                                        onLeaveVerb: () {
-                                          setState(() => _hoveredKey = null);
-                                          if (!_keyboardMode) {
-                                            _movePillTo(null);
-                                          }
-                                        },
-                                        onPick: _pick,
-                                        onToggleFavorite: (v) =>
-                                            widget.onToggleFavorite(v.key),
-                                        onTogglePin: (v) =>
-                                            c.toggleVerbPin(v.key),
-                                        onContextMenu: _showVerbContextMenu,
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              left: 0,
-                              right: 0,
-                              bottom: 0,
-                              height: 16,
-                              child: IgnorePointer(
-                                child: AnimatedOpacity(
-                                  duration: _kUiMs,
-                                  opacity: _canScrollDown ? 1 : 0,
-                                  child: const DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                        colors: [
-                                          Color(0x00181D22),
-                                          Color(0xFF181D22),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
                     ),
                   ),
                 ],
@@ -1436,8 +1554,7 @@ class VerbIndexPanelState extends State<VerbIndexPanel> {
 
 // ── Subwidgets ──────────────────────────────────────────────────────────────
 
-/// Packs letter/category groups into 1–2 columns so wide panels don't leave
-/// a dead zone on the right.
+/// Letter/category groups in a single column (never split on wide screens).
 class _VerbIndexGroupGrid extends StatelessWidget {
   const _VerbIndexGroupGrid({
     required this.groups,
@@ -1531,145 +1648,317 @@ class _VerbIndexGroupGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final twoCol = constraints.maxWidth >= 420;
-        final columns = verbLetterBandColumns(
-          groups,
-          columnCount: twoCol ? 2 : 1,
-        );
-        if (columns.length <= 1) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var i = 0; i < groups.length; i++)
-                _row(groups[i], isLast: i == groups.length - 1),
-            ],
-          );
-        }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (var i = 0; i < columns.length; i++) ...[
-              if (i > 0) const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (var j = 0; j < columns[i].length; j++)
-                      _row(
-                        columns[i][j],
-                        isLast: j == columns[i].length - 1,
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        );
-      },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < groups.length; i++)
+          _row(groups[i], isLast: i == groups.length - 1),
+      ],
     );
   }
 }
 
 /// Faves / Frequent filter track — shared by Index and A–Z layouts.
 /// Pills stay content-sized; the pinned slot takes the remaining width.
-class VerbIndexModeBar extends StatelessWidget {
-  const VerbIndexModeBar({
+/// One top row: 🔍 · Faves · pin | ⚙  (Header Fix).
+class VerbIndexTopBar extends StatefulWidget {
+  const VerbIndexTopBar({
     super.key,
     required this.controller,
-    this.showPinned = true,
+    required this.filterController,
+    required this.filterFocusNode,
+    required this.tokens,
+    this.onFilterKey,
+    this.onFilterChanged,
   });
 
   final CaptionV2Controller controller;
-  /// When false (A–Z lane), skip the inline pin — that layout has its own.
-  final bool showPinned;
+  final TextEditingController filterController;
+  final FocusNode filterFocusNode;
+  final FfTokens tokens;
+  final KeyEventResult Function(FocusNode, KeyEvent)? onFilterKey;
+  final ValueChanged<String>? onFilterChanged;
+
+  @override
+  State<VerbIndexTopBar> createState() => _VerbIndexTopBarState();
+}
+
+class _VerbIndexTopBarState extends State<VerbIndexTopBar>
+    with SingleTickerProviderStateMixin {
+  static const _expandMs = Duration(milliseconds: 220);
+
+  bool _searchOpen = false;
+  bool _tabsTight = false;
+  bool _searchHovered = false;
+  late final AnimationController _expand;
+
+  @override
+  void initState() {
+    super.initState();
+    _expand = AnimationController(vsync: this, duration: _expandMs);
+    widget.filterController.addListener(_onFilterText);
+    widget.filterFocusNode.addListener(_onFilterFocus);
+    if (widget.filterController.text.isNotEmpty ||
+        widget.filterFocusNode.hasFocus) {
+      _searchOpen = true;
+      _expand.value = 1;
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.filterController.removeListener(_onFilterText);
+    widget.filterFocusNode.removeListener(_onFilterFocus);
+    _expand.dispose();
+    super.dispose();
+  }
+
+  void _onFilterText() {
+    widget.onFilterChanged?.call(widget.filterController.text);
+    final hasText = widget.filterController.text.isNotEmpty;
+    if (hasText && !_searchOpen) {
+      _openSearch(requestFocus: false);
+    }
+    setState(() {});
+  }
+
+  void _onFilterFocus() {
+    if (widget.filterFocusNode.hasFocus) {
+      if (!_searchOpen) _openSearch(requestFocus: false);
+    } else if (widget.filterController.text.isEmpty) {
+      // Blur when empty → close (slight delay so × tap can win).
+      Future<void>.delayed(const Duration(milliseconds: 120), () {
+        if (!mounted) return;
+        if (!widget.filterFocusNode.hasFocus &&
+            widget.filterController.text.isEmpty) {
+          _closeSearch();
+        }
+      });
+    }
+  }
+
+  void _openSearch({bool requestFocus = true}) {
+    if (_searchOpen && _expand.value == 1) {
+      if (requestFocus) widget.filterFocusNode.requestFocus();
+      return;
+    }
+    setState(() => _searchOpen = true);
+    _expand.forward();
+    if (requestFocus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.filterFocusNode.requestFocus();
+      });
+    }
+  }
+
+  void _closeSearch() {
+    widget.filterController.clear();
+    widget.filterFocusNode.unfocus();
+    _expand.reverse().whenComplete(() {
+      if (mounted) setState(() => _searchOpen = false);
+    });
+    setState(() {});
+  }
+
+  KeyEventResult _onSearchKey(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.escape) {
+      _closeSearch();
+      return KeyEventResult.handled;
+    }
+    return widget.onFilterKey?.call(node, event) ?? KeyEventResult.ignored;
+  }
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: controller,
+      listenable: widget.controller,
       builder: (context, _) {
-        final mode = controller.verbIndexFilterMode;
-        final pinned = controller.pinnedVerbDefinition;
-        final customPhrase = controller.customVerbPhrase.trim();
-        final customPinned =
-            controller.customVerbPinned && customPhrase.isNotEmpty;
-        final pinLabel = pinned?.label ?? (customPinned ? customPhrase : null);
-
-        void toggleFilter(VerbIndexFilterMode next) {
-          controller.setVerbIndexFilterMode(
-            mode == next ? VerbIndexFilterMode.all : next,
-          );
+        final c = widget.controller;
+        // Frequent tab removed — migrate leftover mostUsed → all.
+        if (c.verbIndexFilterMode == VerbIndexFilterMode.mostUsed) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            c.setVerbIndexFilterMode(VerbIndexFilterMode.all);
+          });
         }
+        final mode = c.verbIndexFilterMode == VerbIndexFilterMode.mostUsed
+            ? VerbIndexFilterMode.all
+            : c.verbIndexFilterMode;
+        final pinned = c.pinnedVerbDefinition;
+        final customPhrase = c.customVerbPhrase.trim();
+        final customPinned =
+            c.customVerbPinned && customPhrase.isNotEmpty;
+        final pinLabel =
+            pinned?.label ?? (customPinned ? customPhrase : null);
+        final searchVisible = _searchOpen || _expand.value > 0;
 
-        // One track: bg #1E242A, radius 8, pad 2, inset .08, margin 0 10.
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E242A),
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x14E8EEF4), // rgba(232,238,244,.08)
-                  blurRadius: 0,
-                  spreadRadius: 1,
-                ),
-              ],
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(2),
-              child: Row(
-                children: [
-                  _VerbIndexModePill(
-                    label: 'Faves',
-                    icon: PhosphorIconsRegular.star,
-                    selected: mode == VerbIndexFilterMode.faves,
-                    onTap: () => toggleFilter(VerbIndexFilterMode.faves),
-                  ),
-                  const SizedBox(width: 1),
-                  _VerbIndexModePill(
-                    label: 'Frequent',
-                    icon: PhosphorIconsRegular.chartBar,
-                    selected: mode == VerbIndexFilterMode.mostUsed,
-                    onTap: () => toggleFilter(VerbIndexFilterMode.mostUsed),
-                  ),
-                  // Always reserve the pin lane so Faves/Frequent don't
-                  // jump when a verb is pinned or cleared.
-                  if (showPinned) ...[
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 4),
-                      child: SizedBox(
-                        width: 1,
-                        height: 14,
-                        child: ColoredBox(color: Color(0x1AE8EEF4)),
-                      ),
-                    ),
-                    Expanded(
-                      child: _VerbIndexPinnedChip(
-                        label: pinLabel,
-                        onSelect: pinLabel == null
-                            ? null
-                            : () {
-                                if (pinned != null) {
-                                  controller.selectVerb(pinned.key);
+        // Same height as the player-lane header (36).
+        return SizedBox(
+          height: _kTopBarH,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final fullW = math.max(28.0, constraints.maxWidth - 28);
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        IgnorePointer(
+                          ignoring: searchVisible,
+                          child: Opacity(
+                            opacity: searchVisible ? 0 : 1,
+                            child: _SearchIconButton(
+                              hovered: _searchHovered,
+                              onHover: (v) =>
+                                  setState(() => _searchHovered = v),
+                              onTap: () => _openSearch(),
+                            ),
+                          ),
+                        ),
+                        IgnorePointer(
+                          ignoring: searchVisible,
+                          child: Opacity(
+                            opacity: searchVisible ? 0 : 1,
+                            child: const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 4),
+                              child: SizedBox(
+                                width: 1,
+                                height: 14,
+                                child: ColoredBox(color: Color(0x24E8EEF4)),
+                              ),
+                            ),
+                          ),
+                        ),
+                        IgnorePointer(
+                          ignoring: searchVisible,
+                          child: Opacity(
+                            opacity: searchVisible ? 0 : 1,
+                            child: _FilterTabs(
+                              mode: mode,
+                              tight: _tabsTight,
+                              onToggle: (next) {
+                                c.setVerbIndexFilterMode(
+                                  mode == next
+                                      ? VerbIndexFilterMode.all
+                                      : next,
+                                );
+                              },
+                              onOverflow: (overflow) {
+                                if (overflow != _tabsTight) {
+                                  setState(() => _tabsTight = overflow);
                                 }
                               },
-                        onUnpin: pinLabel == null
-                            ? null
-                            : () {
-                                if (pinned != null) {
-                                  controller.unpinVerb();
-                                } else if (customPinned) {
-                                  controller.toggleCustomVerbPin();
-                                }
-                              },
-                      ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: AnimatedOpacity(
+                            duration: const Duration(milliseconds: 150),
+                            opacity: searchVisible ? 0 : 1,
+                            child: IgnorePointer(
+                              ignoring: searchVisible,
+                              child: Row(
+                                children: [
+                                  const Padding(
+                                    padding: EdgeInsets.only(right: 6),
+                                    child: SizedBox(
+                                      width: 1,
+                                      height: 14,
+                                      child: ColoredBox(
+                                        color: Color(0x24E8EEF4),
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Align(
+                                      alignment: pinLabel == null
+                                          ? Alignment.center
+                                          : Alignment.centerLeft,
+                                      child: _PinnedSlot(
+                                        label: pinLabel,
+                                        onSelect: pinLabel == null
+                                            ? null
+                                            : () {
+                                                if (pinned != null) {
+                                                  c.selectVerb(pinned.key);
+                                                }
+                                              },
+                                        onUnpin: pinLabel == null
+                                            ? null
+                                            : () {
+                                                if (pinned != null) {
+                                                  c.unpinVerb();
+                                                } else if (customPinned) {
+                                                  c.toggleCustomVerbPin();
+                                                }
+                                              },
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.only(left: 8, right: 8),
+                          child: SizedBox(
+                            width: 1,
+                            height: 14,
+                            child: ColoredBox(color: Color(0x24E8EEF4)),
+                          ),
+                        ),
+                        VerbMenuTools(
+                          controller: c,
+                          tokens: widget.tokens,
+                          showInlineTextSize: true,
+                          gearSize: 24,
+                          textSizeHeight: 20,
+                        ),
+                      ],
                     ),
+                    // Expanding search — grows rightward over tabs to gear.
+                    if (searchVisible)
+                      Positioned(
+                        left: 0,
+                        top: (_kTopBarH - 24) / 2,
+                        height: 24,
+                        child: AnimatedBuilder(
+                          animation: _expand,
+                          builder: (context, child) {
+                            final t = _kEase.transform(_expand.value);
+                            final w = 28 + (fullW - 28) * t;
+                            return SizedBox(
+                              width: w,
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(7),
+                                child: OverflowBox(
+                                  alignment: Alignment.centerLeft,
+                                  maxWidth: fullW,
+                                  minWidth: fullW,
+                                  child: SizedBox(
+                                    width: fullW,
+                                    child: child,
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                          child: _ExpandingSearchField(
+                            controller: widget.filterController,
+                            focusNode: widget.filterFocusNode,
+                            onKeyEvent: _onSearchKey,
+                            onClose: _closeSearch,
+                          ),
+                        ),
+                      ),
                   ],
-                ],
-              ),
+                );
+              },
             ),
           ),
         );
@@ -1678,23 +1967,318 @@ class VerbIndexModeBar extends StatelessWidget {
   }
 }
 
-class _VerbIndexPinnedChip extends StatefulWidget {
-  const _VerbIndexPinnedChip({
+class _SearchIconButton extends StatelessWidget {
+  const _SearchIconButton({
+    required this.hovered,
+    required this.onHover,
+    required this.onTap,
+  });
+
+  final bool hovered;
+  final ValueChanged<bool> onHover;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => onHover(true),
+      onExit: (_) => onHover(false),
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          width: 24,
+          height: 24,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: hovered ? FfTokens.nocturneHv : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: PhosphorIcon(
+            PhosphorIconsRegular.magnifyingGlass,
+            size: 14,
+            color: hovered ? FfTokens.nocturneTx : FfTokens.nocturneT2,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ExpandingSearchField extends StatelessWidget {
+  const _ExpandingSearchField({
+    required this.controller,
+    required this.focusNode,
+    required this.onKeyEvent,
+    required this.onClose,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final KeyEventResult Function(FocusNode, KeyEvent) onKeyEvent;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    // Border (not spread shadow) so the focus ring follows the radius —
+    // spreadRadius paints square corners that peek past the rounded fill.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: FfTokens.nocturneSunken,
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(
+          color: const Color(0x594A7A96), // rgba(74,122,150,.35)
+          width: 1.5,
+        ),
+      ),
+      child: SizedBox(
+        height: 24,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 7),
+          child: Row(
+            children: [
+              const PhosphorIcon(
+                PhosphorIconsRegular.magnifyingGlass,
+                size: 14,
+                color: FfTokens.nocturneT2,
+              ),
+              // Vertical rule after 🔍 inside the open field.
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 6),
+                child: SizedBox(
+                  width: 1,
+                  height: 12,
+                  child: ColoredBox(color: Color(0x38E8EEF4)),
+                ),
+              ),
+              Expanded(
+                child: Focus(
+                  onKeyEvent: onKeyEvent,
+                  child: TextField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    style: const TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w400,
+                      color: FfTokens.nocturneTx,
+                      height: 1,
+                    ),
+                    cursorColor: FfTokens.nocturneAc,
+                    cursorHeight: 13,
+                    decoration: const InputDecoration(
+                      isCollapsed: true,
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.zero,
+                      // User-requested placeholder for expanding search.
+                      hintText: 'Search verbs',
+                      hintStyle: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
+                        color: FfTokens.nocturneT3,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Tooltip(
+                message: 'Close (Esc)',
+                waitDuration: const Duration(milliseconds: 400),
+                child: _IconHit(
+                  size: 18,
+                  iconSize: 11,
+                  icon: PhosphorIconsRegular.x,
+                  onTap: onClose,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterTabs extends StatefulWidget {
+  const _FilterTabs({
+    super.key,
+    required this.mode,
+    required this.tight,
+    required this.onToggle,
+    required this.onOverflow,
+  });
+
+  final VerbIndexFilterMode mode;
+  final bool tight;
+  final ValueChanged<VerbIndexFilterMode> onToggle;
+  final ValueChanged<bool> onOverflow;
+
+  @override
+  State<_FilterTabs> createState() => _FilterTabsState();
+}
+
+class _FilterTabsState extends State<_FilterTabs> {
+  final _probeKey = GlobalKey();
+
+  @override
+  void didUpdateWidget(covariant _FilterTabs oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkOverflow());
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkOverflow());
+  }
+
+  void _checkOverflow() {
+    final box = context.findRenderObject() as RenderBox?;
+    final probe = _probeKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize || probe == null || !probe.hasSize) {
+      return;
+    }
+    final overflow = probe.size.width > box.size.width + 1;
+    widget.onOverflow(overflow);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tight = widget.tight;
+    final selected = widget.mode == VerbIndexFilterMode.faves;
+    return Stack(
+      clipBehavior: Clip.hardEdge,
+      children: [
+        Opacity(
+          opacity: 0,
+          child: IgnorePointer(
+            child: Row(
+              key: _probeKey,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _TabButton(
+                  icon: PhosphorIconsFill.star,
+                  selected: true,
+                  tight: false,
+                  fave: true,
+                  onTap: () {},
+                ),
+              ],
+            ),
+          ),
+        ),
+        Row(
+          children: [
+            _TabButton(
+              icon: selected
+                  ? PhosphorIconsFill.star
+                  : PhosphorIconsRegular.star,
+              selected: selected,
+              tight: tight,
+              fave: true,
+              onTap: () => widget.onToggle(VerbIndexFilterMode.faves),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _TabButton extends StatefulWidget {
+  const _TabButton({
+    required this.icon,
+    required this.selected,
+    required this.tight,
+    required this.fave,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final bool selected;
+  final bool tight;
+  final bool fave;
+  final VoidCallback onTap;
+
+  @override
+  State<_TabButton> createState() => _TabButtonState();
+}
+
+class _TabButtonState extends State<_TabButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = widget.selected;
+    final Color ink;
+    if (selected) {
+      ink = Colors.white;
+    } else if (_hovered) {
+      ink = FfTokens.nocturneTx;
+    } else {
+      ink = FfTokens.nocturneT3;
+    }
+    // Gold underline marks Faves when active.
+    final underline = selected
+        ? (widget.fave ? _kGold : FfTokens.nocturneAc)
+        : Colors.transparent;
+
+    return Tooltip(
+      message: 'Faves',
+      waitDuration: const Duration(milliseconds: 400),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          behavior: HitTestBehavior.opaque,
+          child: SizedBox(
+            height: _kTopBarH,
+            width: 24,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                PhosphorIcon(widget.icon, size: 14, color: ink),
+                Positioned(
+                  left: 4,
+                  right: 4,
+                  bottom: 2,
+                  height: 2,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: underline,
+                      borderRadius: BorderRadius.circular(1),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PinnedSlot extends StatefulWidget {
+  const _PinnedSlot({
     this.label,
     this.onSelect,
     this.onUnpin,
   });
 
-  /// Null = empty reserved slot (pin icon only).
   final String? label;
   final VoidCallback? onSelect;
   final VoidCallback? onUnpin;
 
   @override
-  State<_VerbIndexPinnedChip> createState() => _VerbIndexPinnedChipState();
+  State<_PinnedSlot> createState() => _PinnedSlotState();
 }
 
-class _VerbIndexPinnedChipState extends State<_VerbIndexPinnedChip> {
+class _PinnedSlotState extends State<_PinnedSlot> {
   bool _closeHovered = false;
 
   @override
@@ -1702,104 +2286,118 @@ class _VerbIndexPinnedChipState extends State<_VerbIndexPinnedChip> {
     final label = widget.label;
     final hasPin = label != null && label.isNotEmpty;
 
-    // Empty: quiet pin icon so the lane stays visible. Filled: teal chip
-    // that stretches across the remaining track width.
     if (!hasPin) {
-      return SizedBox(
-        height: _kModeTrackInnerH,
-        width: double.infinity,
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: PhosphorIcon(
+      // Plain hint — no chip/fill (don't read as a search field).
+      return const SizedBox(
+        height: 24,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            PhosphorIcon(
               PhosphorIconsRegular.pushPin,
               size: 12,
-              color: FfTokens.nocturneT3,
+              color: FfTokens.pinnedHint,
             ),
-          ),
+            SizedBox(width: 5),
+            Text(
+              'CMD+Click to pin verb',
+              maxLines: 1,
+              softWrap: false,
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                height: 1,
+                color: FfTokens.pinnedHint,
+                decoration: TextDecoration.none,
+              ),
+            ),
+          ],
         ),
       );
     }
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: const Color(0x1A4A7A96), // rgba(74,122,150,.10)
-        borderRadius: BorderRadius.circular(6),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x4D4A7A96), // rgba(74,122,150,.30)
-            blurRadius: 0,
-            spreadRadius: 1,
-          ),
-        ],
-      ),
-      child: SizedBox(
-        height: _kModeTrackInnerH,
-        width: double.infinity,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(8, 0, 2, 0),
-          child: Row(
-            children: [
-              const PhosphorIcon(
-                PhosphorIconsFill.pushPin,
-                size: 12,
-                color: FfTokens.accentHover, // #5A8EAB
-              ),
-              const SizedBox(width: 5),
-              Expanded(
-                child: GestureDetector(
-                  onTap: widget.onSelect,
-                  behavior: HitTestBehavior.opaque,
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontFamily: FfTokens.fontFamily,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w500,
-                      height: 1,
-                      color: Colors.white,
-                      decoration: TextDecoration.none,
-                    ),
-                  ),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 150),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0x1F4A7A96), // rgba(74,122,150,.12)
+          borderRadius: BorderRadius.circular(6),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x4D4A7A96), // rgba(74,122,150,.30)
+              blurRadius: 0,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: SizedBox(
+          height: 22,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(7, 0, 2, 0),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const PhosphorIcon(
+                  PhosphorIconsFill.pushPin,
+                  size: 11,
+                  color: FfTokens.accentHover,
                 ),
-              ),
-              Tooltip(
-                message: 'Unpin',
-                waitDuration: const Duration(milliseconds: 400),
-                child: MouseRegion(
-                  onEnter: (_) => setState(() => _closeHovered = true),
-                  onExit: (_) => setState(() => _closeHovered = false),
-                  cursor: SystemMouseCursors.click,
+                const SizedBox(width: 5),
+                Flexible(
                   child: GestureDetector(
-                    onTap: widget.onUnpin,
+                    onTap: widget.onSelect,
                     behavior: HitTestBehavior.opaque,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 80),
-                      width: 20,
-                      height: 20,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: _closeHovered
-                            ? const Color(0x14E8EEF4)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                      child: PhosphorIcon(
-                        PhosphorIconsRegular.x,
-                        size: 12,
-                        color: _closeHovered
-                            ? FfTokens.nocturneTx
-                            : FfTokens.nocturneT3,
+                    child: Text(
+                      label!,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        height: 1,
+                        color: Colors.white,
+                        decoration: TextDecoration.none,
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+                Tooltip(
+                  message: 'Unpin',
+                  waitDuration: const Duration(milliseconds: 400),
+                  child: MouseRegion(
+                    onEnter: (_) => setState(() => _closeHovered = true),
+                    onExit: (_) => setState(() => _closeHovered = false),
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: widget.onUnpin,
+                      behavior: HitTestBehavior.opaque,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 80),
+                        width: 16,
+                        height: 16,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: _closeHovered
+                              ? const Color(0x14E8EEF4)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: PhosphorIcon(
+                          PhosphorIconsRegular.x,
+                          size: 11,
+                          color: _closeHovered
+                              ? FfTokens.nocturneTx
+                              : FfTokens.nocturneT3,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1807,46 +2405,28 @@ class _VerbIndexPinnedChipState extends State<_VerbIndexPinnedChip> {
   }
 }
 
-class _VerbIndexModePill extends StatefulWidget {
-  const _VerbIndexModePill({
-    required this.label,
-    required this.selected,
+class _IconHit extends StatefulWidget {
+  const _IconHit({
+    required this.size,
+    required this.iconSize,
+    required this.icon,
     required this.onTap,
-    this.icon,
   });
 
-  final String label;
-  final IconData? icon;
-  final bool selected;
+  final double size;
+  final double iconSize;
+  final IconData icon;
   final VoidCallback onTap;
 
   @override
-  State<_VerbIndexModePill> createState() => _VerbIndexModePillState();
+  State<_IconHit> createState() => _IconHitState();
 }
 
-class _VerbIndexModePillState extends State<_VerbIndexModePill> {
+class _IconHitState extends State<_IconHit> {
   bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    final selected = widget.selected;
-    final Color fill;
-    final Color edge;
-    final Color ink;
-    if (selected) {
-      fill = const Color(0xFF20313C);
-      edge = const Color(0xFF3A6076);
-      ink = Colors.white;
-    } else if (_hovered) {
-      fill = Colors.transparent;
-      edge = Colors.transparent;
-      ink = FfTokens.nocturneTx;
-    } else {
-      fill = Colors.transparent;
-      edge = Colors.transparent;
-      ink = FfTokens.nocturneT2; // #959AA0
-    }
-    // Content-sized so Faves/Frequent sit tight and leave room for the pin.
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
@@ -1854,38 +2434,18 @@ class _VerbIndexModePillState extends State<_VerbIndexModePill> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          curve: _kEase,
-          height: _kModeTrackInnerH,
-          padding: const EdgeInsets.symmetric(horizontal: 6),
+          duration: const Duration(milliseconds: 80),
+          width: widget.size,
+          height: widget.size,
           alignment: Alignment.center,
-          clipBehavior: Clip.hardEdge,
           decoration: BoxDecoration(
-            color: fill,
-            borderRadius: BorderRadius.circular(6),
-            border: edge.a == 0 ? null : Border.all(color: edge, width: 1),
+            color: _hovered ? const Color(0x14E8EEF4) : Colors.transparent,
+            borderRadius: BorderRadius.circular(4),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (widget.icon != null) ...[
-                PhosphorIcon(widget.icon!, size: 12, color: ink),
-                const SizedBox(width: 3),
-              ],
-              Text(
-                widget.label,
-                maxLines: 1,
-                softWrap: false,
-                style: TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  height: 1,
-                  color: ink,
-                  decoration: TextDecoration.none,
-                ),
-              ),
-            ],
+          child: PhosphorIcon(
+            widget.icon,
+            size: widget.iconSize,
+            color: _hovered ? FfTokens.nocturneTx : FfTokens.nocturneT3,
           ),
         ),
       ),
@@ -1897,6 +2457,7 @@ class _HistoryBlock extends StatelessWidget {
   const _HistoryBlock({
     required this.verbs,
     required this.dens,
+    required this.fs,
     required this.selectedKey,
     required this.pinnedKey,
     required this.focusKey,
@@ -1909,6 +2470,7 @@ class _HistoryBlock extends StatelessWidget {
 
   final List<EffectiveVerb> verbs;
   final VerbIndexDensityMetrics dens;
+  final double fs;
   final String? selectedKey;
   final String? pinnedKey;
   final String? focusKey;
@@ -1920,80 +2482,113 @@ class _HistoryBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Same shell as Faves / Frequent: #1E242A, radius 8, pad 2, inset ring.
-    final historyDens = VerbIndexDensityMetrics(
-      lineHeight: _kModeTrackInnerH,
-      pad: dens.pad,
-      gap: dens.gap,
+    // 2px smaller than the index; shrink further if needed to fit three lines.
+    final preferredFs = math.max(
+      CaptionV2Controller.verbIndexFontSizeMin,
+      fs - 2,
     );
+    final scaler = MediaQuery.textScalerOf(context);
+    // Soft teal row aligned to the letter grid (Header Fix).
+    // No top pad — flush under the 36px header so roster range rules line up.
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: _kListSidePad),
+      padding: const EdgeInsets.only(bottom: 4),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: const Color(0xFF1E242A),
-          borderRadius: BorderRadius.circular(8),
+          color: const Color(0x144A7A96), // rgba(74,122,150,.08)
+          borderRadius: BorderRadius.circular(7),
           boxShadow: const [
             BoxShadow(
-              color: Color(0x14E8EEF4), // rgba(232,238,244,.08)
+              color: Color(0x2E4A7A96), // rgba(74,122,150,.18)
               blurRadius: 0,
               spreadRadius: 1,
             ),
           ],
         ),
         child: Padding(
-          padding: const EdgeInsets.all(2),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const SizedBox(
-                width: _kLetterColW,
-                height: _kModeTrackInnerH,
-                child: Center(
-                  child: PhosphorIcon(
-                    PhosphorIconsRegular.clockCounterClockwise,
-                    size: 14,
-                    color: FfTokens.accentHover,
-                  ),
-                ),
-              ),
-              const SizedBox(width: _kLetterColGap),
-              Expanded(
-                child: verbs.isEmpty
-                    ? const SizedBox(
-                        height: _kModeTrackInnerH,
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            '—',
-                            style: TextStyle(
-                              fontFamily: FfTokens.fontFamily,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w400,
-                              color: FfTokens.nocturneT3,
-                              height: 1,
-                              decoration: TextDecoration.none,
-                            ),
-                          ),
-                        ),
-                      )
-                    : _DottedVerbWrap(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Padding(
+            padding: const EdgeInsets.only(left: _kRowSidePad),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final wrapW = math.max(
+                  1.0,
+                  constraints.maxWidth - _kLetterColW - _kLetterColGap,
+                );
+                final histFs = verbs.isEmpty
+                    ? preferredFs
+                    : historyFontToFit(
                         verbs: verbs,
-                        dens: historyDens,
-                        // Match Faves / Frequent label size (not index Fit size).
-                        fs: 12,
-                        color: _kVerbInk,
-                        newestFirst: true,
-                        selectedKey: selectedKey,
-                        pinnedKey: pinnedKey,
-                        focusKey: focusKey,
-                        dotsTick: dotsTick,
-                        onPick: onPick,
-                        onContextMenu: onContextMenu,
-                        onToggleFavorite: onToggleFavorite,
-                        onTogglePin: onTogglePin,
+                        preferredFs: preferredFs,
+                        wrapWidth: wrapW,
+                        textScaler: scaler,
+                      );
+                final histDens = VerbIndexDensityMetrics.from(histFs);
+                final lines = verbs.isEmpty
+                    ? 1
+                    : estimateVerbWrapLines(
+                        verbs: verbs,
+                        fontSize: histFs,
+                        dens: histDens,
+                        wrapWidth: wrapW,
+                        textScaler: scaler,
+                      ).clamp(1, 3);
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: _kLetterColW,
+                      height: histDens.lineHeight,
+                      child: Center(
+                        child: PhosphorIcon(
+                          PhosphorIconsRegular.clockCounterClockwise,
+                          size: histFs >= 14 ? 15 : 13,
+                          color: FfTokens.accentHover,
+                        ),
                       ),
-              ),
-            ],
+                    ),
+                    const SizedBox(width: _kLetterColGap),
+                    Expanded(
+                      child: verbs.isEmpty
+                          ? SizedBox(
+                              height: histDens.lineHeight,
+                              child: const Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  '—',
+                                  style: TextStyle(
+                                    fontFamily: FfTokens.fontFamily,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w400,
+                                    color: FfTokens.nocturneT3,
+                                    height: 1,
+                                    decoration: TextDecoration.none,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : SizedBox(
+                              height: histDens.lineHeight * lines,
+                              child: _DottedVerbWrap(
+                                verbs: verbs,
+                                dens: histDens,
+                                fs: histFs,
+                                color: FfTokens.nocturneT2,
+                                newestFirst: true,
+                                selectedKey: selectedKey,
+                                pinnedKey: pinnedKey,
+                                focusKey: focusKey,
+                                dotsTick: dotsTick,
+                                onPick: onPick,
+                                onContextMenu: onContextMenu,
+                                onToggleFavorite: onToggleFavorite,
+                                onTogglePin: onTogglePin,
+                              ),
+                            ),
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -2017,6 +2612,7 @@ class _DottedVerbWrap extends StatefulWidget {
     required this.onTogglePin,
     this.dotsTick = 0,
     this.newestFirst = false,
+    this.singleLine = false,
   });
 
   final List<EffectiveVerb> verbs;
@@ -2024,6 +2620,8 @@ class _DottedVerbWrap extends StatefulWidget {
   final double fs;
   final Color color;
   final bool newestFirst;
+  /// History: keep verbs on one row; scale down if the strip is tight.
+  final bool singleLine;
   final String? selectedKey;
   final String? pinnedKey;
   final String? focusKey;
@@ -2046,12 +2644,15 @@ class _DottedVerbWrapState extends State<_DottedVerbWrap> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
+    if (!widget.singleLine) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
+    }
   }
 
   @override
   void didUpdateWidget(covariant _DottedVerbWrap oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.singleLine) return;
     if (oldWidget.dotsTick != widget.dotsTick ||
         oldWidget.dens.gap != widget.dens.gap ||
         oldWidget.dens.lineHeight != widget.dens.lineHeight ||
@@ -2062,7 +2663,7 @@ class _DottedVerbWrapState extends State<_DottedVerbWrap> {
   }
 
   void _measure() {
-    if (!mounted) return;
+    if (!mounted || widget.singleLine) return;
     int? prevTop;
     final starts = <String>{};
     for (var i = 0; i < widget.verbs.length; i++) {
@@ -2084,34 +2685,56 @@ class _DottedVerbWrapState extends State<_DottedVerbWrap> {
     }
   }
 
+  List<Widget> _chips({required bool forceSep}) {
+    return [
+      for (var i = 0; i < widget.verbs.length; i++) ...[
+        if (i > 0 && forceSep) SizedBox(width: widget.dens.wrapSpacing),
+        _VerbChip(
+          key: _keyFor(widget.verbs[i].key),
+          verb: widget.verbs[i],
+          fs: widget.fs,
+          lh: widget.dens.lineHeight,
+          color: widget.newestFirst && i == 0
+              ? Colors.white
+              : widget.color,
+          selected: widget.verbs[i].key == widget.selectedKey,
+          pinned: widget.verbs[i].key == widget.pinnedKey,
+          focused: widget.verbs[i].key == widget.focusKey,
+          showSep: forceSep
+              ? i > 0
+              : !_lineStarts.contains(widget.verbs[i].key),
+          gap: widget.dens.gap,
+          sepDotLeft: widget.dens.sepDotLeft,
+          onTap: () => widget.onPick(widget.verbs[i]),
+          onSecondary: (pos) =>
+              widget.onContextMenu(widget.verbs[i], pos),
+          onAltClick: () => widget.onToggleFavorite(widget.verbs[i]),
+          onCmdClick: () => widget.onTogglePin(widget.verbs[i]),
+        ),
+      ],
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.singleLine) {
+      return SizedBox(
+        height: widget.dens.lineHeight,
+        width: double.infinity,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: _chips(forceSep: true),
+          ),
+        ),
+      );
+    }
     return Wrap(
       spacing: widget.dens.wrapSpacing,
       runSpacing: 0,
-      children: [
-        for (var i = 0; i < widget.verbs.length; i++)
-          _VerbChip(
-            key: _keyFor(widget.verbs[i].key),
-            verb: widget.verbs[i],
-            fs: widget.fs,
-            lh: widget.dens.lineHeight,
-            color: widget.newestFirst && i == 0
-                ? Colors.white
-                : widget.color,
-            selected: widget.verbs[i].key == widget.selectedKey,
-            pinned: widget.verbs[i].key == widget.pinnedKey,
-            focused: widget.verbs[i].key == widget.focusKey,
-            showSep: !_lineStarts.contains(widget.verbs[i].key),
-            gap: widget.dens.gap,
-            sepDotLeft: widget.dens.sepDotLeft,
-            onTap: () => widget.onPick(widget.verbs[i]),
-            onSecondary: (pos) =>
-                widget.onContextMenu(widget.verbs[i], pos),
-            onAltClick: () => widget.onToggleFavorite(widget.verbs[i]),
-            onCmdClick: () => widget.onTogglePin(widget.verbs[i]),
-          ),
-      ],
+      children: _chips(forceSep: false),
     );
   }
 }
@@ -2229,22 +2852,31 @@ class _LetterRowState extends State<_LetterRow> {
 
   Color _letterColor({
     required bool hasMatch,
-    required bool letterTeal,
   }) {
     if (!hasMatch && widget.searching) return _kDimLetter;
-    // Only the selected/pinned verb's row letter is teal (#5A8EAB).
-    if (letterTeal) return FfTokens.accentHover;
     switch (widget.filterMode) {
       case VerbIndexFilterMode.faves:
         final hasFav = widget.verbs.any((v) => v.isFavorite);
-        return hasFav ? _kFaveLetter : _kDot;
+        return hasFav ? _kGold : _kDot;
       case VerbIndexFilterMode.mostUsed:
         final hasRanked =
             widget.verbs.any((v) => widget.tierFor(v.key) > 0);
-        return hasRanked ? _kMostLetter : _kDot;
+        return hasRanked ? _kLetterInk : _kDot;
       case VerbIndexFilterMode.all:
-        return FfTokens.nocturneT3;
+        return _kLetterInk;
     }
+  }
+
+  List<Shadow>? _letterShadows({
+    required Color letterColor,
+    required bool emphasized,
+  }) {
+    // Dim / empty letters stay flat.
+    if (letterColor == _kDimLetter || letterColor == _kDot) return null;
+    return _letterGlow(
+      gold: widget.filterMode == VerbIndexFilterMode.faves,
+      emphasized: emphasized,
+    );
   }
 
   Color _verbColor(EffectiveVerb verb) {
@@ -2255,10 +2887,9 @@ class _LetterRowState extends State<_LetterRow> {
     }
     switch (widget.filterMode) {
       case VerbIndexFilterMode.faves:
-        // Verbs stay bright; teal is reserved for the letter column.
-        return verb.isFavorite ? Colors.white : _kFilterDim;
+        // Non-faves are hidden; keep remaining verbs at normal ink.
+        return _kVerbInk;
       case VerbIndexFilterMode.mostUsed:
-        // Same idea as Faves: ranked verbs white, teal only on letters.
         return widget.tierFor(verb.key) > 0 ? Colors.white : _kFilterDim;
       case VerbIndexFilterMode.all:
         return _kVerbInk;
@@ -2274,12 +2905,13 @@ class _LetterRowState extends State<_LetterRow> {
             widget.verbs.any((v) => v.key == widget.pinnedKey)) ||
         (widget.selectedKey != null &&
             widget.verbs.any((v) => v.key == widget.selectedKey));
-    final letterColor = _letterColor(
-      hasMatch: hasMatch,
-      letterTeal: letterTeal,
+    final letterColor = _letterColor(hasMatch: hasMatch);
+    final letterShadows = _letterShadows(
+      letterColor: letterColor,
+      emphasized: letterTeal,
     );
-    // Index letters sit under the verb size so the column reads as a label.
-    final letterSize = math.max(9.0, widget.fs - 4);
+    // Fixed 18px letter column (Header Fix); category labels stay compact.
+    final letterSize = widget.categoryMode ? widget.fs + 1 : 18.0;
 
     return MouseRegion(
       onEnter: (_) => widget.onHoverGroup(widget.groupId),
@@ -2293,12 +2925,11 @@ class _LetterRowState extends State<_LetterRow> {
                 ),
         ),
         child: Padding(
-          // Extra bottom pad so a selected chip outline clears the divider.
           padding: EdgeInsets.fromLTRB(
             widget.categoryMode ? 8 : _kRowSidePad,
-            2,
+            widget.dens.pad,
             0,
-            5,
+            widget.dens.pad,
           ),
           child: widget.categoryMode
               ? Column(
@@ -2315,6 +2946,7 @@ class _LetterRowState extends State<_LetterRow> {
                           letterSpacing: 0.8,
                           height: 1.6,
                           color: letterColor,
+                          shadows: letterShadows,
                         ),
                       ),
                     ),
@@ -2331,12 +2963,12 @@ class _LetterRowState extends State<_LetterRow> {
                       child: Text(
                         widget.letter,
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontFamily: FfTokens.fontFamily,
+                        style: _verbIndexTextStyle(
                           fontSize: letterSize,
-                          fontWeight: FontWeight.w600,
+                          weight: FontWeight.w600,
                           height: widget.dens.lineHeight / letterSize,
                           color: letterColor,
+                          shadows: letterShadows,
                         ),
                       ),
                     ),
@@ -2355,43 +2987,45 @@ class _LetterRowState extends State<_LetterRow> {
       spacing: widget.dens.wrapSpacing,
       runSpacing: 0,
       children: [
-        for (final verb in widget.verbs)
-          _VerbChip(
-            key: widget.keyFor(verb.key),
-            verb: verb,
-            fs: widget.fs,
-            lh: widget.dens.lineHeight,
-            color: _verbColor(verb),
-            selected: verb.key == widget.selectedKey,
-            pinned: verb.key == widget.pinnedKey,
-            focused: verb.key == widget.focusKey,
-            score: widget.scores[verb.key],
-            showSep: !_lineStarts.contains(verb.key),
-            gap: widget.dens.gap,
-            sepDotLeft: widget.dens.sepDotLeft,
-            homeCode: widget.codes[verb.key],
-            showHomeCode: widget.altHints,
-            homeHighlight: widget.altBuf.isNotEmpty &&
-                (widget.codes[verb.key] ?? '').startsWith(widget.altBuf),
-            homeDim: widget.altBuf.isNotEmpty &&
-                !(widget.codes[verb.key] ?? '').startsWith(widget.altBuf),
-            pressing: widget.pressing.contains(verb.key),
-            onTap: () {
-              final box = widget
-                  .keyFor(verb.key)
-                  .currentContext
-                  ?.findRenderObject() as RenderBox?;
-              final origin =
-                  box?.localToGlobal(Offset.zero) ?? Offset.zero;
-              onPickWithOrigin(verb, origin);
-            },
-            onHover: () => widget.onHoverVerb(verb.key),
-            onLeave: widget.onLeaveVerb,
-            onSecondary: (pos) => widget.onContextMenu(verb, pos),
-            onAltClick: () => widget.onToggleFavorite(verb),
-            onCmdClick: () => widget.onTogglePin(verb),
-          ),
+        for (var i = 0; i < widget.verbs.length; i++)
+          _chipAt(i),
       ],
+    );
+  }
+
+  Widget _chipAt(int i) {
+    final verb = widget.verbs[i];
+    return _VerbChip(
+      key: widget.keyFor(verb.key),
+      verb: verb,
+      fs: widget.fs,
+      lh: widget.dens.lineHeight,
+      color: _verbColor(verb),
+      selected: verb.key == widget.selectedKey,
+      pinned: verb.key == widget.pinnedKey,
+      focused: verb.key == widget.focusKey,
+      score: widget.scores[verb.key],
+      showSep: !_lineStarts.contains(verb.key),
+      gap: widget.dens.gap,
+      sepDotLeft: widget.dens.sepDotLeft,
+      homeCode: widget.codes[verb.key],
+      showHomeCode: widget.altHints,
+      homeHighlight: widget.altBuf.isNotEmpty &&
+          (widget.codes[verb.key] ?? '').startsWith(widget.altBuf),
+      homeDim: widget.altBuf.isNotEmpty &&
+          !(widget.codes[verb.key] ?? '').startsWith(widget.altBuf),
+      pressing: widget.pressing.contains(verb.key),
+      onTap: () {
+        final box = widget.keyFor(verb.key).currentContext?.findRenderObject()
+            as RenderBox?;
+        final origin = box?.localToGlobal(Offset.zero) ?? Offset.zero;
+        onPickWithOrigin(verb, origin);
+      },
+      onHover: () => widget.onHoverVerb(verb.key),
+      onLeave: widget.onLeaveVerb,
+      onSecondary: (pos) => widget.onContextMenu(verb, pos),
+      onAltClick: () => widget.onToggleFavorite(verb),
+      onCmdClick: () => widget.onTogglePin(verb),
     );
   }
 
@@ -2472,11 +3106,11 @@ class _VerbChipState extends State<_VerbChip> {
         : widget.color;
     final Color fill;
     final Color edge;
-    // Selected / pinned: #20313C + inset #3A6076. Hover: light wash, no border.
+    // Selected / pinned: #20313C + inset #3A6076. Hover/press: light wash.
     if (pinned || widget.selected) {
       fill = _kSelectedFill;
       edge = _kSelectedEdge;
-    } else if (_hot) {
+    } else if (_hot || widget.pressing) {
       fill = _kHoverWash;
       edge = Colors.transparent;
     } else {
@@ -2528,12 +3162,12 @@ class _VerbChipState extends State<_VerbChip> {
             children: [
               if (widget.showSep)
                 Positioned(
-                  // Center 3px dot on mid-x-height of the verb glyphs.
+                  // Center separator circle on mid-x-height of the verb glyphs.
                   left: widget.sepDotLeft,
-                  top: (widget.lh / 2) - 1.5 + 1,
+                  top: (widget.lh / 2) - (_kSepDotSize / 2) + 1,
                   child: const SizedBox(
-                    width: 3,
-                    height: 3,
+                    width: _kSepDotSize,
+                    height: _kSepDotSize,
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         color: _kDot,
@@ -2678,6 +3312,12 @@ class _VerbChipState extends State<_VerbChip> {
     final text = widget.verb.label;
     // Tight line box; chip Center places glyphs mid-pill.
     const styleHeight = 1.0;
+    final style = _verbIndexTextStyle(
+      fontSize: widget.fs,
+      height: styleHeight,
+      color: ink,
+      thinFace: true,
+    );
     if (score == null || score.ranges.isEmpty) {
       return Text(
         text,
@@ -2686,13 +3326,7 @@ class _VerbChipState extends State<_VerbChip> {
           applyHeightToFirstAscent: false,
           applyHeightToLastDescent: false,
         ),
-        style: TextStyle(
-          fontFamily: FfTokens.fontFamily,
-          fontSize: widget.fs,
-          fontWeight: FontWeight.w400,
-          height: styleHeight,
-          color: ink,
-        ),
+        style: style,
       );
     }
     final spans = <InlineSpan>[];
@@ -2711,16 +3345,7 @@ class _VerbChipState extends State<_VerbChip> {
       spans.add(TextSpan(text: text.substring(cursor)));
     }
     return Text.rich(
-      TextSpan(
-        style: TextStyle(
-          fontFamily: FfTokens.fontFamily,
-          fontSize: widget.fs,
-          fontWeight: FontWeight.w400,
-          height: styleHeight,
-          color: ink,
-        ),
-        children: spans,
-      ),
+      TextSpan(style: style, children: spans),
       softWrap: false,
       textHeightBehavior: const TextHeightBehavior(
         applyHeightToFirstAscent: false,
@@ -2853,7 +3478,7 @@ class _ShortcutsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     const rows = [
       ('Type', 'Filter verbs'),
-      ('F', 'All · Faves · Frequent'),
+      ('F', 'All · Faves'),
       ('↑ ↓ ← →', 'Move'),
       ('Tab', 'Next match'),
       ('↵', 'Pick · first history when empty'),

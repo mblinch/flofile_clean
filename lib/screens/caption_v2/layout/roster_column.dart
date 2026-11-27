@@ -111,6 +111,7 @@ class _RosterColumnState extends State<RosterColumn> {
     Offset position,
   ) async {
     final pinned = c.isPlayerPinned(player, isHome: widget.isHome);
+    final favorite = c.isPlayerFavorite(player, isHome: widget.isHome);
     final action = await showCaptionV2PopupMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
@@ -121,6 +122,12 @@ class _RosterColumnState extends State<RosterColumn> {
       ),
       items: [
         PopupMenuItem(
+          value: 'favorite',
+          child: Text(
+            favorite ? 'Remove from Favorites' : 'Add to Favorites',
+          ),
+        ),
+        PopupMenuItem(
           value: 'pin',
           child: Text(pinned ? 'Unpin Player' : 'Pin Player'),
         ),
@@ -129,6 +136,10 @@ class _RosterColumnState extends State<RosterColumn> {
       ],
     );
     if (action == null || !mounted) return;
+    if (action == 'favorite') {
+      await c.togglePlayerFavorite(player, isHome: widget.isHome);
+      return;
+    }
     if (action == 'pin') {
       c.togglePlayerPin(player, isHome: widget.isHome);
       return;

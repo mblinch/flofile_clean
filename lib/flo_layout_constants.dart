@@ -7,15 +7,10 @@ const double kFloAppHeaderHeight = 34.0;
 const double kFloUnifiedTitleBarHeight = 36.0;
 
 /// Left inset so title-bar controls clear the traffic lights.
-const double kFloTrafficLightInset = 78.0;
+const double kFloTrafficLightInset = 90.0;
 
 /// True for the 1280×800 window preset and anything smaller.
-/// Verb index density locks to compact in this range.
 bool floWindowIsCompact(Size size) => size.width < 1340 || size.height < 850;
-
-/// Saved density, or compact when [floWindowIsCompact] is true.
-int floVerbIndexDensity(Size size, int saved) =>
-    floWindowIsCompact(size) ? 0 : saved.clamp(0, 2);
 
 /// Pic preview top/bottom bars, caption (CAPTION) title row, thumbnail toolbar,
 /// and Keyboard Fire caption strip header — keep heights aligned (compact strip).

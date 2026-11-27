@@ -25,39 +25,10 @@ class _CaptionV2ShortcutsMenuButtonState
     extends State<CaptionV2ShortcutsMenuButton> {
   final MenuController _menu = MenuController();
 
-  static String get _mod => Platform.isMacOS ? '⌘' : 'Ctrl';
-
-  List<({String keys, String label})> _rowsFor(bool ftpMode) {
-    final mod = _mod;
-    return [
-      (keys: '$mod K', label: 'Focus Firebar shorthand line'),
-      (keys: 'Esc', label: 'Exit Firebar (keep selection)'),
-      (keys: 'Tab', label: 'Pick Firebar dropdown row'),
-      (keys: '↵', label: 'Apply Firebar line'),
-      (keys: 'Tab / ⇧Tab', label: 'Cycle Home → Verbs → Away'),
-      (keys: '← →', label: 'Previous / next frame'),
-      (keys: 'I', label: 'Open IPTC (thumbnails focused)'),
-      (keys: '$mod ↵', label: 'Save & next'),
-      (keys: '$mod S', label: 'Save & next'),
-      (keys: '⇧↵', label: 'Save & next'),
-      (keys: '$mod ⇧ ↵', label: 'Save & previous'),
-      if (ftpMode) (keys: '$mod U', label: 'Save, FTP & next'),
-      if (ftpMode) (keys: '⇧ F', label: 'Transmit current'),
-      (keys: '$mod ⇧ V', label: 'Paste previous caption'),
-      (keys: '$mod Z', label: 'Undo Firebar change'),
-      (keys: 'Ctrl + #', label: 'Home jersey number'),
-      (
-        keys: Platform.isMacOS ? '⌘ / ⌥ + #' : 'Alt + #',
-        label: 'Away jersey number',
-      ),
-      (keys: '⇧ + #', label: 'Select verb by number'),
-    ];
-  }
-
   @override
   Widget build(BuildContext context) {
     final t = widget.tokens;
-    final rows = _rowsFor(widget.ftpMode);
+    final rows = captionV2ShortcutRows(ftpMode: widget.ftpMode);
     return MenuAnchor(
       controller: _menu,
       alignmentOffset: const Offset(0, 6),
@@ -147,6 +118,106 @@ class _CaptionV2ShortcutsMenuButtonState
       ],
     );
   }
+}
+
+List<({String keys, String label})> captionV2ShortcutRows({
+  bool ftpMode = false,
+}) {
+  final mod = Platform.isMacOS ? '⌘' : 'Ctrl';
+  return [
+    (keys: '$mod K', label: 'Focus Firebar shorthand line'),
+    (keys: 'Esc', label: 'Exit Firebar (keep selection)'),
+    (keys: 'Tab', label: 'Pick Firebar dropdown row'),
+    (keys: '↵', label: 'Apply Firebar line'),
+    (keys: 'Tab / ⇧Tab', label: 'Cycle Home → Verbs → Away'),
+    (keys: '← →', label: 'Previous / next frame'),
+    (keys: 'I', label: 'Open IPTC (thumbnails focused)'),
+    (keys: '$mod ↵', label: 'Save & next'),
+    (keys: '$mod S', label: 'Save & next'),
+    (keys: '⇧↵', label: 'Save & next'),
+    (keys: '$mod ⇧ ↵', label: 'Save & previous'),
+    if (ftpMode) (keys: '$mod U', label: 'Save, FTP & next'),
+    if (ftpMode) (keys: '⇧ F', label: 'Transmit current'),
+    (keys: '$mod ⇧ V', label: 'Paste previous caption'),
+    (keys: '$mod Z', label: 'Undo Firebar change'),
+    (keys: 'Ctrl + #', label: 'Home jersey number'),
+    (
+      keys: Platform.isMacOS ? '⌘ / ⌥ + #' : 'Alt + #',
+      label: 'Away jersey number',
+    ),
+    (keys: '⇧ + #', label: 'Select verb by number'),
+  ];
+}
+
+/// Opens the keyboard shortcuts reference as a dialog (account-chip menu).
+Future<void> showCaptionV2ShortcutsDialog(
+  BuildContext context, {
+  bool ftpMode = false,
+}) {
+  final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+  final rows = captionV2ShortcutRows(ftpMode: ftpMode);
+  return showDialog<void>(
+    context: context,
+    builder: (context) {
+      return Dialog(
+        backgroundColor: t.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: t.divider),
+        ),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minWidth: 300,
+            maxWidth: 340,
+            maxHeight: MediaQuery.sizeOf(context).height * 0.7,
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    PhosphorIcon(
+                      PhosphorIconsRegular.keyboard,
+                      size: 14,
+                      color: t.textSecondary,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Keyboard shortcuts',
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: t.text,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: PhosphorIcon(
+                        PhosphorIconsRegular.x,
+                        size: 14,
+                        color: t.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                for (var i = 0; i < rows.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 7),
+                  _ShortcutRow(keys: rows[i].keys, label: rows[i].label),
+                ],
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
 }
 
 class _ShortcutRow extends StatelessWidget {

@@ -1,7 +1,7 @@
 name: quick_cap
 description: A Flutter app for generating Getty-style captions with IPTC metadata and code-replacement dropdowns.
 publish_to: "none"
-version: 2.0.57+257
+version: 2.0.58+258
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -98,26 +98,11 @@ flutter:
     - assets/cursors/
 
   fonts:
+    # Single variable entry — multi-weight duplicates make Flutter/macOS ignore
+    # fontVariations and leave Inter stuck on a heavy optical/default face.
     - family: Inter
       fonts:
         - asset: fonts/Inter-Variable.ttf
-          weight: 100
-        - asset: fonts/Inter-Variable.ttf
-          weight: 200
-        - asset: fonts/Inter-Variable.ttf
-          weight: 300
-        - asset: fonts/Inter-Variable.ttf
-          weight: 400
-        - asset: fonts/Inter-Variable.ttf
-          weight: 500
-        - asset: fonts/Inter-Variable.ttf
-          weight: 600
-        - asset: fonts/Inter-Variable.ttf
-          weight: 700
-        - asset: fonts/Inter-Variable.ttf
-          weight: 800
-        - asset: fonts/Inter-Variable.ttf
-          weight: 900
     # Cross-platform monospace (Windows lacks Menlo/SF Mono; Consolas differs).
     # License: fonts/JetBrainsMono-OFL.txt
     - family: JetBrainsMono

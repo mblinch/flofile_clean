@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -7,10 +8,12 @@ import 'package:flutter/services.dart';
 import '../../../theme/ff_tokens.dart';
 import '../../../widgets/oriented_file_preview.dart';
 import '../data/burst_groups.dart';
+import '../data/caption_history.dart';
+import '../layout/caption_v2_photo_actions.dart';
 import 'frame_status_dot.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
-/// Primary Save & next fill (Nocturne action bar).
+/// Primary Save & next fill (Nocturne action bar — Action Bar.html).
 const LinearGradient _kActionTealGradient = LinearGradient(
   begin: Alignment.topCenter,
   end: Alignment.bottomCenter,
@@ -44,17 +47,41 @@ const LinearGradient _kActionTealGradientPressed = LinearGradient(
   stops: [0.0, 0.55, 1.0],
 );
 
-/// Match Firebar / period bar (minHeight 32 in caption_v2_search.dart).
-/// Grouped clip chips sit inside a 2px shell → 28 so the group is also 32.
 const double _kActionRowHeight = 32;
 const double _kActionChipHeight = 28;
+const double _kToolIconSize = 28;
 
+/// Icon-only tool cluster width (5×28 + divider + pad).
+const double _kToolsIconsWidth = 149;
+
+/// Icon+label tool cluster (Copy/Paste/Paste last/History/Refresh).
+const double _kToolsLabeledWidth = 310;
+
+/// Approx widths used when deciding whether labels fit with Burst reserved.
+const double _kApproxSavePrevWidth = 72;
+const double _kApproxSaveNextWidth = 130; // Save + ⌘↵ keycap + caret
+const double _kApproxBurstWidth = 100; // lightning + Burst + count
+const double _kApproxFtpWidth = 155;
+const double _kApproxFtpHistoryWidth = 40;
+const double _kApproxThumbsWidth = 48;
+const double _kActionBarPad = 10;
+const double _kActionGap = 8;
+const double _kMinActionSpacer = 16;
+
+const Color _kActionBarBg = Color(0xFF14181C);
 const Color _kActionSecondaryBg = Color(0xFF1E242A);
 const Color _kActionHairline = Color(0x1EE8EEF4); // rgba(232,238,244,.12)
-const Color _kActionPressedBg = Color(0xFF20313C);
-const Color _kActionPressedEdge = Color(0xFF3A6076);
-const Color _kActionPrimaryEdge = Color(0xF24A7A96); // rgba(74,122,150,.95)
-const Color _kActionPrimaryEdgeHover = Color(0xD9E8EEF4); // rgba(232,238,244,.85)
+const Color _kSavePrevBg = Color(0xFF15222B);
+const Color _kSavePrevBgHover = Color(0xFF1C2D38);
+const Color _kSavePrevInk = Color(0xFFBFD3DF);
+const Color _kSaveInset = Color(0x994A7A96); // rgba(74,122,150,.6)
+const Color _kSaveNextInset = Color(0xF24A7A96); // rgba(74,122,150,.95)
+const Color _kSaveNextGlow = Color(0x404A7A96); // rgba(74,122,150,.25)
+const Color _kBurstFill = Color(0x0FE8C547); // rgba(232,197,71,.06)
+const Color _kBurstFillHover = Color(0x1EE8C547); // rgba(232,197,71,.12)
+const Color _kBurstInset = Color(0x73E8C547); // rgba(232,197,71,.45)
+const Color _kVerbAccent = Color(0xFF9FC3D6);
+const Color _kHistoryRest = Color(0xFFD8DEE4);
 
 String get _modKey =>
     defaultTargetPlatform == TargetPlatform.macOS ? '⌘' : 'Ctrl';
@@ -64,6 +91,34 @@ String get _savePrevShortcut => '$_modKey ⇧ ↵';
 String get _saveToBurstShortcut => '$_modKey B';
 String get _pasteLastShortcut => '$_modKey ⇧ V';
 String get _ftpShortcut => '$_modKey U';
+
+/// True when the tool cluster can show text labels without colliding once
+/// Burst pops in (burst width is always reserved when orange actions are
+/// visible, so labels do not flicker on/off as you enter a burst).
+bool _canShowToolLabels({
+  required double width,
+  required bool reserveBurst,
+  required bool showTransmit,
+  required bool hasThumbs,
+  required bool hideOrangeActions,
+}) {
+  // Layout: [thumbs?] prev · tools · [next?] [burst?] · spacer · [ftp?] [hist?]
+  // Compare leftover with icon tools against the extra labeled tools need.
+  var fixed = _kActionBarPad + _kApproxSavePrevWidth + _kActionGap;
+  // tools slot measured separately
+  fixed += _kActionGap;
+  if (!hideOrangeActions) {
+    fixed += _kApproxSaveNextWidth;
+    if (reserveBurst) fixed += _kActionGap + _kApproxBurstWidth;
+  }
+  if (hasThumbs) fixed += _kApproxThumbsWidth + _kActionGap;
+  if (showTransmit && !hideOrangeActions) {
+    fixed += _kActionGap + _kApproxFtpWidth + _kActionGap + _kApproxFtpHistoryWidth;
+  }
+  final leftoverWithIcons = width - fixed - _kToolsIconsWidth;
+  final extraForLabels = _kToolsLabeledWidth - _kToolsIconsWidth;
+  return leftoverWithIcons >= extraForLabels + _kMinActionSpacer;
+}
 
 /// Compact caption actions shown beneath the all-at-once search field.
 class CaptionV2ActionRow extends StatelessWidget {
@@ -92,6 +147,9 @@ class CaptionV2ActionRow extends StatelessWidget {
     this.ftpBatchIndex = 0,
     this.ftpBatchTotal = 0,
     this.onFtpCancel,
+    this.captionHistory = const [],
+    this.onCaptionHistorySelect,
+    this.onRefresh,
     this.singleRow = false,
     this.mobileDock = false,
     this.onThumbs,
@@ -140,6 +198,13 @@ class CaptionV2ActionRow extends StatelessWidget {
   final int ftpBatchTotal;
   final VoidCallback? onFtpCancel;
 
+  /// Last 5 user-built captions (newest first) for the history dropdown.
+  final List<CaptionHistoryEntry> captionHistory;
+  final ValueChanged<CaptionHistoryEntry>? onCaptionHistorySelect;
+
+  /// Reset / refresh the current caption selection.
+  final VoidCallback? onRefresh;
+
   /// Keep save / copy / paste / next on one horizontal row (mobile).
   final bool singleRow;
 
@@ -171,47 +236,37 @@ class CaptionV2ActionRow extends StatelessWidget {
         final showBurst = !hideOrangeActions &&
             burstPaths.length > 1 &&
             onSaveToBurst != null;
-        // Burst adds another chip; tighten earlier so Copy/Paste don't overflow.
-        final compact = singleRow || width <= 1060 || (showBurst && width <= 1320);
-        // Stay on one horizontal line always — never Wrap/stack when the
-        // photo pane takes width. Compact earlier instead.
-        final tight = !singleRow &&
-            (width <= 720 ||
-                (showTransmit && !hideOrangeActions && width <= 900) ||
-                (showBurst && width <= 1000));
-        final clipIconOnly =
-            singleRow || tight || (showBurst && width <= 1180);
-        final pad = singleRow || tight ? 8.0 : 13.0;
-        final showShortcuts = !tight;
-        final prev = _NavButton(
-          label: 'Save',
-          tooltip: 'Save & Prev',
-          icon: PhosphorIconsRegular.caretLeft,
-          iconAtEnd: false,
-          primary: true,
-          shortcut: showShortcuts ? _savePrevShortcut : null,
-          padding: EdgeInsets.symmetric(horizontal: pad),
+        final showShortcuts = !singleRow && width > 720;
+        // Reserve burst even when it is not currently showing so labels do not
+        // disappear the moment Save to Burst pops onto a multi-frame photo.
+        final showToolLabels = !singleRow &&
+            _canShowToolLabels(
+              width: width,
+              reserveBurst: !hideOrangeActions,
+              showTransmit: showTransmit,
+              hasThumbs: onThumbs != null,
+              hideOrangeActions: hideOrangeActions,
+            );
+        final prev = _SavePrevButton(
+          tooltip: 'Save & previous (${_savePrevShortcut})',
           onPressed: onSavePrevious,
         );
-        final clip = _ClipGroup(
-          compact: compact || tight,
-          iconOnly: clipIconOnly,
+        final tools = _ToolGroup(
           onCopy: onCopy,
           onPaste: onPaste,
           onPasteLast: onPastePrevious,
           pasteEnabled: pasteEnabled,
-          pasteLastShortcut: showShortcuts ? _pasteLastShortcut : null,
+          pasteLastShortcut: _pasteLastShortcut,
+          captionHistory: captionHistory,
+          onCaptionHistorySelect: onCaptionHistorySelect,
+          onRefresh: onRefresh,
+          showLabels: showToolLabels,
         );
         final next = hideOrangeActions
             ? null
-            : _NavButton(
-                label: 'Save',
-                tooltip: 'Save & Next',
-                icon: PhosphorIconsRegular.caretRight,
+            : _SaveNextButton(
                 enabled: saveNextEnabled,
-                primary: true,
-                shortcut: showShortcuts ? _saveNextShortcut : null,
-                padding: EdgeInsets.symmetric(horizontal: tight ? 10 : 16),
+                tooltip: 'Save & next (${_saveNextShortcut})',
                 onPressed: onSaveNext,
               );
         final burst = showBurst
@@ -239,75 +294,86 @@ class CaptionV2ActionRow extends StatelessWidget {
                 onTap: openActive,
               )
             : null;
-        // Always one horizontal line. Scale the chip cluster down when the
-        // caption column shrinks (photo pane dragged wider) instead of wrapping.
-        final bar = Row(
-          children: [
-            Flexible(
-              fit: FlexFit.loose,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (thumbs != null) ...[
-                      thumbs,
-                      const SizedBox(width: 8),
-                    ],
-                    prev,
-                    const SizedBox(width: 8),
-                    clip,
-                    if (next != null) ...[
-                      const SizedBox(width: 8),
-                      next,
-                    ],
-                    if (burst != null) ...[
-                      const SizedBox(width: 8),
-                      burst,
-                    ],
-                    if (showTransmit && !hideOrangeActions) ...[
-                      const SizedBox(width: 8),
-                      _FtpGroup(
-                        narrow: false,
-                        label: transmitLabel,
-                        enabled: transmitEnabled,
-                        onTransmit: onTransmit,
-                        onHistory: ftpActive ? null : onFtpHistory,
-                        shortcut: showShortcuts && width >= 860
-                            ? _ftpShortcut
-                            : null,
-                      ),
-                    ],
-                    if (!singleRow &&
-                        ftpActive &&
-                        ftpThumbPath != null &&
-                        ftpThumbPath!.trim().isNotEmpty) ...[
-                      const SizedBox(width: 8),
-                      _FtpUploadPreview(
-                        path: ftpThumbPath!.trim(),
-                        onTap: openActive,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            if (!singleRow && ftpActive && progress != null) ...[
-              const SizedBox(width: 8),
-              Flexible(child: progress),
-            ],
+
+        final leading = <Widget>[
+          if (thumbs != null) ...[
+            thumbs,
+            const SizedBox(width: 8),
           ],
-        );
+          prev,
+          const SizedBox(width: 8),
+          tools,
+          if (next != null) ...[
+            const SizedBox(width: 8),
+            next,
+          ],
+          if (burst != null) ...[
+            const SizedBox(width: 8),
+            burst,
+          ],
+        ];
+
+        final trailing = <Widget>[
+          if (showTransmit && !hideOrangeActions) ...[
+            _FtpGroup(
+              narrow: false,
+              label: transmitLabel,
+              enabled: transmitEnabled,
+              onTransmit: onTransmit,
+              onHistory: ftpActive ? null : onFtpHistory,
+              shortcut: showShortcuts ? _ftpShortcut : null,
+            ),
+          ],
+          if (!singleRow &&
+              ftpActive &&
+              ftpThumbPath != null &&
+              ftpThumbPath!.trim().isNotEmpty) ...[
+            const SizedBox(width: 8),
+            _FtpUploadPreview(
+              path: ftpThumbPath!.trim(),
+              onTap: openActive,
+            ),
+          ],
+        ];
+
+        // Prefer one row with FTP right-aligned; wrap when narrow.
+        // Do not FittedBox-scale the left cluster — that made Save/tools
+        // look tiny next to full-size FTP on the right.
+        final useRow = width > 720 && !singleRow;
+        final child = useRow
+            ? Row(
+                children: [
+                  ...leading,
+                  const SizedBox(width: 8),
+                  const Spacer(),
+                  ...trailing,
+                  if (ftpActive && progress != null) ...[
+                    const SizedBox(width: 8),
+                    Flexible(child: progress),
+                  ],
+                ],
+              )
+            : Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  ...leading,
+                  ...trailing,
+                  if (!singleRow && ftpActive && progress != null)
+                    SizedBox(width: 120, child: progress),
+                ],
+              );
 
         return Container(
           width: double.infinity,
-          padding: EdgeInsets.all(singleRow ? 6 : 8),
+          padding: EdgeInsets.all(singleRow ? 4 : 5),
           decoration: BoxDecoration(
-            color: FfTokens.nocturneEl,
-            borderRadius: BorderRadius.circular(14),
+            color: _kActionBarBg,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0x1AE8EEF4)),
           ),
-          child: bar,
+          child: child,
         );
       },
     );
@@ -488,7 +554,7 @@ class _MobileDockBar extends StatelessWidget {
                   ),
                   mid(
                     icon: PhosphorIconsRegular.clockCounterClockwise,
-                    label: 'Last',
+                    label: 'Paste last',
                     onTap: onPastePrevious,
                     enabled: true,
                   ),
@@ -510,7 +576,7 @@ class _MobileDockBar extends StatelessWidget {
   }
 }
 
-/// Save to burst — gold-bordered button + filmstrip popover (hover/click).
+/// Save to burst — gold accent button + filmstrip popover (hover/click).
 class _SaveToBurstButton extends StatefulWidget {
   const _SaveToBurstButton({
     required this.paths,
@@ -530,7 +596,6 @@ class _SaveToBurstButton extends StatefulWidget {
 
 class _SaveToBurstButtonState extends State<_SaveToBurstButton> {
   static const _gold = Color(0xFFE8C547);
-  static const _goldEdge = Color(0x8CE8C547); // rgba(232,197,71,.55)
   static const _goldInk = Color(0xFF1A1606);
 
   final OverlayPortalController _portal = OverlayPortalController();
@@ -690,17 +755,15 @@ class _SaveToBurstButtonState extends State<_SaveToBurstButton> {
             dimWhenDisabled: false,
             onTap: _toggleOpen,
             builder: (hovered, pressed) {
-              final bg = pressed || hovered
-                  ? FfTokens.nocturneHv
-                  : _kActionSecondaryBg;
+              final bg = pressed || hovered ? _kBurstFillHover : _kBurstFill;
               // No LayoutBuilder here — OverlayPortal + hover setState
               // otherwise hits debugNeedsLayout asserts (red flashes).
               return _BarShell(
                 height: _kActionRowHeight,
-                padding: const EdgeInsets.fromLTRB(8, 0, 5, 0),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
                 background: bg,
-                outline: _goldEdge,
-                radius: 9,
+                radius: 8,
+                outline: _kBurstInset,
                 pressed: pressed,
                 nudge: false,
                 child: Row(
@@ -712,17 +775,14 @@ class _SaveToBurstButtonState extends State<_SaveToBurstButton> {
                       size: 13,
                       color: _gold,
                     ),
-                    const SizedBox(width: 5),
+                    const SizedBox(width: 6),
                     Text(
-                      'Save to Burst',
-                      style: _barLabel(FfTokens.nocturneTx),
+                      'Burst',
+                      style: _barLabel(FfTokens.nocturneTx, size: 13),
                     ),
-                    const SizedBox(width: 5),
+                    const SizedBox(width: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 5,
-                        vertical: 1,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 5),
                       decoration: BoxDecoration(
                         color: _gold,
                         borderRadius: BorderRadius.circular(4),
@@ -733,16 +793,12 @@ class _SaveToBurstButtonState extends State<_SaveToBurstButton> {
                           fontFamily: FfTokens.fontFamily,
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          height: 1.2,
+                          height: 17 / 11,
                           fontFeatures: [FontFeature.tabularFigures()],
                           color: _goldInk,
                         ),
                       ),
                     ),
-                    if (widget.shortcut != null) ...[
-                      const SizedBox(width: 6),
-                      _ShortcutBadge(widget.shortcut!),
-                    ],
                   ],
                 ),
               );
@@ -1314,27 +1370,58 @@ class _BurstFrameThumbState extends State<_BurstFrameThumb> {
   }
 }
 
-class _NavButton extends StatelessWidget {
-  const _NavButton({
-    required this.label,
+class _SavePrevButton extends StatelessWidget {
+  const _SavePrevButton({
     required this.tooltip,
-    required this.icon,
     required this.onPressed,
-    required this.padding,
-    this.shortcut,
-    this.iconAtEnd = true,
-    this.primary = false,
+  });
+
+  final String tooltip;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return _BarTap(
+      tooltip: tooltip,
+      enabled: onPressed != null,
+      onTap: onPressed,
+      builder: (hovered, pressed) {
+        final bg = hovered || pressed ? _kSavePrevBgHover : _kSavePrevBg;
+        final ink = hovered || pressed ? Colors.white : _kSavePrevInk;
+        return _BarShell(
+          height: _kActionRowHeight,
+          padding: const EdgeInsets.fromLTRB(9, 0, 11, 0),
+          background: bg,
+          radius: 8,
+          outline: _kSaveInset,
+          pressed: pressed,
+          nudge: false,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(PhosphorIconsBold.caretLeft, size: 13, color: ink),
+              const SizedBox(width: 5),
+              Text(
+                'Save',
+                style: _barLabel(ink, size: 13),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SaveNextButton extends StatelessWidget {
+  const _SaveNextButton({
+    required this.tooltip,
+    required this.onPressed,
     this.enabled = true,
   });
 
-  final String label;
-  final String? shortcut;
   final String tooltip;
-  final IconData icon;
   final VoidCallback? onPressed;
-  final EdgeInsets padding;
-  final bool iconAtEnd;
-  final bool primary;
   final bool enabled;
 
   @override
@@ -1344,76 +1431,35 @@ class _NavButton extends StatelessWidget {
       enabled: enabled && onPressed != null,
       onTap: onPressed,
       builder: (hovered, pressed) {
-        if (primary) {
-          final gradient = pressed
-              ? _kActionTealGradientPressed
-              : hovered
-                  ? _kActionTealGradientHover
-                  : _kActionTealGradient;
-          final border = hovered || pressed
-              ? _kActionPrimaryEdgeHover
-              : _kActionPrimaryEdge;
-          return _BarShell(
-            height: _kActionRowHeight,
-            padding: padding,
-            gradient: gradient,
-            outline: border,
-            radius: 9,
-            pressed: pressed,
-            nudge: false,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (!iconAtEnd) ...[
-                  Icon(icon, size: 16, color: Colors.white),
-                  const SizedBox(width: 8),
-                ],
-                Text(label, style: _barLabel(Colors.white)),
-                if (iconAtEnd) ...[
-                  const SizedBox(width: 8),
-                  Icon(icon, size: 16, color: Colors.white),
-                ],
-                if (shortcut != null) ...[
-                  const SizedBox(width: 8),
-                  _ShortcutBadge(shortcut!, onPrimary: true),
-                ],
-              ],
-            ),
-          );
-        }
-
-        final bg = pressed
-            ? _kActionPressedBg
+        final gradient = pressed
+            ? _kActionTealGradientPressed
             : hovered
-                ? FfTokens.nocturneHv
-                : _kActionSecondaryBg;
-        final edge = pressed ? _kActionPressedEdge : _kActionHairline;
-        const iconColor = FfTokens.nocturneT2;
+                ? _kActionTealGradientHover
+                : _kActionTealGradient;
         return _BarShell(
           height: _kActionRowHeight,
-          padding: padding,
-          background: bg,
-          outline: edge,
-          radius: 9,
+          padding: const EdgeInsets.fromLTRB(12, 0, 10, 0),
+          gradient: gradient,
+          radius: 8,
+          outline: _kSaveNextInset,
+          glow: _kSaveNextGlow,
           pressed: pressed,
           nudge: false,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (!iconAtEnd) ...[
-                Icon(icon, size: 16, color: iconColor),
-                const SizedBox(width: 7),
-              ],
-              Text(label, style: _barLabel(FfTokens.nocturneTx)),
-              if (shortcut != null) ...[
-                const SizedBox(width: 7),
-                _ShortcutBadge(shortcut!),
-              ],
-              if (iconAtEnd) ...[
-                const SizedBox(width: 7),
-                Icon(icon, size: 16, color: iconColor),
-              ],
+              Text(
+                'Save',
+                style: _barLabel(Colors.white, size: 13, weight: FontWeight.w700),
+              ),
+              const SizedBox(width: 7),
+              _ShortcutKeycap(label: _saveNextShortcut),
+              const SizedBox(width: 6),
+              const Icon(
+                PhosphorIconsBold.caretRight,
+                size: 13,
+                color: Colors.white,
+              ),
             ],
           ),
         );
@@ -1422,98 +1468,919 @@ class _NavButton extends StatelessWidget {
   }
 }
 
-class _ClipGroup extends StatelessWidget {
-  const _ClipGroup({
-    required this.compact,
+class _ShortcutKeycap extends StatelessWidget {
+  const _ShortcutKeycap({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: const Color(0x0FE8EEF4),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: const Color(0x2EE8EEF4)),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontFamily: FfTokens.fontFamily,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w600,
+          color: _kSavePrevInk,
+          height: 1.2,
+        ),
+      ),
+    );
+  }
+}
+
+class _ToolGroup extends StatelessWidget {
+  const _ToolGroup({
     required this.onCopy,
     required this.onPaste,
     required this.onPasteLast,
     required this.pasteEnabled,
-    this.iconOnly = false,
-    this.pasteLastShortcut,
+    required this.pasteLastShortcut,
+    required this.captionHistory,
+    this.onCaptionHistorySelect,
+    this.onRefresh,
+    this.showLabels = false,
   });
 
-  final bool compact;
-  final bool iconOnly;
   final VoidCallback? onCopy;
   final VoidCallback? onPaste;
   final VoidCallback? onPasteLast;
   final bool pasteEnabled;
-  final String? pasteLastShortcut;
+  final String pasteLastShortcut;
+  final List<CaptionHistoryEntry> captionHistory;
+  final ValueChanged<CaptionHistoryEntry>? onCaptionHistorySelect;
+  final VoidCallback? onRefresh;
+  final bool showLabels;
 
   @override
   Widget build(BuildContext context) {
-    final pad = iconOnly ? 8.0 : 11.0;
-    Widget item({
-      required IconData icon,
-      required String label,
-      required VoidCallback? onPressed,
-      required bool enabled,
-      String? shortcut,
-    }) {
-      final tip = shortcut == null ? label : '$label  ·  $shortcut';
-      return _BarTap(
-        tooltip: tip,
-        enabled: enabled && onPressed != null,
-        onTap: onPressed,
-        builder: (hovered, pressed) {
-          return _BarShell(
-            height: _kActionChipHeight,
-            padding: EdgeInsets.symmetric(horizontal: pad),
-            background:
-                hovered || pressed ? FfTokens.nocturneHv : Colors.transparent,
-            radius: 7,
-            pressed: pressed,
-            nudge: false,
-            child: iconOnly
-                ? Icon(icon, size: 16, color: FfTokens.nocturneT2)
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(icon, size: 16, color: FfTokens.nocturneT2),
-                      const SizedBox(width: 6),
-                      Text(label, style: _barLabel(FfTokens.nocturneTx)),
-                      if (shortcut != null) ...[
-                        const SizedBox(width: 6),
-                        _ShortcutBadge(shortcut),
-                      ],
-                    ],
-                  ),
-          );
-        },
-      );
-    }
-
     return Container(
+      height: _kActionRowHeight,
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
         color: _kActionSecondaryBg,
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: _kActionHairline),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0x14E8EEF4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          item(
+          _ToolIconButton(
             icon: PhosphorIconsRegular.copy,
-            label: 'Copy',
+            label: showLabels ? 'Copy' : null,
+            tooltip: 'Copy caption',
             onPressed: onCopy,
-            enabled: true,
           ),
-          item(
+          _ToolIconButton(
             icon: PhosphorIconsRegular.clipboardText,
-            label: 'Paste',
-            onPressed: onPaste,
-            enabled: pasteEnabled,
+            label: showLabels ? 'Paste' : null,
+            tooltip: 'Paste caption',
+            onPressed: pasteEnabled ? onPaste : null,
           ),
-          item(
-            icon: PhosphorIconsRegular.clockCounterClockwise,
-            label: 'Paste last',
+          _ToolIconButton(
+            icon: PhosphorIconsRegular.arrowBendDownLeft,
+            label: showLabels ? 'Paste last' : null,
+            tooltip: 'Paste last caption ($pasteLastShortcut)',
             onPressed: onPasteLast,
-            enabled: true,
-            shortcut: pasteLastShortcut,
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 2),
+            child: SizedBox(
+              width: 1,
+              height: 16,
+              child: ColoredBox(color: Color(0x1AE8EEF4)),
+            ),
+          ),
+          _CaptionHistoryButton(
+            entries: captionHistory,
+            onSelect: onCaptionHistorySelect,
+            showLabel: showLabels,
+          ),
+          _ToolIconButton(
+            icon: PhosphorIconsRegular.arrowClockwise,
+            label: showLabels ? 'Refresh' : null,
+            tooltip: 'Refresh',
+            onPressed: onRefresh,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ToolIconButton extends StatelessWidget {
+  const _ToolIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+    this.label,
+    this.selected = false,
+  });
+
+  final IconData icon;
+  final String? label;
+  final String tooltip;
+  final VoidCallback? onPressed;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final labeled = label != null;
+    return _BarTap(
+      tooltip: tooltip,
+      enabled: onPressed != null,
+      onTap: onPressed,
+      builder: (hovered, pressed) {
+        final active = selected || hovered || pressed;
+        final fg = active ? FfTokens.nocturneTx : FfTokens.nocturneT2;
+        return Container(
+          width: labeled ? null : _kToolIconSize,
+          height: _kToolIconSize,
+          padding: labeled
+              ? const EdgeInsets.symmetric(horizontal: 6)
+              : EdgeInsets.zero,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: active ? FfTokens.nocturneHv : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: labeled
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 14, color: fg),
+                    const SizedBox(width: 4),
+                    Text(
+                      label!,
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: fg,
+                        height: 1,
+                      ),
+                    ),
+                  ],
+                )
+              : Icon(icon, size: 15, color: fg),
+        );
+      },
+    );
+  }
+}
+
+class _CaptionHistoryButton extends StatefulWidget {
+  const _CaptionHistoryButton({
+    required this.entries,
+    this.onSelect,
+    this.showLabel = false,
+  });
+
+  final List<CaptionHistoryEntry> entries;
+  final ValueChanged<CaptionHistoryEntry>? onSelect;
+  final bool showLabel;
+
+  @override
+  State<_CaptionHistoryButton> createState() => _CaptionHistoryButtonState();
+}
+
+class _CaptionHistoryButtonState extends State<_CaptionHistoryButton> {
+  final OverlayPortalController _portal = OverlayPortalController();
+  final LayerLink _link = LayerLink();
+  final FocusNode _focus = FocusNode(debugLabel: 'CaptionHistory');
+  final GlobalKey _buttonKey = GlobalKey();
+  int _keyboardIndex = -1;
+  /// Row whose full-size preview was just closed — kept lit so the user can
+  /// apply that caption next.
+  int _viewedIndex = -1;
+  bool _openUp = true;
+  bool _openingZoom = false;
+
+  @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_onKey);
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKey);
+    _focus.dispose();
+    if (_portal.isShowing) _portal.hide();
+    super.dispose();
+  }
+
+  bool get _open => _portal.isShowing;
+
+  List<CaptionHistoryEntry> get _entries =>
+      widget.entries.take(5).toList(growable: false);
+
+  bool _onKey(KeyEvent event) {
+    if (!_open || event is! KeyDownEvent) return false;
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      _close();
+      return true;
+    }
+    final digit = event.logicalKey.keyLabel;
+    if (digit.length == 1) {
+      final n = int.tryParse(digit);
+      if (n != null && n >= 1 && n <= _entries.length) {
+        _pick(_entries[n - 1]);
+        return true;
+      }
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      setState(() {
+        _keyboardIndex = (_keyboardIndex + 1).clamp(0, _entries.length - 1);
+      });
+      return true;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      setState(() {
+        _keyboardIndex = (_keyboardIndex - 1).clamp(0, _entries.length - 1);
+      });
+      return true;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+      if (_keyboardIndex >= 0 && _keyboardIndex < _entries.length) {
+        _pick(_entries[_keyboardIndex]);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void _resolveDirection() {
+    final box = _buttonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) {
+      _openUp = true;
+      return;
+    }
+    final top = box.localToGlobal(Offset.zero).dy;
+    _openUp = top > 280;
+  }
+
+  void _openMenu({int? focusIndex}) {
+    _keyboardIndex = focusIndex ?? -1;
+    _resolveDirection();
+    if (!_portal.isShowing) {
+      _portal.show();
+      _focus.requestFocus();
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _close({bool clearViewed = true}) {
+    if (_portal.isShowing) _portal.hide();
+    _keyboardIndex = -1;
+    if (clearViewed) _viewedIndex = -1;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _toggle() {
+    if (_open) {
+      _close();
+    } else {
+      _openMenu();
+    }
+  }
+
+  void _pick(CaptionHistoryEntry entry) {
+    _close();
+    widget.onSelect?.call(entry);
+  }
+
+  Future<void> _openZoom(String path, int entryIndex) async {
+    final trimmed = path.trim();
+    if (trimmed.isEmpty || _openingZoom) return;
+    _openingZoom = true;
+    // Close first so this menu's ESC handler does not steal the zoom dialog.
+    // Keep the viewed index so we can restore + highlight on return.
+    _viewedIndex = entryIndex;
+    _close(clearViewed: false);
+    try {
+      await Future<void>.delayed(Duration.zero);
+      if (!mounted) return;
+      await showCaptionV2Zoom(context, trimmed);
+    } finally {
+      _openingZoom = false;
+    }
+    if (!mounted) return;
+    _viewedIndex = entryIndex;
+    _openMenu(focusIndex: entryIndex);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final open = _open;
+    return OverlayPortal(
+      controller: _portal,
+      overlayChildBuilder: (context) {
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: _close,
+              ),
+            ),
+            CompositedTransformFollower(
+              link: _link,
+              showWhenUnlinked: false,
+              targetAnchor:
+                  _openUp ? Alignment.topCenter : Alignment.bottomCenter,
+              followerAnchor:
+                  _openUp ? Alignment.bottomCenter : Alignment.topCenter,
+              offset: Offset(0, _openUp ? -6 : 6),
+              child: Focus(
+                focusNode: _focus,
+                child: _CaptionHistoryMenu(
+                  entries: _entries,
+                  keyboardIndex: _keyboardIndex,
+                  viewedIndex: _viewedIndex,
+                  onHoverIndex: (i) {
+                    if (_keyboardIndex != i) {
+                      setState(() => _keyboardIndex = i);
+                    }
+                  },
+                  onSelect: _pick,
+                  onClose: _close,
+                  onOpenZoom: _openZoom,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+      child: CompositedTransformTarget(
+        link: _link,
+        child: KeyedSubtree(
+          key: _buttonKey,
+          child: _ToolIconButton(
+            icon: PhosphorIconsRegular.clockCounterClockwise,
+            label: widget.showLabel ? 'History' : null,
+            tooltip: 'Caption history',
+            selected: open,
+            onPressed: widget.onSelect == null ? null : _toggle,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CaptionHistoryMenu extends StatelessWidget {
+  const _CaptionHistoryMenu({
+    required this.entries,
+    required this.keyboardIndex,
+    required this.viewedIndex,
+    required this.onHoverIndex,
+    required this.onSelect,
+    required this.onClose,
+    required this.onOpenZoom,
+  });
+
+  final List<CaptionHistoryEntry> entries;
+  final int keyboardIndex;
+  final int viewedIndex;
+  final ValueChanged<int> onHoverIndex;
+  final ValueChanged<CaptionHistoryEntry> onSelect;
+  final VoidCallback onClose;
+  final void Function(String path, int entryIndex) onOpenZoom;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxW = MediaQuery.sizeOf(context).width - 48;
+    final width = maxW < 820 ? maxW.clamp(320.0, 820.0) : 820.0;
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        width: width,
+        padding: const EdgeInsets.all(5),
+        decoration: BoxDecoration(
+          color: _kActionSecondaryBg,
+          borderRadius: BorderRadius.circular(11),
+          border: Border.all(color: const Color(0x24E8EEF4)),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x8C000000),
+              blurRadius: 44,
+              offset: Offset(0, 18),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(9, 4, 4, 5),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'RECENT CAPTIONS',
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.84,
+                        color: FfTokens.nocturneT3,
+                        height: 1,
+                      ),
+                    ),
+                  ),
+                  const Text(
+                    'Last 5',
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w500,
+                      color: FfTokens.nocturneT3,
+                      height: 1,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  _OverlaySafeTap(
+                    enabled: true,
+                    onTap: onClose,
+                    builder: (hovered, pressed) {
+                      return Container(
+                        width: 24,
+                        height: 24,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: hovered || pressed
+                              ? FfTokens.nocturneSunken
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: PhosphorIcon(
+                          PhosphorIconsRegular.x,
+                          size: 14,
+                          color: hovered || pressed
+                              ? FfTokens.nocturneTx
+                              : FfTokens.nocturneT3,
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+            if (entries.isEmpty)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(9, 8, 9, 12),
+                child: Text(
+                  'No saved captions yet',
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    color: FfTokens.nocturneT3,
+                  ),
+                ),
+              )
+            else
+              for (var i = 0; i < entries.length; i++)
+                _CaptionHistoryRow(
+                  index: i + 1,
+                  entry: entries[i],
+                  focused: keyboardIndex == i,
+                  viewed: viewedIndex == i,
+                  onHover: () => onHoverIndex(i),
+                  onTap: () => onSelect(entries[i]),
+                  onOpenZoom: (path) => onOpenZoom(path, i),
+                ),
+            Container(
+              margin: const EdgeInsets.only(top: 3),
+              padding: const EdgeInsets.fromLTRB(9, 6, 9, 5),
+              decoration: const BoxDecoration(
+                border: Border(
+                  top: BorderSide(color: Color(0x14E8EEF4)),
+                ),
+              ),
+              child: const Text(
+                'Template text (dateline, venue, credit) is added automatically',
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 11,
+                  color: FfTokens.nocturneT3,
+                  height: 1.3,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CaptionHistoryRow extends StatelessWidget {
+  const _CaptionHistoryRow({
+    required this.index,
+    required this.entry,
+    required this.focused,
+    required this.viewed,
+    required this.onHover,
+    required this.onTap,
+    required this.onOpenZoom,
+  });
+
+  final int index;
+  final CaptionHistoryEntry entry;
+  final bool focused;
+  final bool viewed;
+  final VoidCallback onHover;
+  final VoidCallback onTap;
+  final ValueChanged<String> onOpenZoom;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => onHover(),
+      child: _OverlaySafeTap(
+        enabled: true,
+        onTap: onTap,
+        builder: (hovered, pressed) {
+          final active = focused || viewed || hovered || pressed;
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+            decoration: BoxDecoration(
+              color: viewed
+                  ? const Color(0x244A7A96)
+                  : active
+                      ? FfTokens.nocturneSunken
+                      : Colors.transparent,
+              borderRadius: BorderRadius.circular(7),
+              border: viewed
+                  ? Border.all(color: const Color(0x664A7A96))
+                  : null,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  width: 18,
+                  height: 18,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: viewed
+                          ? FfTokens.nocturneAc
+                          : const Color(0x1EE8EEF4),
+                    ),
+                    color: viewed ? const Color(0x334A7A96) : null,
+                  ),
+                  child: Text(
+                    '$index',
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: viewed ? FfTokens.nocturneTx : FfTokens.nocturneT3,
+                      height: 1,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Absorb so the loupe / thumb hit area does not apply the
+                // caption via the parent row tap.
+                GestureDetector(
+                  onTap: () {},
+                  behavior: HitTestBehavior.opaque,
+                  child: _CaptionHistoryThumb(
+                    path: entry.imagePath,
+                    highlighted: viewed,
+                    onOpenZoom: () {
+                      final path = entry.imagePath?.trim() ?? '';
+                      if (path.isEmpty) return;
+                      onOpenZoom(path);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(children: _bodySpans(entry)),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${formatCaptionHistoryAgo(entry.savedAt)} ago',
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 11,
+                    color: FfTokens.nocturneT3,
+                    height: 19 / 11,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  static List<InlineSpan> _bodySpans(CaptionHistoryEntry entry) {
+    const base = TextStyle(
+      fontFamily: FfTokens.fontFamily,
+      fontSize: 15,
+      height: 21 / 15,
+      color: _kHistoryRest,
+      fontWeight: FontWeight.w400,
+    );
+    final body = entry.body;
+    if (body.isEmpty) return [const TextSpan(text: '', style: base)];
+
+    final players = entry.playersText.trim();
+    final verb = entry.verbText.trim();
+    if (players.isEmpty && verb.isEmpty) {
+      return [TextSpan(text: body, style: base)];
+    }
+
+    final spans = <InlineSpan>[];
+    var cursor = 0;
+    void emitPlain(int end) {
+      if (end <= cursor) return;
+      spans.add(TextSpan(text: body.substring(cursor, end), style: base));
+      cursor = end;
+    }
+
+    void emitMatch(String needle, TextStyle style) {
+      if (needle.isEmpty || cursor >= body.length) return;
+      final from = body.toLowerCase().indexOf(needle.toLowerCase(), cursor);
+      if (from < 0) return;
+      emitPlain(from);
+      spans.add(
+        TextSpan(
+          text: body.substring(from, from + needle.length),
+          style: style,
+        ),
+      );
+      cursor = from + needle.length;
+    }
+
+    emitMatch(
+      players,
+      base.copyWith(color: Colors.white, fontWeight: FontWeight.w500),
+    );
+    emitMatch(
+      verb,
+      base.copyWith(color: _kVerbAccent, fontWeight: FontWeight.w400),
+    );
+    emitPlain(body.length);
+    return spans.isEmpty ? [TextSpan(text: body, style: base)] : spans;
+  }
+}
+
+class _CaptionHistoryThumb extends StatefulWidget {
+  const _CaptionHistoryThumb({
+    this.path,
+    this.highlighted = false,
+    this.onOpenZoom,
+  });
+
+  final String? path;
+  final bool highlighted;
+  final VoidCallback? onOpenZoom;
+
+  static const double _w = 100;
+  static const double _h = 70;
+
+  /// Hover = same crop as the list thumb, just larger.
+  static const double _previewScale = 2.2;
+
+  @override
+  State<_CaptionHistoryThumb> createState() => _CaptionHistoryThumbState();
+}
+
+class _CaptionHistoryThumbState extends State<_CaptionHistoryThumb> {
+  final GlobalKey _thumbKey = GlobalKey();
+  OverlayEntry? _entry;
+  Timer? _hoverTimer;
+  int _hoverGen = 0;
+  bool _wantHover = false;
+  bool _hover = false;
+
+  void _removePreview() {
+    _entry?.remove();
+    _entry = null;
+  }
+
+  void _showPreview(String filePath) {
+    _removePreview();
+    final box =
+        _thumbKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize || !box.attached) return;
+
+    final origin = box.localToGlobal(Offset.zero);
+    final thumbSize = box.size;
+    const scale = _CaptionHistoryThumb._previewScale;
+    final pw = _CaptionHistoryThumb._w * scale;
+    final ph = _CaptionHistoryThumb._h * scale;
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final cacheW = (pw * dpr).round().clamp(200, 480);
+
+    // Centered on the thumb, floating just above it (same framing, enlarged).
+    final screen = MediaQuery.sizeOf(context);
+    final centeredLeft = origin.dx + (thumbSize.width - pw) / 2;
+    final aboveTop = origin.dy - ph - 8;
+    final dx = centeredLeft.clamp(8.0, screen.width - pw - 8);
+    final dy = aboveTop >= 8
+        ? aboveTop
+        : (origin.dy + thumbSize.height + 8)
+            .clamp(8.0, screen.height - ph - 8);
+
+    _entry = OverlayEntry(
+      builder: (context) {
+        return Positioned(
+          left: dx,
+          top: dy,
+          width: pw,
+          height: ph,
+          child: IgnorePointer(
+            child: Material(
+              color: Colors.transparent,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF262D35),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0x66E8EEF4)),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x99000000),
+                      blurRadius: 14,
+                      offset: Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(5),
+                  child: OrientedFilePreview(
+                    path: filePath,
+                    fit: BoxFit.cover,
+                    cacheWidth: cacheW,
+                    filterQuality: FilterQuality.medium,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    // Root overlay — avoids nesting inside the history menu OverlayPortal.
+    Overlay.of(context, rootOverlay: true).insert(_entry!);
+  }
+
+  void _applyHover(bool hover, String filePath) {
+    if (!mounted) return;
+    if (_hover != hover) setState(() => _hover = hover);
+    if (hover) {
+      _showPreview(filePath);
+    } else {
+      _removePreview();
+    }
+  }
+
+  void _setHover(bool hover, String filePath) {
+    if (_wantHover == hover) return;
+    _wantHover = hover;
+    _hoverTimer?.cancel();
+    final gen = ++_hoverGen;
+    final delay = hover
+        ? const Duration(milliseconds: 80)
+        : const Duration(milliseconds: 40);
+    _hoverTimer = Timer(delay, () {
+      if (!mounted || gen != _hoverGen) return;
+      _applyHover(hover, filePath);
+    });
+  }
+
+  @override
+  void dispose() {
+    _hoverTimer?.cancel();
+    _removePreview();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filePath = widget.path?.trim() ?? '';
+    final exists = filePath.isNotEmpty && File(filePath).existsSync();
+    final canZoom = exists && widget.onOpenZoom != null;
+    final ring = widget.highlighted
+        ? FfTokens.nocturneAc
+        : _hover
+            ? const Color(0x66E8EEF4)
+            : const Color(0x1EE8EEF4);
+
+    return MouseRegion(
+      cursor: canZoom ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      onEnter: exists ? (_) => _setHover(true, filePath) : null,
+      onExit: (_) => _setHover(false, filePath),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: canZoom ? widget.onOpenZoom : null,
+        child: SizedBox(
+          key: _thumbKey,
+          width: _CaptionHistoryThumb._w,
+          height: _CaptionHistoryThumb._h,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(
+                      color: ring,
+                      width: widget.highlighted || _hover ? 1.5 : 1,
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: ColoredBox(
+                      color: const Color(0xFF262D35),
+                      child: exists
+                          ? OrientedFilePreview(
+                              path: filePath,
+                              fit: BoxFit.cover,
+                              cacheWidth: 160,
+                              filterQuality: FilterQuality.medium,
+                            )
+                          : filePath.isEmpty
+                              ? null
+                              : const Center(
+                                  child: PhosphorIcon(
+                                    PhosphorIconsRegular.imageBroken,
+                                    size: 14,
+                                    color: FfTokens.nocturneT3,
+                                  ),
+                                ),
+                    ),
+                  ),
+                ),
+              ),
+              if (canZoom)
+                Positioned(
+                  right: -2,
+                  bottom: -2,
+                  child: IgnorePointer(
+                    child: Container(
+                      width: 18,
+                      height: 18,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: _hover || widget.highlighted
+                            ? FfTokens.nocturneAc
+                            : const Color(0xE0181D22),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: _hover || widget.highlighted
+                              ? FfTokens.nocturneAc
+                              : const Color(0x40E8EEF4),
+                        ),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x66000000),
+                            blurRadius: 4,
+                            offset: Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                      child: PhosphorIcon(
+                        PhosphorIconsRegular.magnifyingGlass,
+                        size: 11,
+                        color: _hover || widget.highlighted
+                            ? Colors.white
+                            : FfTokens.nocturneTx,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1556,27 +2423,22 @@ class _FtpGroup extends StatelessWidget {
             enabled: true,
             onTap: onHistory,
             builder: (hovered, pressed) {
-              final gradient = pressed
-                  ? _kActionTealGradientPressed
-                  : hovered
-                      ? _kActionTealGradientHover
-                      : _kActionTealGradient;
-              final edge = hovered || pressed
-                  ? _kActionPrimaryEdgeHover
-                  : _kActionPrimaryEdge;
+              final bg = hovered || pressed
+                  ? FfTokens.nocturneSunken
+                  : _kActionSecondaryBg;
               return _BarShell(
                 height: _kActionRowHeight,
                 width: _kActionRowHeight,
                 padding: EdgeInsets.zero,
-                gradient: gradient,
-                outline: edge,
-                radius: 9,
+                background: bg,
+                radius: 8,
+                outline: _kActionHairline,
                 pressed: pressed,
                 nudge: false,
                 child: const Icon(
                   PhosphorIconsRegular.clockClockwise,
-                  size: 16,
-                  color: Colors.white,
+                  size: 15,
+                  color: FfTokens.nocturneT2,
                 ),
               );
             },
@@ -1727,8 +2589,9 @@ class _FtpSendButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final canSend = enabled && onPressed != null;
     final status = _destination;
-    final display = status.isEmpty ? 'FTP' : label;
-    final tip = shortcut == null ? 'FTP · $label' : 'FTP · $shortcut';
+    final tip = shortcut == null
+        ? (status.isEmpty ? 'FTP' : 'FTP · $status')
+        : 'FTP · $shortcut';
 
     return _BarTap(
       tooltip: tip,
@@ -1736,23 +2599,18 @@ class _FtpSendButton extends StatelessWidget {
       enabled: canSend,
       onTap: onPressed,
       builder: (hovered, pressed) {
-        final gradient = pressed
-            ? _kActionTealGradientPressed
-            : hovered
-                ? _kActionTealGradientHover
-                : _kActionTealGradient;
-        final edge = hovered || pressed
-            ? _kActionPrimaryEdgeHover
-            : _kActionPrimaryEdge;
+        final bg = hovered || pressed
+            ? FfTokens.nocturneSunken
+            : _kActionSecondaryBg;
         // Avoid LayoutBuilder inside _BarTap — hover setState under
         // OverlayPortal/action-row rebuilds asserts debugNeedsLayout.
         return _BarShell(
           height: _kActionRowHeight,
           width: expand ? double.infinity : null,
-          padding: const EdgeInsets.symmetric(horizontal: 13),
-          gradient: gradient,
-          outline: edge,
-          radius: 9,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          background: bg,
+          radius: 8,
+          outline: _kActionHairline,
           pressed: pressed,
           nudge: false,
           child: Row(
@@ -1761,58 +2619,31 @@ class _FtpSendButton extends StatelessWidget {
             children: [
               const Icon(
                 PhosphorIconsRegular.cloudArrowUp,
-                size: 16,
-                color: Colors.white,
+                size: 14,
+                color: FfTokens.nocturneT2,
               ),
-              const SizedBox(width: 7),
+              const SizedBox(width: 6),
               Text(
-                display,
-                maxLines: 1,
-                softWrap: false,
-                style: _barLabel(Colors.white),
+                'FTP:',
+                style: _barLabel(
+                  FfTokens.nocturneT2,
+                  weight: FontWeight.w500,
+                  size: 12.5,
+                ),
               ),
-              if (shortcut != null) ...[
-                const SizedBox(width: 7),
-                _ShortcutBadge(shortcut!, onPrimary: true),
+              if (status.isNotEmpty) ...[
+                const SizedBox(width: 4),
+                Text(
+                  status,
+                  maxLines: 1,
+                  softWrap: false,
+                  style: _barLabel(FfTokens.nocturneTx, size: 12.5),
+                ),
               ],
             ],
           ),
         );
       },
-    );
-  }
-}
-
-class _ShortcutBadge extends StatelessWidget {
-  const _ShortcutBadge(this.keys, {this.onPrimary = false});
-
-  final String keys;
-  final bool onPrimary;
-
-  @override
-  Widget build(BuildContext context) {
-    final fill = onPrimary
-        ? const Color(0x1AFFFFFF) // rgba(255,255,255,.1)
-        : FfTokens.nocturneSunken; // #262D35
-    final ink = onPrimary
-        ? const Color(0xBFFFFFFF) // rgba(255,255,255,.75)
-        : FfTokens.nocturneT2; // #959AA0
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: fill,
-        borderRadius: BorderRadius.circular(5),
-      ),
-      child: Text(
-        keys,
-        style: TextStyle(
-          fontFamily: FfTokens.fontFamily,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: ink,
-          height: 1,
-        ),
-      ),
     );
   }
 }
@@ -1900,6 +2731,7 @@ class _BarShell extends StatelessWidget {
     this.gradient,
     this.width,
     this.outline,
+    this.glow,
     this.radius = 9,
     this.nudge = true,
   });
@@ -1912,6 +2744,7 @@ class _BarShell extends StatelessWidget {
   final bool pressed;
   final Widget child;
   final Color? outline;
+  final Color? glow;
   final double radius;
   final bool nudge;
 
@@ -1930,16 +2763,29 @@ class _BarShell extends StatelessWidget {
         gradient: gradient,
         borderRadius: BorderRadius.circular(radius),
         border: outline == null ? null : Border.all(color: outline!),
+        boxShadow: glow == null
+            ? null
+            : [
+                BoxShadow(
+                  color: glow!,
+                  blurRadius: 16,
+                  spreadRadius: 0,
+                ),
+              ],
       ),
       child: child,
     );
   }
 }
 
-TextStyle _barLabel(Color color, {FontWeight weight = FontWeight.w600}) {
+TextStyle _barLabel(
+  Color color, {
+  FontWeight weight = FontWeight.w600,
+  double size = 13,
+}) {
   return TextStyle(
     fontFamily: FfTokens.fontFamily,
-    fontSize: 13,
+    fontSize: size,
     fontWeight: weight,
     color: color,
     height: 1,
@@ -2114,7 +2960,7 @@ class TransmitDock extends StatelessWidget {
           ],
           if (onPastePrevious != null) ...[
             _UtilityButton(
-              label: 'Paste Last',
+              label: 'Paste last',
               tokens: t,
               onPressed: onPastePrevious,
             ),
@@ -2193,27 +3039,9 @@ class _UtilityButtonState extends State<_UtilityButton> {
             .withValues(alpha: enabled || !dimWhenDisabled ? 0.95 : 0.4);
     final glowColor = hovering || primary ? Colors.white : tokens.accent;
     final gradient = pressing
-        ? const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF1A2A36),
-              Color(0xFF0C141A),
-              Color(0xFF080E12),
-            ],
-            stops: [0.0, 0.45, 1.0],
-          )
+        ? _kActionTealGradientPressed
         : hovering
-            ? const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF2E4658),
-                  Color(0xFF1A2E3A),
-                  Color(0xFF121F28),
-                ],
-                stops: [0.0, 0.45, 1.0],
-              )
+            ? _kActionTealGradientHover
             : _kActionTealGradient;
 
     return Semantics(

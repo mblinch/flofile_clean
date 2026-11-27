@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -17,11 +18,9 @@ import '../../services/auth_service.dart';
 import '../../services/mlb_api_service.dart';
 import '../../flo_layout_constants.dart';
 import '../../theme/ff_tokens.dart';
-import '../../widgets/admin_mode_toggle.dart';
 import '../../widgets/admin_screen.dart';
 import '../../widgets/app_styled_dialogs.dart';
 import '../../widgets/caption_layout_builder_dialog.dart';
-import '../../widgets/flo_chrome_header.dart';
 import '../../widgets/oriented_file_preview.dart';
 import '../../utils/oriented_image_bytes.dart';
 import '../../services/camera_serial_service.dart';
@@ -30,6 +29,7 @@ import '../../widgets/older_roster_dialog.dart';
 import '../../widgets/unknown_serial_dialog.dart';
 import 'caption_v2_flag.dart';
 import 'caption_v2_shortcuts.dart';
+import 'data/caption_history.dart';
 import 'data/caption_transfer_payload.dart';
 import 'data/caption_v2_controller.dart';
 import 'data/team_abbrev.dart';
@@ -53,6 +53,7 @@ import 'widgets/caption_strip.dart';
 import 'widgets/ftp_active_dialog.dart';
 import 'widgets/ftp_history_dialog.dart';
 import 'widgets/mobile_photo_filmstrip.dart';
+import 'widgets/shortcuts_menu.dart';
 import 'widgets/transmit_dock.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
@@ -112,7 +113,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   int _captionIptcPromptSessionGen = -1;
 
   static const double _desktopBreakpoint = kCaptionV2MobileBreakpoint;
-  static double get _gap => 10;
+  static double get _gap => 6;
 
   @override
   void initState() {
@@ -1002,6 +1003,67 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     }
   }
 
+  Future<void> _applyCaptionHistoryEntry(CaptionHistoryEntry entry) async {
+    var applyTiming = true;
+    final clicks = entry.clicks;
+    if (clicks != null &&
+        _controller.captionClicksWouldChangeTiming(clicks)) {
+      final historyLabel = _controller.timingChoiceLabelForClicks(clicks);
+      final currentLabel = _controller.timingChoiceLabel;
+      final choice = await showDialog<bool>(
+        context: context,
+        barrierDismissible: true,
+        builder: (dialogContext) {
+          final t =
+              Theme.of(dialogContext).extension<FfTokens>() ?? FfTokens.dark;
+          return AlertDialog(
+            backgroundColor: t.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
+              side: BorderSide(color: t.divider),
+            ),
+            title: Text(
+              'Change time of game?',
+              style: t.labelStyle.copyWith(fontSize: 16),
+            ),
+            content: Text(
+              'This caption used $historyLabel.\n'
+              'Current is $currentLabel.',
+              style: t.bodyStyle,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text('Keep $currentLabel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: FfTokens.nocturneAc,
+                  foregroundColor: Colors.white,
+                ),
+                child: Text('Use $historyLabel'),
+              ),
+            ],
+          );
+        },
+      );
+      // Dismiss / Esc aborts applying the caption entirely.
+      if (choice == null) return;
+      applyTiming = choice;
+    }
+
+    if (!await _controller.applyCaptionHistoryEntry(
+      entry,
+      applyTiming: applyTiming,
+    )) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not apply caption')),
+      );
+    }
+  }
+
   /// Apply a typed Firebar line before Save & Next. Empty line is fine.
   /// Returns false when the line is red/ambiguous (save aborted).
   bool _applyFirebarLineBeforeSave() {
@@ -1867,7 +1929,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     FfTokens t,
     double workspaceWidth,
   ) {
-    const pad = 10.0;
+    const pad = 4.0;
+    const bottomPad = 2.0;
     final inner = math.max(0.0, workspaceWidth - pad * 2 - _gap);
     final preferred = inner * 0.30;
     final double minPhotoWidth;
@@ -1887,7 +1950,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     final photoWidth =
         (_photoWidth ?? defaultPhotoWidth).clamp(minPhotoWidth, maxPhotoWidth);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(pad, 0, pad, pad),
+      padding: const EdgeInsets.fromLTRB(pad, 0, pad, bottomPad),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -2034,6 +2097,12 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       onFtpProgress: c.transmitting
           ? () => showFtpActiveDialog(context, c)
           : null,
+      captionHistory: List<CaptionHistoryEntry>.from(c.captionHistory),
+      onCaptionHistorySelect: (entry) =>
+          unawaited(_applyCaptionHistoryEntry(entry)),
+      onRefresh: () {
+        c.resetCurrentCaption();
+      },
       singleRow: singleRow,
       mobileDock: mobileDock,
       thumbsSelected: thumbsOpen,
@@ -2508,6 +2577,26 @@ class _UnifiedTitleBar extends StatelessWidget {
     } catch (_) {}
   }
 
+  Future<void> _confirmNewSession(BuildContext context) async {
+    final startNew = await showAppConfirmDialog(
+      context: context,
+      title: 'New session',
+      message: 'Leave this caption session and start a new one?',
+      cancelLabel: 'Cancel',
+      confirmLabel: 'New session',
+    );
+    if (startNew == true) onResetSession();
+  }
+
+  Future<void> _onAdminClosed(BuildContext context) async {
+    final sport = controller.sport;
+    if (sport.trim().isNotEmpty && context.mounted) {
+      await VerbAdminChoice.offer(context: context, sport: sport);
+    }
+    await controller.reloadVerbCatalog();
+    await controller.reloadCaptionStyle();
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
@@ -2515,20 +2604,45 @@ class _UnifiedTitleBar extends StatelessWidget {
         defaultTargetPlatform == TargetPlatform.macOS ? kFloTrafficLightInset : 12.0;
     return ValueListenableBuilder<bool>(
       valueListenable: AdminService.previewAsNonAdmin,
-      builder: (context, _, __) {
+      builder: (context, previewAsNonAdmin, _) {
+        final adminOn =
+            AdminService.isActuallyAdminSync() && !previewAsNonAdmin;
         return AnimatedBuilder(
           animation: controller,
           builder: (context, _) {
             return Material(
-              color: t.bg,
-              child: SizedBox(
+              color: FfTokens.nocturneBg,
+              child: Container(
                 height: kFloUnifiedTitleBarHeight,
+                decoration: BoxDecoration(
+                  color: FfTokens.nocturneBg,
+                  border: Border(
+                    bottom: BorderSide(
+                      color: FfTokens.nocturneTx.withValues(alpha: 0.08),
+                    ),
+                  ),
+                ),
                 child: Row(
                   children: [
                     SizedBox(width: trafficInset),
-                    _GameChip(
-                      controller: controller,
-                      tokens: t,
+                    Container(
+                      width: 1,
+                      height: 18,
+                      color: FfTokens.nocturneLn2,
+                    ),
+                    const SizedBox(width: 12),
+                    _TitleMatchup(controller: controller),
+                    const SizedBox(width: 14),
+                    _TitleGameInfoButton(controller: controller),
+                    const SizedBox(width: 12),
+                    Container(
+                      width: 1,
+                      height: 18,
+                      color: FfTokens.nocturneLn2,
+                    ),
+                    const SizedBox(width: 12),
+                    _TitleNewSessionButton(
+                      onTap: () => unawaited(_confirmNewSession(context)),
                     ),
                     Expanded(
                       child: GestureDetector(
@@ -2537,75 +2651,29 @@ class _UnifiedTitleBar extends StatelessWidget {
                         child: const SizedBox.expand(),
                       ),
                     ),
-                    if (AdminService.isActuallyAdminSync() &&
-                        AdminService.isCurrentUserAdminSync()) ...[
-                      if (defaultTargetPlatform == TargetPlatform.macOS) ...[
-                        _AdminExportSizeButton(tokens: t, compact: true),
-                        const SizedBox(width: 4),
-                      ],
-                      if (onToggleMobileLayout != null) ...[
-                        _AdminMobileLayoutButton(
+                    if (AdminService.isActuallyAdminSync()) ...[
+                      _TitleAdminToggle(adminOn: adminOn),
+                      if (adminOn) ...[
+                        const SizedBox(width: 12),
+                        _TitleViewportGroup(
                           tokens: t,
-                          compact: true,
-                          onToggle: onToggleMobileLayout!,
+                          onToggleMobileLayout: onToggleMobileLayout,
                         ),
-                        const SizedBox(width: 4),
                       ],
+                      const SizedBox(width: 12),
+                      Container(
+                        width: 1,
+                        height: 18,
+                        color: FfTokens.nocturneLn2,
+                      ),
+                      const SizedBox(width: 12),
                     ],
-                    _NewSessionButton(
+                    _TitleAccountChip(
                       tokens: t,
-                      compact: true,
-                      onTap: () async {
-                        final startNew = await showAppConfirmDialog(
-                          context: context,
-                          title: 'New session',
-                          message:
-                              'Leave this caption session and start a new one?',
-                          cancelLabel: 'Cancel',
-                          confirmLabel: 'New session',
-                        );
-                        if (startNew == true) onResetSession();
-                      },
-                    ),
-                    const SizedBox(width: 4),
-                    if (AuthService.instance.isSignedIn)
-                      _SessionAvatar(
-                        tokens: t,
-                        admin: AdminService.isCurrentUserAdminSync(),
-                        onAdminClosed: () async {
-                          final sport = controller.sport;
-                          if (sport.trim().isNotEmpty && context.mounted) {
-                            await VerbAdminChoice.offer(
-                              context: context,
-                              sport: sport,
-                            );
-                          }
-                          await controller.reloadVerbCatalog();
-                          await controller.reloadCaptionStyle();
-                        },
-                      ),
-                    const SizedBox(width: 2),
-                    Material(
-                      color: Colors.transparent,
-                      borderRadius: BorderRadius.circular(9),
-                      child: InkWell(
-                        onTap: () =>
-                            _TopChrome._openPreferences(context, controller),
-                        borderRadius: BorderRadius.circular(9),
-                        hoverColor: t.hover,
-                        child: Tooltip(
-                          message: 'Options',
-                          child: SizedBox(
-                            width: 28,
-                            height: 28,
-                            child: Icon(
-                              PhosphorIconsRegular.gearSix,
-                              size: 16,
-                              color: t.textSecondary,
-                            ),
-                          ),
-                        ),
-                      ),
+                      controller: controller,
+                      onOpenSettings: () =>
+                          _TopChrome._openPreferences(context, controller),
+                      onAdminClosed: () => _onAdminClosed(context),
                     ),
                     const SizedBox(width: 10),
                   ],
@@ -2653,30 +2721,67 @@ class _TopChrome extends StatelessWidget {
       return _buildSessionChrome(context, headerTitle);
     }
 
-    return Container(
-      height: kFloUnifiedTitleBarHeight,
-      padding: EdgeInsets.fromLTRB(trafficInset, 0, 8, 0),
-      color: Colors.transparent,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < 420;
-          return Row(
+    return ValueListenableBuilder<bool>(
+      valueListenable: AdminService.previewAsNonAdmin,
+      builder: (context, previewAsNonAdmin, _) {
+        final adminOn =
+            AdminService.isActuallyAdminSync() && !previewAsNonAdmin;
+        return Container(
+          height: kFloUnifiedTitleBarHeight,
+          padding: EdgeInsets.fromLTRB(trafficInset, 0, 10, 0),
+          decoration: BoxDecoration(
+            color: FfTokens.nocturneBg,
+            border: Border(
+              bottom: BorderSide(
+                color: FfTokens.nocturneTx.withValues(alpha: 0.08),
+              ),
+            ),
+          ),
+          child: Row(
             children: [
-              if (c != null)
-                _GameChip(
-                  controller: c,
-                  tokens: t,
-                )
-              else if (headerTitle != null && headerTitle.isNotEmpty)
+              if (c != null) ...[
+                Container(
+                  width: 1,
+                  height: 18,
+                  color: FfTokens.nocturneLn2,
+                ),
+                const SizedBox(width: 12),
+                _TitleMatchup(controller: c),
+                const SizedBox(width: 14),
+                _TitleGameInfoButton(controller: c),
+                const SizedBox(width: 12),
+                Container(
+                  width: 1,
+                  height: 18,
+                  color: FfTokens.nocturneLn2,
+                ),
+                if (onResetSession != null) ...[
+                  const SizedBox(width: 12),
+                  _TitleNewSessionButton(
+                    onTap: () async {
+                      final startNew = await showAppConfirmDialog(
+                        context: context,
+                        title: 'New session',
+                        message:
+                            'Leave this caption session and start a new one?',
+                        cancelLabel: 'Cancel',
+                        confirmLabel: 'New session',
+                      );
+                      if (startNew == true) onResetSession!();
+                    },
+                  ),
+                ],
+              ] else if (headerTitle != null && headerTitle.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(left: 4),
                   child: Text(
                     headerTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontFamily: FfTokens.fontFamily,
-                      fontSize: 16,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      letterSpacing: -0.2,
                       height: 1,
                       color: t.text,
                     ),
@@ -2692,29 +2797,27 @@ class _TopChrome extends StatelessWidget {
                     color: t.accent,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
               ],
-              if (AdminService.isActuallyAdminSync() &&
-                  AdminService.isCurrentUserAdminSync()) ...[
-                if (defaultTargetPlatform == TargetPlatform.macOS) ...[
-                  _AdminExportSizeButton(tokens: t, compact: compact),
-                  const SizedBox(width: 8),
-                ],
-                if (onToggleMobileLayout != null) ...[
-                  _AdminMobileLayoutButton(
+              if (AdminService.isActuallyAdminSync()) ...[
+                _TitleAdminToggle(adminOn: adminOn),
+                if (adminOn) ...[
+                  const SizedBox(width: 12),
+                  _TitleViewportGroup(
                     tokens: t,
-                    compact: compact,
-                    onToggle: onToggleMobileLayout!,
+                    onToggleMobileLayout: onToggleMobileLayout,
                   ),
-                  const SizedBox(width: 8),
                 ],
+                const SizedBox(width: 12),
+                Container(
+                  width: 1,
+                  height: 18,
+                  color: FfTokens.nocturneLn2,
+                ),
+                const SizedBox(width: 12),
               ],
-              if (AdminService.isActuallyAdminSync())
-                AdminModeToggle(compact: compact),
-              if (onResetSession != null) ...[
-                _NewSessionButton(
-                  tokens: t,
-                  compact: compact,
+              if (c == null && onResetSession != null) ...[
+                _TitleNewSessionButton(
                   onTap: () async {
                     final startNew = await showAppConfirmDialog(
                       context: context,
@@ -2727,52 +2830,30 @@ class _TopChrome extends StatelessWidget {
                     if (startNew == true) onResetSession!();
                   },
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
               ],
-              if (AuthService.instance.isSignedIn)
-                _SessionAvatar(
-                  tokens: t,
-                  admin: AdminService.isCurrentUserAdminSync(),
-                  onAdminClosed: () async {
-                    final sport = c?.sport;
-                    if (sport != null &&
-                        sport.trim().isNotEmpty &&
-                        context.mounted) {
-                      await VerbAdminChoice.offer(
-                        context: context,
-                        sport: sport,
-                      );
-                    }
-                    await c?.reloadVerbCatalog();
-                    await c?.reloadCaptionStyle();
-                  },
-                ),
-              const SizedBox(width: 4),
-              Material(
-                color: Colors.transparent,
-                borderRadius: BorderRadius.circular(9),
-                child: InkWell(
-                  onTap: () => _openPreferences(context, c),
-                  borderRadius: BorderRadius.circular(9),
-                  hoverColor: t.hover,
-                  child: Tooltip(
-                    message: 'Options',
-                    child: SizedBox(
-                      width: 32,
-                      height: 32,
-                      child: Icon(
-                        PhosphorIconsRegular.gearSix,
-                        size: 18,
-                        color: t.textSecondary,
-                      ),
-                    ),
-                  ),
-                ),
+              _TitleAccountChip(
+                tokens: t,
+                controller: c,
+                onOpenSettings: () => _openPreferences(context, c),
+                onAdminClosed: () async {
+                  final sport = c?.sport;
+                  if (sport != null &&
+                      sport.trim().isNotEmpty &&
+                      context.mounted) {
+                    await VerbAdminChoice.offer(
+                      context: context,
+                      sport: sport,
+                    );
+                  }
+                  await c?.reloadVerbCatalog();
+                  await c?.reloadCaptionStyle();
+                },
               ),
             ],
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -2780,77 +2861,65 @@ class _TopChrome extends StatelessWidget {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final trafficInset =
         defaultTargetPlatform == TargetPlatform.macOS ? kFloTrafficLightInset : 12.0;
-    return Container(
-      height: kFloUnifiedTitleBarHeight,
-      padding: EdgeInsets.fromLTRB(trafficInset, 0, 10, 0),
-      decoration: const BoxDecoration(
-        color: FfTokens.nocturneBg,
-        border: Border(bottom: BorderSide(color: FfTokens.nocturneLn)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              headerTitle ?? 'New session',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontFamily: FfTokens.fontFamily,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                height: 1,
-                color: FfTokens.sessionTx,
+    return ValueListenableBuilder<bool>(
+      valueListenable: AdminService.previewAsNonAdmin,
+      builder: (context, previewAsNonAdmin, _) {
+        final adminOn =
+            AdminService.isActuallyAdminSync() && !previewAsNonAdmin;
+        return Container(
+          height: kFloUnifiedTitleBarHeight,
+          padding: EdgeInsets.fromLTRB(trafficInset, 0, 10, 0),
+          decoration: BoxDecoration(
+            color: FfTokens.nocturneBg,
+            border: Border(
+              bottom: BorderSide(
+                color: FfTokens.nocturneTx.withValues(alpha: 0.08),
               ),
             ),
           ),
-          if (AdminService.isActuallyAdminSync() &&
-              AdminService.isCurrentUserAdminSync()) ...[
-            if (defaultTargetPlatform == TargetPlatform.macOS) ...[
-              _AdminExportSizeButton(tokens: t, compact: true),
-              const SizedBox(width: 4),
-            ],
-            if (onToggleMobileLayout != null) ...[
-              _AdminMobileLayoutButton(
-                tokens: t,
-                compact: true,
-                onToggle: onToggleMobileLayout!,
-              ),
-              const SizedBox(width: 4),
-            ],
-          ],
-          if (AdminService.isActuallyAdminSync())
-            const AdminModeToggle(compact: true),
-          if (AuthService.instance.isSignedIn)
-            _SessionAvatar(
-              tokens: t,
-              admin: AdminService.isCurrentUserAdminSync(),
-              sessionChrome: true,
-              onAdminClosed: () async {},
-            ),
-          const SizedBox(width: 2),
-          Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(9),
-            child: InkWell(
-              onTap: () => _openPreferences(context, null),
-              borderRadius: BorderRadius.circular(9),
-              hoverColor: FfTokens.sessionHv,
-              child: const Tooltip(
-                message: 'Settings',
-                child: SizedBox(
-                  width: 28,
-                  height: 28,
-                  child: Icon(
-                    PhosphorIconsRegular.gearSix,
-                    size: 16,
-                    color: FfTokens.sessionT2,
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  headerTitle ?? 'New session',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    height: 1,
+                    color: FfTokens.sessionTx,
                   ),
                 ),
               ),
-            ),
+              if (AdminService.isActuallyAdminSync()) ...[
+                _TitleAdminToggle(adminOn: adminOn),
+                if (adminOn) ...[
+                  const SizedBox(width: 12),
+                  _TitleViewportGroup(
+                    tokens: t,
+                    onToggleMobileLayout: onToggleMobileLayout,
+                  ),
+                ],
+                const SizedBox(width: 12),
+                Container(
+                  width: 1,
+                  height: 18,
+                  color: FfTokens.nocturneLn2,
+                ),
+                const SizedBox(width: 12),
+              ],
+              _TitleAccountChip(
+                tokens: t,
+                controller: null,
+                onOpenSettings: () => _openPreferences(context, null),
+                onAdminClosed: () async {},
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -2979,109 +3048,89 @@ Future<void> _openGameGoogleSearch(CaptionV2Controller controller) async {
   }
 }
 
-class _NewSessionButton extends StatelessWidget {
-  const _NewSessionButton({
-    required this.tokens,
-    required this.onTap,
-    this.compact = false,
-  });
+/// Away / Home stacked matchup + date (variant A).
+class _TitleMatchup extends StatelessWidget {
+  const _TitleMatchup({required this.controller});
 
-  final FfTokens tokens;
-  final VoidCallback onTap;
-  final bool compact;
+  final CaptionV2Controller controller;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(9),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(9),
-        hoverColor: tokens.hover,
-        child: Container(
-          height: 32,
-          padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 10),
-          decoration: BoxDecoration(
-            color: tokens.surface,
-            borderRadius: BorderRadius.circular(9),
+    final away = mlbTeamAbbreviation(controller.awayTeam);
+    final home = mlbTeamAbbreviation(controller.homeTeam);
+    final awayLabel = away.isNotEmpty ? away : '—';
+    final homeLabel = home.isNotEmpty ? home : '—';
+
+    Widget teamStack(String micro, String code) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            micro,
+            style: const TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 8,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.8,
+              height: 1,
+              color: FfTokens.nocturneT3,
+            ),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                PhosphorIconsRegular.plusCircle,
-                size: 16,
-                color: tokens.textSecondary,
-              ),
-              if (!compact) ...[
-                const SizedBox(width: 6),
-                Text(
-                  'New session',
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    height: 1,
-                    color: tokens.text,
-                  ),
-                ),
-              ],
-            ],
+          const SizedBox(height: 1),
+          Text(
+            code,
+            style: const TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              height: 1,
+              color: FfTokens.nocturneTx,
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        teamStack('AWAY', awayLabel),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 6),
+          child: Text(
+            '@',
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              height: 1,
+              color: FfTokens.nocturneT3,
+            ),
           ),
         ),
-      ),
+        teamStack('HOME', homeLabel),
+      ],
     );
   }
 }
 
-/// Game identity. Opens a Google search.
-class _GameChip extends StatelessWidget {
-  const _GameChip({
-    required this.controller,
-    required this.tokens,
-    this.embedded = false,
-    this.compact = false,
-  });
+/// Ghost "Game info" button — opens Google search in the browser.
+class _TitleGameInfoButton extends StatelessWidget {
+  const _TitleGameInfoButton({required this.controller});
 
   final CaptionV2Controller controller;
-  final FfTokens tokens;
-  final bool embedded;
-
-  /// Matchup + search icon only — for the caption header.
-  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final query = _gameGoogleSearchQuery(controller);
     final enabled = query.isNotEmpty;
-    final away = mlbTeamAbbreviation(controller.awayTeam);
-    final home = mlbTeamAbbreviation(controller.homeTeam);
-    final date =
-        controller.currentGameInfoForCaption().gameDate ?? DateTime.now();
-    final venue = controller.venue.trim();
-    final labelStyle = TextStyle(
-      fontFamily: FfTokens.fontFamily,
-      fontSize: compact ? 12 : 13,
-      fontWeight: FontWeight.w400,
-      height: 1,
-      color: tokens.text,
-    );
-    final matchup = away.isNotEmpty && home.isNotEmpty
-        ? '$away @ $home'
-        : (home.isNotEmpty
-            ? home
-            : (away.isNotEmpty ? away : 'Game'));
-    final sessionBits = <String>[
-      matchup,
-      if (!compact && venue.isNotEmpty) venue,
-      if (!compact) _shortMonthDayYear(date),
-    ];
-    final searchColor = enabled ? tokens.text : tokens.textTertiary;
+    final fg = enabled ? FfTokens.nocturneTx : FfTokens.nocturneT3;
 
     return Tooltip(
       message: enabled
-          ? 'Search for game info: $query'
+          ? 'Search this game on Google'
           : 'Pick teams to search for game info',
       waitDuration: const Duration(milliseconds: 350),
       child: Material(
@@ -3090,55 +3139,49 @@ class _GameChip extends StatelessWidget {
           onTap: enabled
               ? () => unawaited(_openGameGoogleSearch(controller))
               : null,
-          borderRadius: BorderRadius.circular(embedded || compact ? 8 : 10),
+          borderRadius: BorderRadius.circular(5),
+          hoverColor: Colors.transparent,
           child: Container(
-            height: compact ? 28 : 32,
-            padding: EdgeInsets.fromLTRB(
-              embedded ? 10 : (compact ? 6 : 6),
-              0,
-              embedded ? 6 : (compact ? 6 : 8),
-              0,
+            height: 22,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            decoration: BoxDecoration(
+              color: enabled ? FfTokens.nocturneHv : Colors.transparent,
+              borderRadius: BorderRadius.circular(5),
+              border: Border.all(
+                color: enabled ? FfTokens.nocturneLn : Colors.transparent,
+              ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (embedded) ...[
-                  Text(
-                    'Session:',
-                    style: labelStyle.copyWith(fontWeight: FontWeight.w500),
+                PhosphorIcon(
+                  PhosphorIconsRegular.magnifyingGlass,
+                  size: 12,
+                  color: fg,
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  'Game info',
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    height: 1,
+                    color: fg,
                   ),
-                  const SizedBox(width: 5),
-                ],
-                Text(sessionBits.join(' · '), style: labelStyle),
-                if (!compact) ...[
-                  Text(
-                    ' · ',
-                    style: labelStyle.copyWith(color: tokens.textTertiary),
-                  ),
-                  PhosphorIcon(
-                    PhosphorIconsRegular.magnifyingGlass,
-                    size: 12,
-                    color: searchColor,
-                  ),
-                  const SizedBox(width: 3),
-                  Text(
-                    'Search game info',
-                    style: TextStyle(
-                      fontFamily: FfTokens.fontFamily,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      height: 1,
-                      color: searchColor,
+                ),
+                if (enabled)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: Opacity(
+                      opacity: 0.8,
+                      child: PhosphorIcon(
+                        PhosphorIconsRegular.arrowSquareOut,
+                        size: 11,
+                        color: fg,
+                      ),
                     ),
                   ),
-                ] else ...[
-                  const SizedBox(width: 4),
-                  PhosphorIcon(
-                    PhosphorIconsRegular.magnifyingGlass,
-                    size: 12,
-                    color: searchColor,
-                  ),
-                ],
               ],
             ),
           ),
@@ -3148,110 +3191,273 @@ class _GameChip extends StatelessWidget {
   }
 }
 
-String _shortMonthDay(DateTime date) {
-  const months = <String>[
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-  return '${months[date.month - 1]} ${date.day}';
+/// Mini Admin switch — only shown to real admin accounts.
+class _TitleAdminToggle extends StatelessWidget {
+  const _TitleAdminToggle({required this.adminOn});
+
+  final bool adminOn;
+
+  @override
+  Widget build(BuildContext context) {
+    final tooltip = adminOn
+        ? 'Admin mode on — turn off to preview as a regular user'
+        : 'Admin mode off — turn on to restore admin tools';
+    final labelColor = adminOn ? FfTokens.gold : FfTokens.nocturneT3;
+    return Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 350),
+      child: _TitleHoverChip(
+        height: 22,
+        padding: const EdgeInsets.fromLTRB(4, 0, 6, 0),
+        onTap: () => AdminService.setPreviewAsNonAdmin(adminOn),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _TitleMiniSwitch(on: adminOn),
+            const SizedBox(width: 5),
+            Text(
+              'ADMIN',
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.4,
+                height: 1,
+                color: labelColor,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-String _shortMonthDayYear(DateTime date) =>
-    '${_shortMonthDay(date)}, ${date.year}';
+class _TitleMiniSwitch extends StatelessWidget {
+  const _TitleMiniSwitch({required this.on});
 
-/// Admin-only window size picker in the top chrome.
-class _AdminExportSizeButton extends StatefulWidget {
-  const _AdminExportSizeButton({
+  final bool on;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      width: 22,
+      height: 12,
+      padding: const EdgeInsets.all(1),
+      alignment: on ? Alignment.centerRight : Alignment.centerLeft,
+      decoration: BoxDecoration(
+        color: on
+            ? FfTokens.gold.withValues(alpha: 0.15)
+            : FfTokens.nocturneSunken,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: on
+              ? FfTokens.gold.withValues(alpha: 0.5)
+              : FfTokens.nocturneLn2,
+        ),
+      ),
+      child: Container(
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(
+          color: on ? FfTokens.gold : FfTokens.nocturneT3,
+          shape: BoxShape.circle,
+        ),
+      ),
+    );
+  }
+}
+
+/// Segmented Fit · Desktop · Mobile — visible only while Admin is on.
+class _TitleViewportGroup extends StatelessWidget {
+  const _TitleViewportGroup({
     required this.tokens,
-    this.compact = false,
+    this.onToggleMobileLayout,
   });
 
   final FfTokens tokens;
-  final bool compact;
+  final VoidCallback? onToggleMobileLayout;
 
   @override
-  State<_AdminExportSizeButton> createState() => _AdminExportSizeButtonState();
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: captionV2ForceMobilePreview,
+      builder: (context, mobileOn, _) {
+        return Container(
+          height: 24,
+          padding: const EdgeInsets.all(1),
+          decoration: BoxDecoration(
+            color: FfTokens.nocturneEl,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: FfTokens.nocturneLn),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (defaultTargetPlatform == TargetPlatform.macOS) ...[
+                _TitleFitSizeButton(tokens: tokens),
+                const SizedBox(width: 1),
+              ],
+              _TitleViewportIconButton(
+                icon: PhosphorIconsRegular.desktop,
+                tooltip: 'Desktop',
+                selected: !mobileOn,
+                onTap: mobileOn ? onToggleMobileLayout : null,
+              ),
+              const SizedBox(width: 1),
+              _TitleViewportIconButton(
+                icon: PhosphorIconsRegular.deviceMobile,
+                tooltip: 'Mobile',
+                selected: mobileOn,
+                onTap: !mobileOn ? onToggleMobileLayout : null,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 }
 
-class _AdminExportSizeButtonState extends State<_AdminExportSizeButton> {
+class _TitleViewportIconButton extends StatefulWidget {
+  const _TitleViewportIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.selected,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  State<_TitleViewportIconButton> createState() =>
+      _TitleViewportIconButtonState();
+}
+
+class _TitleViewportIconButtonState extends State<_TitleViewportIconButton> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = widget.selected;
+    final fg = active || _hover ? FfTokens.nocturneTx : FfTokens.nocturneT2;
+    return Tooltip(
+      message: widget.tooltip,
+      waitDuration: const Duration(milliseconds: 350),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) => setState(() => _hover = false),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: widget.onTap,
+            borderRadius: BorderRadius.circular(5),
+            hoverColor: Colors.transparent,
+            child: Container(
+              height: 20,
+              constraints: const BoxConstraints(minWidth: 22),
+              padding: const EdgeInsets.symmetric(horizontal: 5),
+              decoration: BoxDecoration(
+                color: active
+                    ? FfTokens.nocturneAccentSoft
+                    : (_hover ? FfTokens.nocturneHv : Colors.transparent),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Icon(widget.icon, size: 13, color: fg),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TitleFitSizeButton extends StatefulWidget {
+  const _TitleFitSizeButton({required this.tokens});
+
+  final FfTokens tokens;
+
+  @override
+  State<_TitleFitSizeButton> createState() => _TitleFitSizeButtonState();
+}
+
+class _TitleFitSizeButtonState extends State<_TitleFitSizeButton> {
   final MenuController _menu = MenuController();
+  bool _hover = false;
 
   @override
   Widget build(BuildContext context) {
     final t = widget.tokens;
     final sizeLabel = _windowSizeLabel(MediaQuery.sizeOf(context));
+    final open = _menu.isOpen;
+    final fg = open || _hover ? FfTokens.nocturneTx : FfTokens.nocturneT2;
     return MenuAnchor(
       controller: _menu,
       alignmentOffset: const Offset(0, 6),
       style: MenuStyle(
-        backgroundColor: WidgetStatePropertyAll(t.surface),
+        backgroundColor: const WidgetStatePropertyAll(FfTokens.nocturneSf),
         surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
         elevation: const WidgetStatePropertyAll(8),
         padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 6)),
         shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: t.divider),
+            borderRadius: BorderRadius.circular(10),
+            side: const BorderSide(color: FfTokens.nocturneLn2),
           ),
         ),
       ),
       builder: (context, controller, child) {
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () {
-              if (controller.isOpen) {
-                controller.close();
-              } else {
-                controller.open();
-              }
-            },
-            borderRadius: BorderRadius.circular(9),
-            child: Container(
-              height: 32,
-              padding: EdgeInsets.symmetric(horizontal: widget.compact ? 8 : 10),
-              decoration: BoxDecoration(
-                color: t.surface,
-                borderRadius: BorderRadius.circular(9),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  PhosphorIcon(
-                    PhosphorIconsRegular.cornersOut,
-                    size: 16,
-                    color: t.textSecondary,
+        return Tooltip(
+          message: 'Window size',
+          waitDuration: const Duration(milliseconds: 350),
+          child: MouseRegion(
+            onEnter: (_) => setState(() => _hover = true),
+            onExit: (_) => setState(() => _hover = false),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {
+                  if (controller.isOpen) {
+                    controller.close();
+                  } else {
+                    controller.open();
+                  }
+                  setState(() {});
+                },
+                borderRadius: BorderRadius.circular(5),
+                hoverColor: Colors.transparent,
+                child: Container(
+                  height: 20,
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  decoration: BoxDecoration(
+                    color: open || _hover
+                        ? (open
+                            ? FfTokens.nocturneAccentSoft
+                            : FfTokens.nocturneHv)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(4),
                   ),
-                  if (!widget.compact) ...[
-                    const SizedBox(width: 6),
-                    Text(
-                      sizeLabel,
-                      style: TextStyle(
-                        fontFamily: FfTokens.monoFamily,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        height: 1,
-                        color: t.text,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        PhosphorIconsRegular.cornersOut,
+                        size: 13,
+                        color: fg,
                       ),
-                    ),
-                  ],
-                  const SizedBox(width: 4),
-                  PhosphorIcon(
-                    PhosphorIconsRegular.caretDown,
-                    size: 11,
-                    color: t.textSecondary,
+                      const SizedBox(width: 2),
+                      Icon(
+                        PhosphorIconsRegular.caretDown,
+                        size: 9,
+                        color: fg.withValues(alpha: 0.7),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -3280,66 +3486,451 @@ class _AdminExportSizeButtonState extends State<_AdminExportSizeButton> {
   }
 }
 
-/// Admin-only mobile layout preview toggle in the top chrome.
-class _AdminMobileLayoutButton extends StatelessWidget {
-  const _AdminMobileLayoutButton({
-    required this.tokens,
-    required this.onToggle,
-    this.compact = false,
-  });
+class _TitleNewSessionButton extends StatelessWidget {
+  const _TitleNewSessionButton({required this.onTap});
 
-  final FfTokens tokens;
-  final VoidCallback onToggle;
-  final bool compact;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<bool>(
-      valueListenable: captionV2ForceMobilePreview,
-      builder: (context, on, _) {
-        final t = tokens;
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onToggle,
-            borderRadius: BorderRadius.circular(9),
-            child: Container(
-              height: 32,
-              padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 10),
-              decoration: BoxDecoration(
-                color: on ? t.hover : t.surface,
-                borderRadius: BorderRadius.circular(9),
-                border: on ? Border.all(color: t.divider) : null,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  PhosphorIcon(
-                    PhosphorIconsRegular.deviceMobile,
-                    size: 16,
-                    color: on ? t.text : t.textSecondary,
+    const fg = FfTokens.nocturneTx;
+    return Tooltip(
+      message: 'New session',
+      waitDuration: const Duration(milliseconds: 350),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(5),
+          hoverColor: Colors.transparent,
+          child: Container(
+            height: 22,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            decoration: BoxDecoration(
+              color: FfTokens.nocturneHv,
+              borderRadius: BorderRadius.circular(5),
+              border: Border.all(color: FfTokens.nocturneLn),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(PhosphorIconsRegular.plus, size: 12, color: fg),
+                SizedBox(width: 5),
+                Text(
+                  'New session',
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    height: 1,
+                    color: fg,
                   ),
-                  if (!compact) ...[
-                    const SizedBox(width: 6),
-                    Text(
-                      'Mobile layout',
-                      style: TextStyle(
-                        fontFamily: FfTokens.fontFamily,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        height: 1,
-                        color: on ? t.text : t.textSecondary,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TitleHoverChip extends StatefulWidget {
+  const _TitleHoverChip({
+    required this.child,
+    required this.onTap,
+    this.height = 24,
+    this.padding = const EdgeInsets.symmetric(horizontal: 8),
+  });
+
+  final Widget child;
+  final VoidCallback onTap;
+  final double height;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  State<_TitleHoverChip> createState() => _TitleHoverChipState();
+}
+
+class _TitleHoverChipState extends State<_TitleHoverChip> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: widget.onTap,
+          borderRadius: BorderRadius.circular(6),
+          hoverColor: Colors.transparent,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            height: widget.height,
+            padding: widget.padding,
+            decoration: BoxDecoration(
+              color: _hover ? FfTokens.nocturneHv : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: _hover ? FfTokens.nocturneLn : Colors.transparent,
+              ),
+            ),
+            child: widget.child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Avatar + gear pill — opens account / settings menu.
+class _TitleAccountChip extends StatefulWidget {
+  const _TitleAccountChip({
+    required this.tokens,
+    required this.onOpenSettings,
+    required this.onAdminClosed,
+    this.controller,
+  });
+
+  final FfTokens tokens;
+  final CaptionV2Controller? controller;
+  final VoidCallback onOpenSettings;
+  final Future<void> Function() onAdminClosed;
+
+  @override
+  State<_TitleAccountChip> createState() => _TitleAccountChipState();
+}
+
+class _TitleAccountChipState extends State<_TitleAccountChip> {
+  final MenuController _menu = MenuController();
+  bool _hover = false;
+
+  String _initials(User? user) {
+    final name = user?.displayName?.trim() ?? '';
+    if (name.isNotEmpty) {
+      final parts = name.split(RegExp(r'\s+')).where((p) => p.isNotEmpty);
+      final letters = parts.map((p) => p[0]).take(2).join();
+      if (letters.isNotEmpty) return letters.toUpperCase();
+    }
+    final local = (user?.email ?? '').split('@').first.trim();
+    if (local.length >= 2) return local.substring(0, 2).toUpperCase();
+    if (local.isNotEmpty) return local.toUpperCase();
+    return '?';
+  }
+
+  String _displayName(User? user) {
+    final name = user?.displayName?.trim() ?? '';
+    if (name.isNotEmpty) {
+      final parts = name.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+      if (parts.length >= 2) {
+        return '${parts.first} ${parts.last[0]}.';
+      }
+      return name;
+    }
+    final email = user?.email?.trim() ?? '';
+    if (email.contains('@')) return email.split('@').first;
+    return email.isNotEmpty ? email : 'Account';
+  }
+
+  Future<void> _switchAccount() async {
+    try {
+      await AuthService.instance.signOut();
+      await AuthService.instance.signInWithGoogle();
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = AuthService.instance.currentUser;
+    final signedIn = AuthService.instance.isSignedIn && user != null;
+    final open = _menu.isOpen;
+    final active = _hover || open;
+    final ftpMode = widget.controller?.ftpModeEnabled ?? false;
+    final mod = Platform.isMacOS ? '⌘' : 'Ctrl';
+
+    Widget avatar({double size = 22, double fontSize = 9.5}) {
+      return SizedBox(
+        width: size,
+        height: size,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              width: size,
+              height: size,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: FfTokens.nocturneAccentDeep,
+                shape: BoxShape.circle,
+                border: Border.all(color: FfTokens.nocturneAccentEdge),
+              ),
+              child: Text(
+                signedIn ? _initials(user) : '?',
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.w700,
+                  height: 1,
+                  color: FfTokens.nocturneTx,
+                ),
+              ),
+            ),
+            if (signedIn)
+              Positioned(
+                right: -1,
+                bottom: -1,
+                child: AdminBadgeButton(
+                  onClosed: widget.onAdminClosed,
+                  child: Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: FfTokens.gold,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: FfTokens.nocturneBg,
+                        width: 1.5,
                       ),
                     ),
-                  ],
-                ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
+    Widget menuItem({
+      required String label,
+      String? shortcut,
+      Color? color,
+      required VoidCallback onTap,
+    }) {
+      return MenuItemButton(
+        onPressed: onTap,
+        style: ButtonStyle(
+          minimumSize: const WidgetStatePropertyAll(Size(0, 28)),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 8),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+          ),
+          overlayColor: WidgetStatePropertyAll(
+            FfTokens.nocturneHv.withValues(alpha: 0.9),
+          ),
+        ),
+        child: SizedBox(
+          width: 220,
+          height: 28,
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    color: color ?? FfTokens.nocturneTx,
+                  ),
+                ),
+              ),
+              if (shortcut != null)
+                Text(
+                  shortcut,
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: FfTokens.nocturneT3,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return MenuAnchor(
+      controller: _menu,
+      alignmentOffset: const Offset(0, 6),
+      consumeOutsideTap: true,
+      style: const MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(FfTokens.nocturneSf),
+        surfaceTintColor: WidgetStatePropertyAll(Colors.transparent),
+        elevation: WidgetStatePropertyAll(12),
+        padding: WidgetStatePropertyAll(EdgeInsets.all(5)),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(10)),
+            side: BorderSide(color: FfTokens.nocturneLn2),
+          ),
+        ),
+        shadowColor: WidgetStatePropertyAll(Color(0x80000000)),
+      ),
+      builder: (context, controller, child) {
+        return Tooltip(
+          message: 'Account & settings',
+          waitDuration: const Duration(milliseconds: 350),
+          child: MouseRegion(
+            onEnter: (_) => setState(() => _hover = true),
+            onExit: (_) => setState(() => _hover = false),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {
+                  if (controller.isOpen) {
+                    controller.close();
+                  } else {
+                    controller.open();
+                  }
+                  setState(() {});
+                },
+                borderRadius: BorderRadius.circular(13),
+                hoverColor: Colors.transparent,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 120),
+                  height: 26,
+                  padding: const EdgeInsets.fromLTRB(2, 0, 5, 0),
+                  decoration: BoxDecoration(
+                    color: active ? FfTokens.nocturneHv : FfTokens.nocturneEl,
+                    borderRadius: BorderRadius.circular(13),
+                    border: Border.all(
+                      color: active
+                          ? FfTokens.nocturneLn2
+                          : FfTokens.nocturneLn,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      avatar(),
+                      const SizedBox(width: 3),
+                      Icon(
+                        PhosphorIconsRegular.gearSix,
+                        size: 13,
+                        color: active
+                            ? FfTokens.nocturneTx
+                            : FfTokens.nocturneT2,
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
         );
       },
+      menuChildren: [
+        if (signedIn)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 10),
+            child: Row(
+              children: [
+                avatar(size: 28, fontSize: 10.5),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _displayName(user),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontFamily: FfTokens.fontFamily,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: FfTokens.nocturneTx,
+                        ),
+                      ),
+                      Text(
+                        user.email?.trim() ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontFamily: FfTokens.fontFamily,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: FfTokens.nocturneT2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Text(
+                  'Synced',
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: FfTokens.sessionOk,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        if (signedIn)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 4),
+            child: Divider(height: 1, thickness: 1, color: FfTokens.nocturneLn),
+          ),
+        menuItem(
+          label: 'Settings…',
+          shortcut: '$mod,',
+          onTap: widget.onOpenSettings,
+        ),
+        menuItem(
+          label: 'Keyboard shortcuts',
+          shortcut: '?',
+          onTap: () => unawaited(
+            showCaptionV2ShortcutsDialog(context, ftpMode: ftpMode),
+          ),
+        ),
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+          child: Divider(height: 1, thickness: 1, color: FfTokens.nocturneLn),
+        ),
+        if (signedIn) ...[
+          menuItem(
+            label: 'Switch account',
+            onTap: () => unawaited(_switchAccount()),
+          ),
+          menuItem(
+            label: 'Sign out',
+            color: FfTokens.danger,
+            onTap: () => unawaited(AuthService.instance.signOut()),
+          ),
+        ] else
+          menuItem(
+            label: 'Sign in',
+            onTap: () => unawaited(AuthService.instance.signInWithGoogle()),
+          ),
+      ],
     );
   }
+}
+
+String _shortMonthDay(DateTime date) {
+  const months = <String>[
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  return '${months[date.month - 1]} ${date.day}';
 }
 
 const _windowSizeOptions = <(String, String)>[
@@ -3369,117 +3960,6 @@ Future<void> _resizeWindow(BuildContext context, String value) async {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Could not resize window: ${error.message}')),
-    );
-  }
-}
-
-class _AbbrChip extends StatelessWidget {
-  const _AbbrChip({required this.label, required this.tokens});
-
-  final String label;
-  final FfTokens tokens;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 26,
-      alignment: Alignment.center,
-      child: Text(
-        label,
-        style: TextStyle(
-          fontFamily: FfTokens.fontFamily,
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.4,
-          height: 1,
-          color: tokens.text,
-        ),
-      ),
-    );
-  }
-}
-
-class _SessionAvatar extends StatelessWidget {
-  const _SessionAvatar({
-    required this.tokens,
-    required this.admin,
-    required this.onAdminClosed,
-    this.sessionChrome = false,
-  });
-
-  final FfTokens tokens;
-  final bool admin;
-  final Future<void> Function() onAdminClosed;
-  final bool sessionChrome;
-
-  @override
-  Widget build(BuildContext context) {
-    final avatar = FloHeaderSignedInAs(
-      foreground: sessionChrome ? FfTokens.sessionTx : tokens.text,
-      foregroundMuted: sessionChrome ? FfTokens.sessionT2 : tokens.textSecondary,
-      initials: true,
-      showStatusDot: false,
-      avatarFill: sessionChrome ? FfTokens.sessionHv : null,
-      initialsDiameter: sessionChrome ? 26 : 24,
-      initialsBorder: !sessionChrome,
-    );
-    if (!admin) return avatar;
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        avatar,
-        Positioned(
-          right: -2,
-          bottom: -2,
-          child: AdminBadgeButton(
-              onClosed: onAdminClosed,
-              child: Tooltip(
-                message: 'Admin',
-                child: Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: FfTokens.gold,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: sessionChrome ? FfTokens.nocturneBg : tokens.bg,
-                      width: 2,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      );
-  }
-}
-
-class _TopAdminBadge extends StatelessWidget {
-  const _TopAdminBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    return Container(
-      height: 32,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: t.elevated,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: t.divider),
-      ),
-      child: const Text(
-        'Admin',
-        style: TextStyle(
-          fontFamily: FfTokens.fontFamily,
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-          height: 1,
-          color: FfTokens.gold,
-        ),
-      ),
     );
   }
 }

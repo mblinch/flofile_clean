@@ -55,6 +55,9 @@ String _ocrTargetDetail(JerseyOcrSuggestion match) {
 const _ocrTargetTeal = Color(0xFF537690);
 const _ocrTargetTealHot = Color(0xFF7FA6C2);
 
+/// Inset around the thumbnail grid (also used for marquee hit-testing).
+const _kThumbGridPad = 4.0;
+
 enum _BrowseScope { all, toCaption, captioned, toFtp, ftp }
 
 enum _BrowseSort {
@@ -2339,8 +2342,8 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
       final column = i % columns;
       final row = i ~/ columns;
       final itemRect = Rect.fromLTWH(
-        8 + column * (itemWidth + spacing),
-        8 + row * (itemHeight + spacing) - scrollOffset,
+        _kThumbGridPad + column * (itemWidth + spacing),
+        _kThumbGridPad + row * (itemHeight + spacing) - scrollOffset,
         itemWidth,
         itemHeight,
       );
@@ -2482,7 +2485,7 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
 
     final itemHeight = itemWidth / _thumbAspect;
     final row = selectedIndex ~/ columns;
-    final itemTop = 8 + row * (itemHeight + spacing);
+    final itemTop = _kThumbGridPad + row * (itemHeight + spacing);
     final itemBottom = itemTop + itemHeight;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2602,9 +2605,10 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                       )
                     : LayoutBuilder(
                         builder: (context, constraints) {
-                          const spacing = 8.0;
-                          final contentWidth = (constraints.maxWidth - 20)
-                              .clamp(1.0, double.infinity);
+                          const spacing = 6.0;
+                          final contentWidth =
+                              (constraints.maxWidth - _kThumbGridPad * 2)
+                                  .clamp(1.0, double.infinity);
                           final minCell =
                               (110 - (columnCount - 3) * 28).clamp(72.0, 180.0);
                           final rawColumns =
@@ -2643,7 +2647,7 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                               children: [
                                 GridView.builder(
                                   controller: _scrollController,
-                                  padding: const EdgeInsets.all(8),
+                                  padding: const EdgeInsets.all(_kThumbGridPad),
                                   cacheExtent: 2200,
                                   gridDelegate:
                                       SliverGridDelegateWithFixedCrossAxisCount(

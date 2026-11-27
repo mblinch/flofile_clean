@@ -33,8 +33,9 @@ class _CmdClickState extends State<CmdClick> {
   bool _handledByCmd = false;
 
   void _onTapDown(TapDownDetails _) {
-    _handledByCmd =
-        HardwareKeyboard.instance.isMetaPressed && widget.onCmdTap != null;
+    final kb = HardwareKeyboard.instance;
+    _handledByCmd = widget.onCmdTap != null &&
+        (kb.isMetaPressed || kb.isControlPressed);
   }
 
   void _onTapCancel() {

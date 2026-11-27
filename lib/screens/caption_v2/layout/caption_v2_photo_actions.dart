@@ -80,6 +80,11 @@ class _CaptionV2ZoomDialogState extends State<_CaptionV2ZoomDialog> {
     super.dispose();
   }
 
+  void _close() {
+    if (!mounted) return;
+    Navigator.of(context).maybePop();
+  }
+
   void _zoomBy(double factor) {
     final box = context.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return;
@@ -121,7 +126,7 @@ class _CaptionV2ZoomDialogState extends State<_CaptionV2ZoomDialog> {
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.escape) {
-      Navigator.of(context).pop();
+      _close();
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -130,60 +135,68 @@ class _CaptionV2ZoomDialogState extends State<_CaptionV2ZoomDialog> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    return Focus(
-      focusNode: _focus,
-      autofocus: true,
-      onKeyEvent: _onKey,
-      child: Dialog(
-        insetPadding: const EdgeInsets.all(20),
-        backgroundColor: t.sunken,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
-          side: BorderSide(color: t.divider),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: InteractiveViewer(
-                transformationController: _transform,
-                minScale: _minScale,
-                maxScale: _maxScale,
-                boundaryMargin: const EdgeInsets.all(240),
-                child: Center(
-                  child: OrientedFilePreview(
-                    path: widget.imagePath,
-                    fit: BoxFit.contain,
-                    cacheWidth: 4096,
-                    filterQuality: FilterQuality.high,
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): _close,
+      },
+      child: Focus(
+        focusNode: _focus,
+        autofocus: true,
+        onKeyEvent: _onKey,
+        child: Dialog(
+          insetPadding: const EdgeInsets.all(20),
+          backgroundColor: t.sunken,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
+            side: BorderSide(color: t.divider),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: InteractiveViewer(
+                  transformationController: _transform,
+                  minScale: _minScale,
+                  maxScale: _maxScale,
+                  boundaryMargin: const EdgeInsets.all(240),
+                  child: Center(
+                    child: OrientedFilePreview(
+                      path: widget.imagePath,
+                      fit: BoxFit.contain,
+                      cacheWidth: 4096,
+                      filterQuality: FilterQuality.high,
+                    ),
                   ),
                 ),
               ),
-            ),
-            Positioned(
-              left: 14,
-              bottom: 12,
-              child: _OverlayLabel(
-                label:
-                    '${p.basename(widget.imagePath)}  ·  Z to zoom in  ·  scroll or pinch',
-                tokens: t,
-              ),
-            ),
-            Positioned(
-              right: 12,
-              top: 12,
-              child: IconButton.filledTonal(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const PhosphorIcon(PhosphorIconsRegular.x),
-                tooltip: 'Close',
-                style: IconButton.styleFrom(
-                  backgroundColor: t.surface.withValues(alpha: 0.9),
-                  foregroundColor: t.text,
-                  side: BorderSide(color: t.divider),
+              Positioned(
+                left: 14,
+                bottom: 12,
+                child: _OverlayLabel(
+                  label:
+                      '${p.basename(widget.imagePath)}  ·  Z to zoom in  ·  scroll or pinch · Esc to close',
+                  tokens: t,
                 ),
               ),
-            ),
-          ],
+              Positioned(
+                right: 12,
+                top: 12,
+                child: Material(
+                  color: Colors.transparent,
+                  child: IconButton.filledTonal(
+                    onPressed: _close,
+                    icon: const PhosphorIcon(PhosphorIconsRegular.x),
+                    tooltip: 'Close (Esc)',
+                    style: IconButton.styleFrom(
+                      backgroundColor: t.surface.withValues(alpha: 0.92),
+                      foregroundColor: t.text,
+                      side: BorderSide(color: t.divider),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

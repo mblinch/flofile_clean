@@ -21,6 +21,7 @@ class VerbDefaultsBundle {
   static Map<String, dynamic> withoutFavoriteVerbs(Map<String, dynamic> bundle) {
     final next = Map<String, dynamic>.from(bundle);
     next['favoriteVerbs'] = <String>[];
+    next['favoritePlayers'] = <String>[];
     next.remove('hiddenCategories');
     return next;
   }
@@ -469,6 +470,8 @@ class VerbDefaultsBundle {
     // publish paths clear them via [withoutFavoriteVerbs].
     next['favoriteVerbs'] =
         ((next['favoriteVerbs'] as List?) ?? const []).toList();
+    next['favoritePlayers'] =
+        ((next['favoritePlayers'] as List?) ?? const []).toList();
     next['favoriteTeams'] =
         ((next['favoriteTeams'] as List?) ?? const []).toList();
     // Pitching → Pitches rename: migrate soft-deletes onto the new key so a

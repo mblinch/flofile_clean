@@ -55,6 +55,7 @@ import 'caption_transfer_payload.dart';
 import 'caption_v2_caption_domain.dart';
 import 'effective_verb_catalog.dart';
 import 'firebar_shorthand.dart';
+import 'caption_history.dart';
 import 'ftp_history.dart';
 import 'iptc_caption_writer.dart';
 import 'team_abbrev.dart';
@@ -555,11 +556,11 @@ class CaptionV2Controller extends ChangeNotifier {
   /// False keeps categories. True lists every verb once, A–Z.
   bool verbListAll = false;
 
-  /// Verb Index type size in px. Manual A/A moves by 1. Fit uses 0.1px.
-  double verbIndexFontSize = 13;
+  /// Verb Index type size in px. Gear stepper moves by 1. Fit uses 0.1px.
+  double verbIndexFontSize = verbIndexFontSizeDefault;
 
-  /// Verb Index density: 0 compact / 1 cozy / 2 comfortable.
-  int verbIndexDensity = 1;
+  /// Last auto-fit size. aA stepping pauses here so you can return to Fit.
+  double? verbIndexFitFontSize;
 
   /// Verb Index sort: false = letter rows, true = category groups.
   bool verbIndexSortByCategory = false;
@@ -572,8 +573,9 @@ class CaptionV2Controller extends ChangeNotifier {
   /// When true, Faves / Most used hide non-matches instead of greying them.
   bool verbIndexHideOthers = false;
   bool verbIndexShowHistory = true;
-  /// How many history verbs to show (1–10). Full store keeps last 10.
-  int verbIndexHistoryLimit = 3;
+  /// How many history verbs to show (1–5). Full store keeps last 10.
+  int verbIndexHistoryLimit = 5;
+  static const int verbIndexHistoryLimitMax = 5;
 
   /// Last 10 picked verb keys, newest first.
   List<String> verbIndexHistory = [];
@@ -591,9 +593,11 @@ class CaptionV2Controller extends ChangeNotifier {
   static const int verbFontStepMin = -6;
   static const int verbFontStepMax = 12;
 
-  /// Verb Index type range. Manual clicks step by 1px inside it.
-  static const double verbIndexFontSizeMin = 10;
-  static const double verbIndexFontSizeMax = 24;
+  /// Verb Index type range (gear stepper). Fit may use tenths inside it.
+  /// Design default is 14px; Fit shrinks below this when needed, never grows past.
+  static const double verbIndexFontSizeDefault = 14;
+  static const double verbIndexFontSizeMin = 12;
+  static const double verbIndexFontSizeMax = 18;
 
   double get verbFontScale =>
       1 + verbFontStep * (verbFontStepPx / verbFontBasePx);
@@ -753,10 +757,15 @@ class CaptionV2Controller extends ChangeNotifier {
   String? celebrationType;
   String? pinnedVerb;
   RosterHit? pinnedPlayer;
+  /// Sport-scoped favorite player keys (Firebase via PreferencesService).
+  Set<String> _favoritePlayerKeys = {};
   String? verbCategory = 'Offense';
   String personality = '';
   String? manualCaptionOverride;
   CaptionTransferPayload? previousCaption;
+
+  /// Last 5 user-built caption portions (newest first). Template text omitted.
+  final List<CaptionHistoryEntry> captionHistory = [];
 
   /// Button clicks that built a caption, kept per picture so opening that
   /// picture, copy, and paste press the same buttons again.
@@ -1624,7 +1633,31 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   Future<void> nudgeVerbIndexFont(int delta) async {
-    await setVerbIndexFontSize(verbIndexFontSize + delta);
+    final current = verbIndexFontSize;
+    final fit = verbIndexFitFontSize;
+    // When stepping past the last Fit size, land on Fit first so aA can
+    // return to the original auto-fit without a separate Fit button.
+    if (fit != null && (current - fit).abs() > 0.05) {
+      final proposed = current + delta;
+      final crossingDown = delta < 0 && current > fit && proposed < fit;
+      final crossingUp = delta > 0 && current < fit && proposed > fit;
+      if (crossingDown || crossingUp) {
+        await setVerbIndexFontSize(fit);
+        return;
+      }
+    }
+    await setVerbIndexFontSize(current + delta);
+  }
+
+  void rememberVerbIndexFitFontSize(double size) {
+    final next =
+        (size.clamp(verbIndexFontSizeMin, verbIndexFontSizeMax) * 10).round() /
+            10;
+    if (verbIndexFitFontSize != null &&
+        (verbIndexFitFontSize! - next).abs() < 0.001) {
+      return;
+    }
+    verbIndexFitFontSize = next;
   }
 
   Future<void> setVerbIndexFontSize(double size) async {
@@ -1634,14 +1667,6 @@ class CaptionV2Controller extends ChangeNotifier {
     verbIndexFontSize = next;
     notifyListeners();
     await _prefs?.saveVerbIndexFontSize(next);
-  }
-
-  Future<void> setVerbIndexDensity(int value) async {
-    final next = value.clamp(0, 2);
-    if (next == verbIndexDensity) return;
-    verbIndexDensity = next;
-    notifyListeners();
-    await _prefs?.saveVerbIndexDensity(next);
   }
 
   Future<void> setVerbIndexSortByCategory(bool value) async {
@@ -1672,11 +1697,11 @@ class CaptionV2Controller extends ChangeNotifier {
     await _prefs?.saveVerbIndexFavoritesOnly(mode == VerbIndexFilterMode.faves);
   }
 
-  /// All → Faves → Frequent → All (shortcut: F).
+  /// All ↔ Faves (shortcut: F). Legacy mostUsed maps back to All.
   Future<void> cycleVerbIndexFilterMode() async {
     final next = switch (verbIndexFilterMode) {
       VerbIndexFilterMode.all => VerbIndexFilterMode.faves,
-      VerbIndexFilterMode.faves => VerbIndexFilterMode.mostUsed,
+      VerbIndexFilterMode.faves => VerbIndexFilterMode.all,
       VerbIndexFilterMode.mostUsed => VerbIndexFilterMode.all,
     };
     await setVerbIndexFilterMode(next);
@@ -1690,7 +1715,7 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   Future<void> setVerbIndexHistoryLimit(int value) async {
-    final next = value.clamp(1, 10);
+    final next = value.clamp(1, verbIndexHistoryLimitMax);
     if (verbIndexHistoryLimit == next) return;
     verbIndexHistoryLimit = next;
     notifyListeners();
@@ -3416,7 +3441,6 @@ class CaptionV2Controller extends ChangeNotifier {
     verbFontStep = (await _prefs!.getVerbFontStep())
         .clamp(verbFontStepMin, verbFontStepMax);
     verbIndexFontSize = await _prefs!.getVerbIndexFontSize();
-    verbIndexDensity = await _prefs!.getVerbIndexDensity();
     verbIndexSortByCategory =
         (await _prefs!.getVerbIndexSort()) == 'category';
     verbIndexShowSuggestions = await _prefs!.getVerbIndexShowSuggestions();
@@ -3429,6 +3453,7 @@ class CaptionV2Controller extends ChangeNotifier {
     verbIndexHistory = await _prefs!.getVerbIndexHistory();
     _verbUsageCounts = await _prefs!.getVerbUsageCountsForSport(sport);
     await _loadVerbCatalog();
+    await _loadFavoritePlayers();
     captionTemplate = await _prefs!.getCaptionTemplate();
     gettyNoteIsNbae = await _prefs!.getGettyNoteIsNbae();
     mlbTimestampEnabled = await _prefs!.getMlbInningFromClockEnabled();
@@ -3453,6 +3478,8 @@ class CaptionV2Controller extends ChangeNotifier {
     await _loadCaptionStyleCatalog();
     await _refreshFtpDestination();
     await _loadFtpHistory();
+    // Caption history is folder-scoped — loaded in [loadFolder], not here.
+    captionHistory.clear();
     CrashReportingService.updateSessionContext(
       league: sport,
       wire: captionTemplate.wireStyle.name,
@@ -3695,6 +3722,7 @@ class CaptionV2Controller extends ChangeNotifier {
     await _prefs?.saveCurrentSport(sport);
     await reloadApplicationModes();
     await _loadVerbCatalog();
+    await _loadFavoritePlayers();
     await _loadCaptionStyleCatalog();
 
     await loadRosters(
@@ -4239,6 +4267,9 @@ class CaptionV2Controller extends ChangeNotifier {
   Future<void> loadFolder(String dirPath) async {
     final blockingLoad = sessionReady;
     loadingImages = true;
+    // Drop prior shoot's captions immediately; restore after scan if this
+    // folder already has saved history.
+    captionHistory.clear();
     if (blockingLoad) {
       sessionLoading = true;
       sessionLoadingLabel = 'Loading images…';
@@ -4297,6 +4328,8 @@ class CaptionV2Controller extends ChangeNotifier {
       // Wait for saved/uploaded marks + preview EXIF before revealing the UI,
       // so header/footer and status icons don't pop in later.
       await _finishFolderMetadata(dirPath, generation);
+      if (generation != _folderWatchGeneration) return;
+      await _loadCaptionHistoryForFolder(dirPath);
       if (generation != _folderWatchGeneration) return;
       unawaited(_ingestFolderAdditions(generation));
       for (final path in pending) {
@@ -5953,7 +5986,13 @@ class CaptionV2Controller extends ChangeNotifier {
   ///
   /// Returns false when nothing matched, leaving the current selection as it
   /// was.
-  bool applyCaptionClicks(CaptionClickSnapshot clicks) {
+  ///
+  /// When [applyTiming] is false, inning / period / pre / post stay as they
+  /// are (used when replaying a recent caption without changing time of game).
+  bool applyCaptionClicks(
+    CaptionClickSnapshot clicks, {
+    bool applyTiming = true,
+  }) {
     final nextPlayers = <RosterHit>[];
     RosterHit? primaryHit;
     for (final row in clicks.players) {
@@ -6052,14 +6091,16 @@ class CaptionV2Controller extends ChangeNotifier {
       selectedBase = null;
     }
 
-    preGame = clicks.preGame;
-    postGame = clicks.postGame;
-    if (preGame || postGame) {
-      timingHalf = null;
-    } else {
-      final nextInning = clicks.inning;
-      if (nextInning != null && nextInning > 0) inning = nextInning;
-      timingHalf = clicks.timingHalf;
+    if (applyTiming) {
+      preGame = clicks.preGame;
+      postGame = clicks.postGame;
+      if (preGame || postGame) {
+        timingHalf = null;
+      } else {
+        final nextInning = clicks.inning;
+        if (nextInning != null && nextInning > 0) inning = nextInning;
+        timingHalf = clicks.timingHalf;
+      }
     }
     manualCaptionOverride = null;
     captionSelectionStarted = true;
@@ -6068,6 +6109,71 @@ class CaptionV2Controller extends ChangeNotifier {
     _syncKeywords();
     _syncPersonality();
     return true;
+  }
+
+  /// True when applying [clicks] would change inning / period / pre / post.
+  bool captionClicksWouldChangeTiming(CaptionClickSnapshot clicks) {
+    if (clicks.preGame != preGame || clicks.postGame != postGame) return true;
+    if (clicks.preGame || clicks.postGame) return false;
+    if (clicks.timingHalf != timingHalf) return true;
+    final nextInning = clicks.inning;
+    if (nextInning != null && nextInning > 0 && nextInning != inning) {
+      return true;
+    }
+    return false;
+  }
+
+  /// Short label for the live time-of-game chip (e.g. "3rd period", "Q2").
+  String get timingChoiceLabel => _timingChoiceLabel(
+        preGame: preGame,
+        postGame: postGame,
+        inning: inning,
+        timingHalf: timingHalf,
+      );
+
+  /// Short label for the time-of-game stored on a history / paste snapshot.
+  String timingChoiceLabelForClicks(CaptionClickSnapshot clicks) =>
+      _timingChoiceLabel(
+        preGame: clicks.preGame,
+        postGame: clicks.postGame,
+        inning: clicks.inning ?? inning,
+        timingHalf: clicks.timingHalf,
+      );
+
+  String _timingChoiceLabel({
+    required bool preGame,
+    required bool postGame,
+    required int inning,
+    String? timingHalf,
+  }) {
+    if (preGame) return 'Before the game';
+    if (postGame) return 'After the game';
+    if (timingHalf == '1H') return '1st half';
+    if (timingHalf == '2H') return '2nd half';
+    final max = timingRegulationCount;
+    final s = sport.toLowerCase();
+    if (inning > max && s != 'baseball') {
+      switch (s) {
+        case 'soccer':
+          return 'Extra time';
+        default:
+          return 'Overtime';
+      }
+    }
+    switch (s) {
+      case 'hockey':
+        return '${_ordinal(inning)} period';
+      case 'basketball':
+      case 'wnba':
+        return 'Q$inning';
+      case 'football':
+        return '${_ordinal(inning)} quarter';
+      case 'soccer':
+        return inning == 1 ? '1st half' : '2nd half';
+      case 'baseball':
+      default:
+        return '${_ordinal(inning)} inning';
+    }
   }
 
   void _applyCopiedVerbExtras(String verb, CaptionClickSnapshot clicks) {
@@ -6512,6 +6618,43 @@ class CaptionV2Controller extends ChangeNotifier {
     await prefs.saveFavoriteVerbs(favorites, sport: sport);
     await _loadVerbCatalog();
     notifyListeners();
+  }
+
+  /// Stable key for player favorites (syncs to Firebase with user prefs).
+  String playerFavoriteKey(Player player, {required bool isHome}) {
+    final id = player.playerId?.trim();
+    if (id != null && id.isNotEmpty) return 'id:$id';
+    final team = (isHome ? homeAbbr : awayAbbr).toUpperCase();
+    final jersey = (player.jerseyNumber ?? '').trim();
+    return '$team|$jersey|${player.fullName}';
+  }
+
+  bool isPlayerFavorite(Player player, {required bool isHome}) =>
+      _favoritePlayerKeys.contains(
+        playerFavoriteKey(player, isHome: isHome),
+      );
+
+  Future<void> togglePlayerFavorite(
+    Player player, {
+    required bool isHome,
+  }) async {
+    final prefs = _prefs;
+    if (prefs == null) return;
+    final key = playerFavoriteKey(player, isHome: isHome);
+    final favorites = await prefs.getFavoritePlayers(sport: sport);
+    if (!favorites.remove(key)) favorites.add(key);
+    await prefs.saveFavoritePlayers(favorites, sport: sport);
+    _favoritePlayerKeys = favorites;
+    notifyListeners();
+  }
+
+  Future<void> _loadFavoritePlayers() async {
+    final prefs = _prefs;
+    if (prefs == null) {
+      _favoritePlayerKeys = {};
+      return;
+    }
+    _favoritePlayerKeys = await prefs.getFavoritePlayers(sport: sport);
   }
 
   Future<void> deleteVerb(String verb) async {
@@ -11385,6 +11528,12 @@ class CaptionV2Controller extends ChangeNotifier {
         if (used != null && used.isNotEmpty) {
           rememberVerbIndexPick(used);
         }
+        final historySnap = captionHistorySnapshot(
+          imagePath: succeeded.isNotEmpty ? succeeded.first : currentPath,
+        );
+        if (historySnap != null) {
+          await _recordCaptionHistory(historySnap);
+        }
       }
       // Drop unpinned custom verbs after a successful save so the next frame
       // starts clean (pinned custom verbs intentionally survive).
@@ -11468,6 +11617,12 @@ class CaptionV2Controller extends ChangeNotifier {
         caption: values['IPTC:Caption-Abstract'] ?? '',
         personality: values['XMP-getty:Personality'] ?? '',
       );
+      final historySnap = captionHistorySnapshot(
+        imagePath: succeeded.isNotEmpty ? succeeded.first : currentPath,
+      );
+      if (historySnap != null) {
+        await _recordCaptionHistory(historySnap);
+      }
     }
 
     final result = CaptionSaveResult(
@@ -12109,6 +12264,181 @@ class CaptionV2Controller extends ChangeNotifier {
       _ftpHistoryKey,
       jsonEncode(ftpHistory.map((item) => item.toJson()).toList()),
     );
+  }
+
+  /// Restore caption history only when [dirPath] matches the folder it was
+  /// saved for. A different shoot starts empty; reopening the same folder
+  /// brings the last five captions back.
+  Future<void> _loadCaptionHistoryForFolder(String dirPath) async {
+    final prefs = _prefs;
+    final folder = _normalizeDir(dirPath);
+    captionHistory.clear();
+    if (prefs == null || folder.isEmpty) {
+      notifyListeners();
+      return;
+    }
+    final stored = await prefs.getCaptionHistory();
+    final storedFolder = stored.folder;
+    if (storedFolder == null ||
+        storedFolder.isEmpty ||
+        _normalizeDir(storedFolder) != folder) {
+      notifyListeners();
+      return;
+    }
+    captionHistory.addAll(
+      stored.entries
+          .map(CaptionHistoryEntry.fromJson)
+          .where((e) => e.body.isNotEmpty),
+    );
+    if (captionHistory.length > 5) {
+      captionHistory.removeRange(5, captionHistory.length);
+    }
+    notifyListeners();
+  }
+
+  /// Snapshot of the user-built portion currently on screen (no template text).
+  ///
+  /// [imagePath] should be the photo that was just saved / uploaded — prefer
+  /// that over [currentPath] so Save & next still stores the framed thumb.
+  CaptionHistoryEntry? captionHistorySnapshot({String? imagePath}) {
+    final body = buildCaptionBody().trim();
+    if (body.isEmpty) return null;
+    final players = !hasCaptionSubject
+        ? ''
+        : (hasTeamPlayersSubject
+            ? _teamPlayersLead(captionTemplate)
+            : _playerLead(captionTemplate));
+    final path = (imagePath ?? currentPath)?.trim();
+    return CaptionHistoryEntry(
+      body: body,
+      playersText: players,
+      verbText: _captionHistoryVerbText(),
+      clicks: captionClicksForTransfer(),
+      imagePath: path == null || path.isEmpty ? null : path,
+      savedAt: DateTime.now(),
+    );
+  }
+
+  String _captionHistoryVerbText() {
+    if (customVerbPhrase.trim().isNotEmpty) {
+      return customVerbPhrase.trim();
+    }
+    final verb = selectedVerb?.trim();
+    if (verb == null || verb.isEmpty) {
+      final ghost = _verbIndexResolve(verbGhostPreview);
+      if (ghost == null) return '';
+      return _historyVerbCoreFor(ghost.key);
+    }
+    return _historyVerbCoreFor(verb);
+  }
+
+  String _historyVerbCoreFor(String verb) {
+    final definition = verbDefinition(verb);
+    final subjects = subjectPlayers;
+    final withTeammates = _verbUsesLeadWithTeammates(verb);
+    final plural = _playersButtonIsGroup
+        ? true
+        : (withTeammates ? false : subjects.length > 1);
+    var action = CaptionV2CaptionDomain.actionCore(
+      verb: verb,
+      sport: sport,
+      plural: plural,
+      rbi: rbi,
+      base: selectedBase,
+      singularPhrase: definition?.singularPhrase,
+      pluralPhrase: definition?.pluralPhrase,
+      subOptions: definition?.subOptions,
+    );
+    action = _withCelebrationType(
+      verb: verb,
+      action: action,
+      type: celebrationType,
+      plural: plural,
+      subOptions: definition?.subOptions,
+    );
+    return action.trim();
+  }
+
+  Future<void> _recordCaptionHistory(CaptionHistoryEntry entry) async {
+    final body = entry.body.trim();
+    if (body.isEmpty) return;
+    final folder = _openFolderPath;
+    if (folder == null || folder.isEmpty) return;
+    captionHistory.removeWhere(
+      (item) => item.body.trim().toLowerCase() == body.toLowerCase(),
+    );
+    captionHistory.insert(0, entry);
+    if (captionHistory.length > 5) {
+      captionHistory.removeRange(5, captionHistory.length);
+    }
+    notifyListeners();
+    await _prefs?.saveCaptionHistory(
+      folder,
+      captionHistory.map((item) => item.toJson()).toList(),
+    );
+  }
+
+  /// Re-apply a history row: presses stored buttons so template text regenerates
+  /// for the current photo — including this file's IPTC byline (so two shooters
+  /// covering the same moment each keep their own credit). Falls back to the
+  /// user-built body alone when clicks no longer match this roster.
+  ///
+  /// [applyTiming] controls whether inning / period / pre / post from the
+  /// history row overwrite the current time of game.
+  Future<bool> applyCaptionHistoryEntry(
+    CaptionHistoryEntry entry, {
+    bool applyTiming = true,
+  }) async {
+    final path = currentPath;
+    // Same as paste: always prefer this frame's IPTC By-line / Creator before
+    // regenerating template text around the history body.
+    if (path != null) {
+      final fromFile = await photographerNameForPath(path);
+      if (fromFile.isNotEmpty) {
+        photographerName = fromFile;
+        _photographerProvenance = _BylineProvenance.iptc;
+      }
+    }
+    final clicks = entry.clicks;
+    if (clicks != null &&
+        applyCaptionClicks(clicks, applyTiming: applyTiming)) {
+      if (path != null) {
+        // Persist the applied timing choice on this frame's click snapshot.
+        final stored = applyTiming
+            ? clicks
+            : CaptionClickSnapshot(
+                players: clicks.players,
+                verb: clicks.verb,
+                customVerb: clicks.customVerb,
+                rbi: clicks.rbi,
+                base: clicks.base,
+                celebration: clicks.celebration,
+                modifiers: clicks.modifiers,
+                preGame: preGame,
+                postGame: postGame,
+                inning: inning,
+                timingHalf: timingHalf,
+                teamPlayersIsHome: clicks.teamPlayersIsHome,
+                teamSubjectKind: clicks.teamSubjectKind,
+                withTeammatesIsHome: clicks.withTeammatesIsHome,
+              );
+        _clicksByPath[path] = stored;
+        _restoreClicksOnOpen.add(path);
+      }
+      metadataDirty = true;
+      captionSelectionStarted = true;
+      notifyListeners();
+      return true;
+    }
+    final body = entry.body.trim();
+    if (body.isEmpty) return false;
+    // No matching buttons — keep the user-built portion as a manual caption;
+    // template text for this photo is not reconstructed without clicks.
+    manualCaptionOverride = body;
+    metadataDirty = true;
+    captionSelectionStarted = true;
+    notifyListeners();
+    return true;
   }
 
   // ---------------------------------------------------------------------------
