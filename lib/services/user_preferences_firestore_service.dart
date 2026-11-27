@@ -56,51 +56,62 @@ class UserPreferencesFirestoreService {
         const GetOptions(source: Source.serverAndCache),
       );
       final localUpdatedAt = await prefs.getUserPreferencesUpdatedAtMs();
+      late UserPreferencesSyncResult result;
 
       if (!snap.exists) {
         await prefs.applyPublishedAppDefaultsForFirstSignIn();
         await _uploadNow(prefs, uid);
-        return UserPreferencesSyncResult.uploaded(
+        result = UserPreferencesSyncResult.uploaded(
           'Initial cloud backup created with app defaults',
         );
+      } else {
+        final data = snap.data();
+        if (data == null) {
+          await prefs.applyPublishedAppDefaultsForFirstSignIn();
+          await _uploadNow(prefs, uid);
+          result = UserPreferencesSyncResult.uploaded(
+            'Initial cloud backup created with app defaults',
+          );
+        } else {
+          final cloudUpdatedAt = _readUpdatedAtMs(data);
+          final cloudPrefs = _readPreferencesMap(data);
+          if (cloudPrefs == null) {
+            await prefs.applyPublishedAppDefaultsForFirstSignIn();
+            await _uploadNow(prefs, uid);
+            result = UserPreferencesSyncResult.uploaded(
+              'Initial cloud backup created with app defaults',
+            );
+          } else if (cloudUpdatedAt > localUpdatedAt) {
+            await prefs.applyCloudPreferences(cloudPrefs, cloudUpdatedAt);
+            // Fill any new empty gaps (e.g. newly published sport) without
+            // overwriting the user's restored personal defaults.
+            await prefs.seedAllFromAppDefaultsIfEmpty();
+            result = UserPreferencesSyncResult.downloaded(
+              'Settings restored from your account',
+            );
+          } else if (localUpdatedAt > cloudUpdatedAt) {
+            await _uploadNow(prefs, uid);
+            result = UserPreferencesSyncResult.uploaded(
+              'Local settings backed up to your account',
+            );
+          } else {
+            await prefs.seedAllFromAppDefaultsIfEmpty();
+            result = UserPreferencesSyncResult.unchanged();
+          }
+        }
       }
 
-      final data = snap.data();
-      if (data == null) {
-        await prefs.applyPublishedAppDefaultsForFirstSignIn();
-        await _uploadNow(prefs, uid);
-        return UserPreferencesSyncResult.uploaded(
-          'Initial cloud backup created with app defaults',
-        );
+      // Pre-release: admin verbs win for everyone; keep personal customVerbs.
+      if (PreferencesService.forceAdminVerbsPreservingCustomsUntilRelease) {
+        final forced = await prefs.forceAdminVerbsPreservingUserCustoms();
+        if (forced) {
+          await _uploadNow(prefs, uid);
+          return UserPreferencesSyncResult.uploaded(
+            'Admin verbs applied; personal custom verbs kept',
+          );
+        }
       }
-
-      final cloudUpdatedAt = _readUpdatedAtMs(data);
-      final cloudPrefs = _readPreferencesMap(data);
-      if (cloudPrefs == null) {
-        await prefs.applyPublishedAppDefaultsForFirstSignIn();
-        await _uploadNow(prefs, uid);
-        return UserPreferencesSyncResult.uploaded(
-          'Initial cloud backup created with app defaults',
-        );
-      }
-
-      if (cloudUpdatedAt > localUpdatedAt) {
-        await prefs.applyCloudPreferences(cloudPrefs, cloudUpdatedAt);
-        // Fill any new empty gaps (e.g. newly published sport) without
-        // overwriting the user's restored personal defaults.
-        await prefs.seedAllFromAppDefaultsIfEmpty();
-        return UserPreferencesSyncResult.downloaded(
-          'Settings restored from your account',
-        );
-      }
-      if (localUpdatedAt > cloudUpdatedAt) {
-        await _uploadNow(prefs, uid);
-        return UserPreferencesSyncResult.uploaded(
-          'Local settings backed up to your account',
-        );
-      }
-      await prefs.seedAllFromAppDefaultsIfEmpty();
-      return UserPreferencesSyncResult.unchanged();
+      return result;
     } catch (e, st) {
       print('UserPreferencesFirestoreService.syncOnSignIn failed: $e');
       print(st);

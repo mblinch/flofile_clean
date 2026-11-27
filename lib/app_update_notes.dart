@@ -12,7 +12,7 @@ const String kAppUpdateNotesTitle = 'What’s new';
 const String kAppUpdateNotesBody = '''
 Here is what changed in this version.
 
-Caption history hover grows the original thumbnail in place, over the caption text.
+Verb catalogs now load from the published admin originals on startup. Your own custom verbs and favorites are kept.
 
 This message shows one time after you update. Tap OK or outside the box to close it.
 ''';

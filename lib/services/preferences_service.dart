@@ -329,6 +329,11 @@ class PreferencesService {
   static const String _keyUserTypedAppDefaultAdjustments =
       'user_typed_app_default_adjustments';
 
+  /// Pre-release: always load published admin verbs on startup/sync.
+  /// Keeps each user's [customVerbs] (+ favorites). Turn off before release to
+  /// restore the "keep personal verbs?" choice dialog.
+  static const bool forceAdminVerbsPreservingCustomsUntilRelease = true;
+
   static PreferencesService? _instance;
   static SharedPreferences? _prefs;
 
@@ -4176,6 +4181,9 @@ class PreferencesService {
     await AppDefaultsFirestoreService.fetchAndCacheAppDefaults(
       forceNetwork: forceNetwork,
     );
+    if (forceAdminVerbsPreservingCustomsUntilRelease) {
+      await forceAdminVerbsPreservingUserCustoms();
+    }
     await seedAllFromAppDefaultsIfEmpty();
   }
 
@@ -4346,6 +4354,101 @@ class PreferencesService {
         AppDefaultsFirestoreService.seededGameIdentifierByWireAndSport(),
       );
     }
+  }
+
+  /// Replace local verb catalogs with published admin originals for every sport.
+  /// Preserves each sport's personal [customVerbs], favorites, and favorite teams.
+  ///
+  /// Used while [forceAdminVerbsPreservingCustomsUntilRelease] is true.
+  Future<bool> forceAdminVerbsPreservingUserCustoms() async {
+    final catalog = AppDefaultsFirestoreService.getCachedCatalog();
+    if (catalog == null || catalog.verbSettingsBySport.isEmpty) {
+      return false;
+    }
+
+    final bySport = <String, Map<String, dynamic>>{};
+    var changed = false;
+    _beginSuppressUserTypedMark();
+    try {
+      for (final sport in AppDefaultsFirestoreService.catalogSports) {
+        final adminRaw = catalog.sportVerbSettings(sport);
+        if (adminRaw == null || adminRaw.isEmpty) continue;
+
+        final admin = VerbDefaultsBundle.ensureComplete(
+          Map<String, dynamic>.from(adminRaw),
+          sport,
+        );
+        final userCustoms = await getCustomVerbs(sport: sport);
+        final favorites = await getFavoriteVerbs(sport: sport);
+        final favoriteTeams = await getFavoriteTeams(sport: sport);
+        final favoritePlayers = await getFavoritePlayers(sport: sport);
+
+        final adminCustoms = <Map<String, dynamic>>[
+          for (final raw in ((admin['customVerbs'] as List?) ?? const []))
+            if (raw is Map) Map<String, dynamic>.from(raw),
+        ];
+        final adminOverrides = Map<String, dynamic>.from(
+          (admin['verbOverrides'] as Map?) ?? const {},
+        );
+        final mergedCustoms = _mergeCustomVerbLists(
+          adminCustoms: adminCustoms,
+          userCustoms: userCustoms,
+          adminOverrides: adminOverrides,
+        );
+
+        final next = Map<String, dynamic>.from(admin);
+        next['customVerbs'] = mergedCustoms;
+        next['favoriteVerbs'] = favorites.toList();
+        next['favoriteTeams'] = favoriteTeams.toList();
+        next['favoritePlayers'] = favoritePlayers.toList();
+        final complete = VerbDefaultsBundle.ensureComplete(next, sport);
+        bySport[sport] = complete;
+
+        final existing = await exportVerbSettingsBySport();
+        final before = existing[sport];
+        try {
+          if (json.encode(before) != json.encode(complete)) {
+            changed = true;
+          }
+        } catch (_) {
+          changed = true;
+        }
+      }
+
+      if (bySport.isEmpty) return false;
+      await importPreferences({'verbSettingsBySport': bySport});
+      return changed;
+    } finally {
+      _endSuppressUserTypedMark();
+    }
+  }
+
+  static List<Map<String, dynamic>> _mergeCustomVerbLists({
+    required List<Map<String, dynamic>> adminCustoms,
+    required List<Map<String, dynamic>> userCustoms,
+    required Map<String, dynamic> adminOverrides,
+  }) {
+    final byKey = <String, Map<String, dynamic>>{};
+    String keyOf(Map<String, dynamic> raw) =>
+        (raw['key'] ?? raw['label'] ?? '').toString().trim();
+
+    for (final raw in adminCustoms) {
+      final key = keyOf(raw);
+      if (key.isEmpty) continue;
+      byKey[key.toLowerCase()] = Map<String, dynamic>.from(raw);
+    }
+    for (final raw in userCustoms) {
+      final key = keyOf(raw);
+      if (key.isEmpty) continue;
+      final lower = key.toLowerCase();
+      if (byKey.containsKey(lower)) continue;
+      final overrideHit = adminOverrides.keys.any(
+        (k) => k.toString().trim().toLowerCase() == lower,
+      );
+      if (overrideHit) continue;
+      byKey[lower] = Map<String, dynamic>.from(raw);
+    }
+    return byKey.values.toList();
   }
 
   /// Fetches latest app originals from Firebase and applies verbs + caption structures.

@@ -47,6 +47,16 @@ class VerbAdminChoice {
       );
       final token = '$_ackPrefix${_fingerprint(published)}';
       final snapshot = _snapshot(publishedComplete);
+
+      // Pre-release: no "keep personal verbs?" dialog — admin catalog wins.
+      // Acknowledgement stays current so re-enabling the dialog later only
+      // prompts on *new* publishes.
+      if (PreferencesService.forceAdminVerbsPreservingCustomsUntilRelease) {
+        await prefs.saveVerbAdminAcknowledgement(normalized, token);
+        await prefs.saveVerbAdminSnapshot(normalized, snapshot);
+        return;
+      }
+
       final acknowledged = await prefs.getVerbAdminAcknowledgement(normalized);
       // Remember the catalog already on disk. Differences that existed before
       // this check are not a new publish.
