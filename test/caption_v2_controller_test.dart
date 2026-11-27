@@ -90,28 +90,46 @@ void main() {
     controller.toggleTeamSubject(isHome: true, kind: TeamSubjectKind.players);
     controller.selectVerb('Celebrates');
 
-    expect(controller.buildCaptionBody(), startsWith('Toronto FC players'));
-    expect(controller.displayedCaption, contains('Toronto FC players'));
+    // Getty teamAfter: same shape as a named athlete lead.
+    expect(controller.buildCaptionBody(), startsWith('players of the Toronto FC'));
+    expect(controller.displayedCaption, contains('players of the Toronto FC'));
     expect(controller.buildCaptionBody(), contains('celebrate against'));
     expect(
       controller.buildCaptionBody(),
       contains('against the New York City FC'),
     );
+    expect(controller.personality, isEmpty);
 
     controller.toggleTeamSubject(isHome: true, kind: TeamSubjectKind.name);
-    expect(controller.buildCaptionBody(), contains('celebrates against'));
+    expect(controller.buildCaptionBody(), startsWith('Toronto FC celebrates'));
     expect(controller.buildCaptionBody(), isNot(contains('players')));
+    expect(controller.personality, isEmpty);
 
+    // Teammates alone is a whole-side subject, like Players.
     controller.toggleTeamSubject(isHome: true, kind: TeamSubjectKind.teammates);
-    expect(controller.hasTeamPlayersSubject, isFalse);
-    expect(controller.withTeammatesIsHome, isTrue);
+    expect(controller.hasTeamPlayersSubject, isTrue);
+    expect(controller.teamSubjectKind, TeamSubjectKind.teammates);
+    expect(controller.buildCaptionBody(), startsWith('teammates of the Toronto FC'));
+    expect(controller.personality, isEmpty);
 
+    // Named pick + Teammates: fold into the lead like another player.
     controller.selectPlayer(player('Federico Bernardeschi', '10'), isHome: true);
+    controller.toggleTeamSubject(isHome: true, kind: TeamSubjectKind.teammates);
+    controller.selectVerb('Celebrates');
+    expect(
+      controller.buildCaptionBody(),
+      contains('Federico Bernardeschi #10 and teammates of the Toronto FC'),
+    );
+    expect(controller.buildCaptionBody(), contains('celebrate against'));
+    expect(controller.buildCaptionBody(), isNot(contains('with teammates')));
+    expect(controller.personality, 'Federico Bernardeschi');
+    expect(controller.playerChipLabel, contains('10'));
+    expect(controller.playerChipLabel, contains('teammates'));
+
+    // Celebrates a Goal still uses a trailing "with teammates" clause.
     controller.selectVerb('Celebrates a Goal');
     expect(controller.buildCaptionBody(), contains('Federico Bernardeschi'));
     expect(controller.buildCaptionBody(), contains('celebrates a goal with teammates'));
-    expect(controller.playerChipLabel, contains('10'));
-    expect(controller.playerChipLabel, contains('teammates'));
   });
 
   test('uses plural caption wording for multiple players', () {
@@ -324,14 +342,16 @@ void main() {
       contains('against the Cincinnati Reds'),
     );
 
-    // Post Game Win/Loss stay opponent-free and use the authored phrase only.
-    controller.selectPlayer(player('Bo Bichette', '11'), isHome: true);
-    controller.selectPlayer(player('Elly De La Cruz', '44'), isHome: false);
-    controller.selectVerb('Post Game Win');
-    final postGameBody = controller.buildCaptionBody();
+    // Post Game Win names the other club.
+    final postGame = CaptionV2Controller()
+      ..homeTeam = 'Toronto Blue Jays'
+      ..awayTeam = 'Cincinnati Reds';
+    postGame.selectPlayer(player('Bo Bichette', '11'), isHome: true);
+    postGame.selectVerb('Post Game Win');
+    final postGameBody = postGame.buildCaptionBody();
     expect(postGameBody, contains('celebrates'));
     expect(postGameBody, isNot(contains('following the game')));
-    expect(postGameBody.toLowerCase(), isNot(contains('against')));
+    expect(postGameBody.toLowerCase(), contains('against the cincinnati reds'));
   });
 
   test('custom verb supports pin and last-used session actions', () {

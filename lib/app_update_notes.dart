@@ -12,7 +12,8 @@ const String kAppUpdateNotesTitle = 'What’s new';
 const String kAppUpdateNotesBody = '''
 Here is what changed in this version.
 
-Verb catalogs now load from the published admin originals on startup. Your own custom verbs and favorites are kept.
+Post Game Win and Loss now name the other team (“against …”).
+Players, Team, and Teammates insert into the caption like named athletes — without writing to Personality.
 
 This message shows one time after you update. Tap OK or outside the box to close it.
 ''';

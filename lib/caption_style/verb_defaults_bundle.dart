@@ -493,17 +493,13 @@ class VerbDefaultsBundle {
 
   /// Keep wantsOpponent / omitAgainst aligned with opponentJoiner text.
   /// A blank joiner drops the connector word and still names the other team.
-  /// Post Game Win/Loss default opponent-free, but honor an explicit opt-in.
+  /// Post Game Win/Loss always name the other club ("…against the …").
   static void _normalizeOpponentFields(String key, Map<String, dynamic> merged) {
     if (key == 'Post Game Win' || key == 'Post Game Loss') {
       final joiner = (merged['opponentJoiner'] ?? 'against').toString().trim();
       merged['opponentJoiner'] = joiner.isEmpty ? 'against' : joiner;
-      if (merged['wantsOpponent'] is! bool) {
-        merged['wantsOpponent'] = false;
-      }
-      if (merged['wantsOpponent'] == true) {
-        merged['omitAgainst'] = joiner.isEmpty;
-      }
+      merged['wantsOpponent'] = true;
+      merged['omitAgainst'] = joiner.isEmpty;
       return;
     }
     final joiner = (merged['opponentJoiner'] ?? 'against').toString().trim();
@@ -542,7 +538,7 @@ class VerbDefaultsBundle {
       'ingPhrase': VerbCaptionWording.defaultIngWording(key, singular, sport: sport),
       'usePluralPhrase': true,
       'keywords': defaultKeywordsForVerbLabel(key),
-      'wantsOpponent': key != 'Post Game Win' && key != 'Post Game Loss',
+      'wantsOpponent': true,
       'omitAgainst': false,
       'opponentJoiner': 'against',
       'withTeammates': key == 'Celebrates a Goal',

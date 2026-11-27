@@ -496,17 +496,14 @@ class EffectiveVerbCatalog {
   }
 
   /// A joiner is only the connector word. Blank still attaches the opposing
-  /// team (`scores the Ottawa Senators`). Post Game Win/Loss stay
-  /// opponent-free unless authoring explicitly enables the opponent.
+  /// team (`scores the Ottawa Senators`). Post Game Win/Loss also name the
+  /// other club by default (`celebrates … against the …`).
   ///
   /// Records that stored `opponentJoiner: against` with `wantsOpponent: false`
   /// (e.g. Stands in Net) are healed the same way: the team clause stays.
   static bool _wantsOpponentFromRecord(Map raw, String key) {
-    if (key == 'Post Game Win' || key == 'Post Game Loss') {
-      return raw['wantsOpponent'] == true;
-    }
-    if (raw.containsKey('opponentJoiner')) return true;
     if (raw['wantsOpponent'] is bool) return raw['wantsOpponent'] as bool;
+    if (raw.containsKey('opponentJoiner')) return true;
     return true;
   }
 }

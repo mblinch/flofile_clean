@@ -270,7 +270,7 @@ void main() {
     final overrides = Map<String, dynamic>.from(fixed['verbOverrides'] as Map);
     expect(overrides['Stands in Net']?['wantsOpponent'], isTrue);
     expect(overrides['Walks to the Ice']?['wantsOpponent'], isTrue);
-    expect(overrides['Post Game Win']?['wantsOpponent'], isFalse);
+    expect(overrides['Post Game Win']?['wantsOpponent'], isTrue);
   });
 
   test('renames legacy Pitching verb to Pitches and migrates hide list', () {

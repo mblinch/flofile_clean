@@ -5120,7 +5120,9 @@ class _RosterSubjectDock extends StatelessWidget {
         controller.teamSubjectKind == TeamSubjectKind.players;
     final teamOn = controller.teamPlayersIsHome == isHome &&
         controller.teamSubjectKind == TeamSubjectKind.name;
-    final teammatesOn = controller.withTeammatesIsHome == isHome;
+    final teammatesOn = controller.withTeammatesIsHome == isHome ||
+        (controller.teamPlayersIsHome == isHome &&
+            controller.teamSubjectKind == TeamSubjectKind.teammates);
     // Match _DrumCustomVerbField height (26). Gap above separates from last player.
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 12, 4, 2),

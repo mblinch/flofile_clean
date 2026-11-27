@@ -822,7 +822,9 @@ class MobilePlayerPane extends StatelessWidget {
         controller.teamSubjectKind == TeamSubjectKind.players;
     final teamOn = controller.teamPlayersIsHome == isHome &&
         controller.teamSubjectKind == TeamSubjectKind.name;
-    final matesOn = controller.withTeammatesIsHome == isHome;
+    final matesOn = controller.withTeammatesIsHome == isHome ||
+        (controller.teamPlayersIsHome == isHome &&
+            controller.teamSubjectKind == TeamSubjectKind.teammates);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),

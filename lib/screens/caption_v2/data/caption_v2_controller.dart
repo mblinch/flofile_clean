@@ -2502,7 +2502,9 @@ class CaptionV2Controller extends ChangeNotifier {
   }) {
     captionSelectionStarted = true;
     manualCaptionOverride = null;
-    if (kind == TeamSubjectKind.teammates) {
+    // Named athletes + Teammates: keep the picks and fold "teammates" into the
+    // lead like another player. Alone, Teammates is a whole-side subject.
+    if (kind == TeamSubjectKind.teammates && selectedPlayers.isNotEmpty) {
       if (withTeammatesIsHome == isHome) {
         withTeammatesIsHome = null;
         captionSelectionStarted =
@@ -3080,6 +3082,14 @@ class CaptionV2Controller extends ChangeNotifier {
           : '($jersey)';
       return '$playerName $numText';
     }).toList();
+    // Teammates chip: fold into the lead like another named pick
+    // ("Matthews #34 and teammates of the Leafs"), not a trailing clause —
+    // except Celebrates-a-Goal-style verbs, which keep "with …".
+    final foldTeammatesIntoLead = _captionIncludesTeammates &&
+        !_verbUsesLeadWithTeammates(selectedVerb);
+    if (foldTeammatesIntoLead) {
+      playerLabels.add('teammates');
+    }
     final playersText = _joinNames(playerLabels);
     if (template.removeDiacritics) {
       teamName = CaptionTextNormalize.stripDiacritics(teamName);
@@ -3097,12 +3107,24 @@ class CaptionV2Controller extends ChangeNotifier {
     return subjectLead;
   }
 
+  /// Players / Teammates use the same team-order pattern as named athletes
+  /// ("players of the Team" / "Team players"). Team name is the subject itself.
   String _teamPlayersLead(CaptionTemplate template) {
-    var label = teamSubjectLabel(isHome: teamPlayersIsHome!);
+    final isHome = teamPlayersIsHome!;
+    var teamName = teamNameLabel(isHome: isHome);
     if (template.removeDiacritics) {
-      label = CaptionTextNormalize.stripDiacritics(label);
+      teamName = CaptionTextNormalize.stripDiacritics(teamName);
     }
-    return label;
+    final subjectWord = switch (teamSubjectKind) {
+      TeamSubjectKind.players => 'players',
+      TeamSubjectKind.teammates => 'teammates',
+      TeamSubjectKind.name => null,
+    };
+    if (subjectWord == null) return teamName;
+    return switch (template.captionTeamOrder) {
+      CaptionTeamOrder.teamAfter => '$subjectWord of the $teamName',
+      CaptionTeamOrder.teamBefore => '$teamName $subjectWord',
+    };
   }
 
   /// Verbs where the first same-team pick is the action subject and later
@@ -3126,10 +3148,14 @@ class CaptionV2Controller extends ChangeNotifier {
     final subjectIsHome = _captionSubjectIsHome;
     final opponentTeam = subjectIsHome ? awayTeam : homeTeam;
     final withTeammates = _verbUsesLeadWithTeammates(verb);
-    // The Players button stands in for two or more athletes.
+    final genericTeammates = _captionIncludesTeammates;
+    // The Players / Teammates buttons stand in for two or more athletes.
+    // Named pick + Teammates chip also reads as plural in the lead.
     final plural = _playersButtonIsGroup
         ? true
-        : (withTeammates ? false : subjects.length > 1);
+        : (withTeammates
+            ? false
+            : (subjects.length > 1 || genericTeammates));
     // Live captioning uses classic RBI / celebration controls. Authored
     // modifier phrases are edited in Admin → Verb authoring only for now.
     var action = CaptionV2CaptionDomain.actionCore(
@@ -3150,8 +3176,8 @@ class CaptionV2Controller extends ChangeNotifier {
       subOptions: definition?.subOptions,
     );
 
-    final genericTeammates = _captionIncludesTeammates &&
-        !action.toLowerCase().contains('with teammates');
+    // Celebrates-a-Goal-style: later picks / Teammates stay in a "with …"
+    // clause. Other verbs already folded Teammates into the lead.
     if (withTeammates && !_playersButtonIsGroup && subjects.length > 1) {
       final teammates = subjects.skip(1).toList(growable: false);
       var names = _formatPlayerNamesOnly(teammates, captionTemplate);
@@ -3163,7 +3189,10 @@ class CaptionV2Controller extends ChangeNotifier {
       } else if (genericTeammates) {
         action = '$action with teammates';
       }
-    } else if (genericTeammates && !_playersButtonIsGroup) {
+    } else if (withTeammates &&
+        genericTeammates &&
+        !_playersButtonIsGroup &&
+        subjects.length <= 1) {
       action = '$action with teammates';
     }
 
@@ -3246,10 +3275,7 @@ class CaptionV2Controller extends ChangeNotifier {
 
   String _customActionPhrase() {
     var action = customVerbPhrase.trim();
-    if (_captionIncludesTeammates &&
-        !action.toLowerCase().contains('with teammates')) {
-      action = '$action with teammates';
-    }
+    // Teammates already sits in the lead like a named pick for custom verbs.
     final subjectIsHome = _captionSubjectIsHome;
     final namedOpponents = _namedOpponentsForCaption();
     final hasNamedOpposingPlayers = namedOpponents.isNotEmpty;
