@@ -5946,7 +5946,9 @@ class CaptionV2Controller extends ChangeNotifier {
     if (path == null || !_restoreClicksOnOpen.contains(path)) return;
     final stored = _clicksByPath[path];
     if (stored == null) return;
-    applyCaptionClicks(stored);
+    // Restore the board/caption, but leave Firebar verb chips alone until
+    // the user clicks Firebar ([setSearchOpen]).
+    applyCaptionClicks(stored, syncFirebarVerbs: false);
   }
 
   /// True when this frame's buttons differ from the pins that return on every
@@ -6018,6 +6020,7 @@ class CaptionV2Controller extends ChangeNotifier {
   bool applyCaptionClicks(
     CaptionClickSnapshot clicks, {
     bool applyTiming = true,
+    bool syncFirebarVerbs = true,
   }) {
     final nextPlayers = <RosterHit>[];
     RosterHit? primaryHit;
@@ -6131,7 +6134,7 @@ class CaptionV2Controller extends ChangeNotifier {
     manualCaptionOverride = null;
     captionSelectionStarted = true;
     _syncPrimaryPlayer();
-    _syncFirebarToSelection();
+    _syncFirebarToSelection(includeVerbs: syncFirebarVerbs);
     _syncKeywords();
     _syncPersonality();
     return true;
@@ -6235,7 +6238,7 @@ class CaptionV2Controller extends ChangeNotifier {
     return TeamSubjectKind.players;
   }
 
-  void _syncFirebarToSelection() {
+  void _syncFirebarToSelection({bool includeVerbs = true}) {
     _firebarCommitted.removeWhere(
       (item) =>
           item.kind == FirebarResultKind.player ||
@@ -6246,7 +6249,7 @@ class CaptionV2Controller extends ChangeNotifier {
         FirebarResult.player(player: row.player, isHome: row.isHome),
       );
     }
-    if (selectedVerb != null) {
+    if (includeVerbs && selectedVerb != null) {
       _firebarCommitted.add(FirebarResult.verb(selectedVerb));
     }
   }
@@ -7823,6 +7826,12 @@ class CaptionV2Controller extends ChangeNotifier {
       _firebarAutoPreviewKeys.clear();
       _discardFirebarVerbPreview(keepSelection: true);
       _firebarCommitted.clear();
+      searchOpen = true;
+      firebarSelectionIndex = -1;
+      // Clicking Firebar mirrors the live board into chips (including verbs).
+      _syncFirebarToSelection();
+      notifyListeners();
+      return;
     }
     searchOpen = open;
     firebarSelectionIndex = -1;
@@ -7845,6 +7854,7 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   /// Clear the shorthand line after a photo change; keep Firebar armed.
+  /// Verb chips stay hidden until the user clicks Firebar again.
   void clearFirebarLineKeepOpen() {
     searchQuery = '';
     _firebarLine = null;
@@ -7854,6 +7864,8 @@ class CaptionV2Controller extends ChangeNotifier {
     firebarSelectionIndex = -1;
     firebarMenuIndex = 0;
     firebarChipCursor = -1;
+    _firebarCommitted
+        .removeWhere((item) => item.kind == FirebarResultKind.verb);
     _clearFirebarOptions();
   }
 
@@ -11762,12 +11774,10 @@ class CaptionV2Controller extends ChangeNotifier {
         _firebarCommitted.add(playerChip);
       }
     }
+    // Never park verbs in Firebar on photo land — only after Firebar is opened.
+    _firebarCommitted
+        .removeWhere((item) => item.kind == FirebarResultKind.verb);
     if (pinnedVerb != null) {
-      _firebarCommitted
-          .removeWhere((item) => item.kind == FirebarResultKind.verb);
-      if (!_firebarCommitted.any((item) => item.verbKey == pinnedVerb)) {
-        _firebarCommitted.add(FirebarResult.verb(pinnedVerb));
-      }
       // A pinned favorite always comes back on the Favorites panel, even if
       // the user was browsing another category when they saved.
       if (isVerbFavorite(pinnedVerb!)) {
@@ -11776,12 +11786,6 @@ class CaptionV2Controller extends ChangeNotifier {
         final category = _categoryForVerb(pinnedVerb!);
         if (category != null) verbCategory = category;
       }
-    } else if (customVerbPinned && customVerbPhrase.trim().isNotEmpty) {
-      _firebarCommitted
-          .removeWhere((item) => item.kind == FirebarResultKind.verb);
-    } else {
-      _firebarCommitted
-          .removeWhere((item) => item.kind == FirebarResultKind.verb);
     }
     _clearFirebarOptions();
     _syncKeywords();

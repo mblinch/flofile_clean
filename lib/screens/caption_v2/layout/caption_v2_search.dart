@@ -821,7 +821,7 @@ class _FirebarTypingField extends StatelessWidget {
     );
     final typed = textController.text;
     final errorStyle = baseStyle.copyWith(color: const Color(0xFFFF5A5A));
-    final verbStyle = baseStyle.copyWith(color: const Color(0xFFFFB08F));
+    final verbStyle = baseStyle.copyWith(color: FfTokens.captionVerb);
     final field = Focus(
       onKeyEvent: onKey,
       child: KeyedSubtree(

@@ -1452,6 +1452,33 @@ void main() {
     expect(controller.selectedVerb, isNull);
   });
 
+  test('Firebar hides verbs on photo land until Firebar is opened', () {
+    final controller = CaptionV2Controller()
+      ..imagePaths = ['/one.jpg', '/two.jpg']
+      ..homeRoster = [player('Bo Bichette', '11')];
+
+    controller.toggleVerbPin('Double');
+    controller.setSearchOpen(true);
+    expect(
+      controller.firebarCommitted.any((c) => c.kind == FirebarResultKind.verb),
+      isTrue,
+    );
+
+    controller.goToIndex(1);
+    expect(controller.selectedVerb, 'Double');
+    expect(
+      controller.firebarCommitted.any((c) => c.kind == FirebarResultKind.verb),
+      isFalse,
+    );
+
+    controller.setSearchOpen(false);
+    controller.setSearchOpen(true);
+    expect(
+      controller.firebarCommitted.any((c) => c.verbKey == 'Double'),
+      isTrue,
+    );
+  });
+
   test('pinned player survives frame navigation while unpinned player clears',
       () {
     final bo = player('Bo Bichette', '11');
