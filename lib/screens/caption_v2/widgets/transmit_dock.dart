@@ -2166,15 +2166,15 @@ class _CaptionHistoryThumb extends StatefulWidget {
   static const double _w = 100;
   static const double _h = 70;
 
-  /// Hover = same crop as the list thumb, just larger.
-  static const double _previewScale = 2.2;
+  /// Same tile, scaled up from its center on hover.
+  static const double _previewScale = 2.4;
 
   @override
   State<_CaptionHistoryThumb> createState() => _CaptionHistoryThumbState();
 }
 
 class _CaptionHistoryThumbState extends State<_CaptionHistoryThumb> {
-  final GlobalKey _thumbKey = GlobalKey();
+  final LayerLink _link = LayerLink();
   OverlayEntry? _entry;
   Timer? _hoverTimer;
   int _hoverGen = 0;
@@ -2188,58 +2188,49 @@ class _CaptionHistoryThumbState extends State<_CaptionHistoryThumb> {
 
   void _showPreview(String filePath) {
     _removePreview();
-    final box =
-        _thumbKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize || !box.attached) return;
-
-    final origin = box.localToGlobal(Offset.zero);
-    final thumbSize = box.size;
     const scale = _CaptionHistoryThumb._previewScale;
     final pw = _CaptionHistoryThumb._w * scale;
     final ph = _CaptionHistoryThumb._h * scale;
-    final dpr = MediaQuery.devicePixelRatioOf(context);
-    final cacheW = (pw * dpr).round().clamp(200, 480);
-
-    // Centered on the thumb, floating just above it (same framing, enlarged).
-    final screen = MediaQuery.sizeOf(context);
-    final centeredLeft = origin.dx + (thumbSize.width - pw) / 2;
-    final aboveTop = origin.dy - ph - 8;
-    final dx = centeredLeft.clamp(8.0, screen.width - pw - 8);
-    final dy = aboveTop >= 8
-        ? aboveTop
-        : (origin.dy + thumbSize.height + 8)
-            .clamp(8.0, screen.height - ph - 8);
 
     _entry = OverlayEntry(
       builder: (context) {
-        return Positioned(
-          left: dx,
-          top: dy,
-          width: pw,
-          height: ph,
+        // Pin to the thumb via LayerLink — same center, same crop, just bigger.
+        return CompositedTransformFollower(
+          link: _link,
+          showWhenUnlinked: false,
+          targetAnchor: Alignment.center,
+          followerAnchor: Alignment.center,
           child: IgnorePointer(
             child: Material(
               color: Colors.transparent,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF262D35),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: const Color(0x66E8EEF4)),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x99000000),
-                      blurRadius: 14,
-                      offset: Offset(0, 6),
+              elevation: 0,
+              child: SizedBox(
+                width: pw,
+                height: ph,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF262D35),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: const Color(0x66E8EEF4),
+                      width: 1.5,
                     ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(5),
-                  child: OrientedFilePreview(
-                    path: filePath,
-                    fit: BoxFit.cover,
-                    cacheWidth: cacheW,
-                    filterQuality: FilterQuality.medium,
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x99000000),
+                        blurRadius: 18,
+                        offset: Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(5),
+                    child: OrientedFilePreview(
+                      path: filePath,
+                      fit: BoxFit.cover,
+                      cacheWidth: 320,
+                      filterQuality: FilterQuality.medium,
+                    ),
                   ),
                 ),
               ),
@@ -2248,7 +2239,6 @@ class _CaptionHistoryThumbState extends State<_CaptionHistoryThumb> {
         );
       },
     );
-    // Root overlay — avoids nesting inside the history menu OverlayPortal.
     Overlay.of(context, rootOverlay: true).insert(_entry!);
   }
 
@@ -2268,7 +2258,7 @@ class _CaptionHistoryThumbState extends State<_CaptionHistoryThumb> {
     _hoverTimer?.cancel();
     final gen = ++_hoverGen;
     final delay = hover
-        ? const Duration(milliseconds: 80)
+        ? const Duration(milliseconds: 60)
         : const Duration(milliseconds: 40);
     _hoverTimer = Timer(delay, () {
       if (!mounted || gen != _hoverGen) return;
@@ -2294,91 +2284,93 @@ class _CaptionHistoryThumbState extends State<_CaptionHistoryThumb> {
             ? const Color(0x66E8EEF4)
             : const Color(0x1EE8EEF4);
 
-    return MouseRegion(
-      cursor: canZoom ? SystemMouseCursors.click : SystemMouseCursors.basic,
-      onEnter: exists ? (_) => _setHover(true, filePath) : null,
-      onExit: (_) => _setHover(false, filePath),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: canZoom ? widget.onOpenZoom : null,
-        child: SizedBox(
-          key: _thumbKey,
-          width: _CaptionHistoryThumb._w,
-          height: _CaptionHistoryThumb._h,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(5),
-                    border: Border.all(
-                      color: ring,
-                      width: widget.highlighted || _hover ? 1.5 : 1,
+    return CompositedTransformTarget(
+      link: _link,
+      child: MouseRegion(
+        cursor: canZoom ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        onEnter: exists ? (_) => _setHover(true, filePath) : null,
+        onExit: (_) => _setHover(false, filePath),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: canZoom ? widget.onOpenZoom : null,
+          child: SizedBox(
+            width: _CaptionHistoryThumb._w,
+            height: _CaptionHistoryThumb._h,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(
+                        color: ring,
+                        width: widget.highlighted || _hover ? 1.5 : 1,
+                      ),
                     ),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: ColoredBox(
-                      color: const Color(0xFF262D35),
-                      child: exists
-                          ? OrientedFilePreview(
-                              path: filePath,
-                              fit: BoxFit.cover,
-                              cacheWidth: 160,
-                              filterQuality: FilterQuality.medium,
-                            )
-                          : filePath.isEmpty
-                              ? null
-                              : const Center(
-                                  child: PhosphorIcon(
-                                    PhosphorIconsRegular.imageBroken,
-                                    size: 14,
-                                    color: FfTokens.nocturneT3,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: ColoredBox(
+                        color: const Color(0xFF262D35),
+                        child: exists
+                            ? OrientedFilePreview(
+                                path: filePath,
+                                fit: BoxFit.cover,
+                                cacheWidth: 160,
+                                filterQuality: FilterQuality.medium,
+                              )
+                            : filePath.isEmpty
+                                ? null
+                                : const Center(
+                                    child: PhosphorIcon(
+                                      PhosphorIconsRegular.imageBroken,
+                                      size: 14,
+                                      color: FfTokens.nocturneT3,
+                                    ),
                                   ),
-                                ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-              if (canZoom)
-                Positioned(
-                  right: -2,
-                  bottom: -2,
-                  child: IgnorePointer(
-                    child: Container(
-                      width: 18,
-                      height: 18,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: _hover || widget.highlighted
-                            ? FfTokens.nocturneAc
-                            : const Color(0xE0181D22),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
+                if (canZoom)
+                  Positioned(
+                    right: -2,
+                    bottom: -2,
+                    child: IgnorePointer(
+                      child: Container(
+                        width: 18,
+                        height: 18,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
                           color: _hover || widget.highlighted
                               ? FfTokens.nocturneAc
-                              : const Color(0x40E8EEF4),
-                        ),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x66000000),
-                            blurRadius: 4,
-                            offset: Offset(0, 1),
+                              : const Color(0xE0181D22),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: _hover || widget.highlighted
+                                ? FfTokens.nocturneAc
+                                : const Color(0x40E8EEF4),
                           ),
-                        ],
-                      ),
-                      child: PhosphorIcon(
-                        PhosphorIconsRegular.magnifyingGlass,
-                        size: 11,
-                        color: _hover || widget.highlighted
-                            ? Colors.white
-                            : FfTokens.nocturneTx,
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x66000000),
+                              blurRadius: 4,
+                              offset: Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                        child: PhosphorIcon(
+                          PhosphorIconsRegular.magnifyingGlass,
+                          size: 11,
+                          color: _hover || widget.highlighted
+                              ? Colors.white
+                              : FfTokens.nocturneTx,
+                        ),
                       ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

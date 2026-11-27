@@ -12,9 +12,7 @@ const String kAppUpdateNotesTitle = 'What’s new';
 const String kAppUpdateNotesBody = '''
 Here is what changed in this version.
 
-Caption history: larger list thumbs, a hover preview that enlarges the same crop above the thumb, and a wider Recent Captions menu.
-
-Caption V2 polish continues across Verb Index, drum picker, and the transmit dock.
+Caption history hover preview now enlarges the original thumb in place (same crop, grown from center) instead of floating a separate preview.
 
 This message shows one time after you update. Tap OK or outside the box to close it.
 ''';
