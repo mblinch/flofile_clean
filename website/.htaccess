@@ -5,9 +5,11 @@ RewriteEngine On
 RewriteCond %{HTTPS} !=on
 RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
-# Optional: remove trailing slash except directories
-# RewriteCond %{REQUEST_FILENAME} !-d
-# RewriteRule ^(.+)/$ /$1 [L,R=301]
+# Clean legal / pricing URLs (static HTML, no JS required)
+RewriteRule ^terms/?$ /terms.html [L]
+RewriteRule ^refunds/?$ /refunds.html [L]
+RewriteRule ^privacy/?$ /privacy.html [L]
+RewriteRule ^pricing/?$ /pricing.html [L]
 
 # Security / comfort headers (safe on most shared hosts)
 <IfModule mod_headers.c>

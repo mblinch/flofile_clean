@@ -9,6 +9,16 @@
     <description>Updates for Flofile Clean</description>
     <language>en</language>
     <item>
+      <title>Version 2.0.60</title>
+      <pubDate>Fri, 27 Nov 2026 19:42:19 +0000</pubDate>
+      <sparkle:version>260</sparkle:version>
+      <sparkle:shortVersionString>2.0.60</sparkle:shortVersionString>
+      <enclosure
+        url="https://github.com/mblinch/flofile_clean/releases/download/v2.0.60/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="42038196" sparkle:edSignature="tuHYbrsNNq55D1ehQITdOv+t6k1z2Zwer/QTNjFgFnh4OW6FqmTDHzklQAzNUE8I6tkck1qQ8IyIIN8tBcGZAg==" />
+    </item>
+    <item>
       <title>Version 2.0.59</title>
       <pubDate>Fri, 27 Nov 2026 17:23:14 +0000</pubDate>
       <sparkle:version>259</sparkle:version>

@@ -1,8 +1,8 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../../../theme/ff_tokens.dart';
@@ -1789,6 +1789,7 @@ class _CaptionHistoryButtonState extends State<_CaptionHistoryButton> {
       controller: _portal,
       overlayChildBuilder: (context) {
         return Stack(
+          clipBehavior: Clip.none,
           children: [
             Positioned.fill(
               child: GestureDetector(
@@ -1866,7 +1867,9 @@ class _CaptionHistoryMenu extends StatelessWidget {
     final width = maxW < 820 ? maxW.clamp(320.0, 820.0) : 820.0;
     return Material(
       color: Colors.transparent,
+      clipBehavior: Clip.none,
       child: Container(
+        clipBehavior: Clip.none,
         width: width,
         padding: const EdgeInsets.all(5),
         decoration: BoxDecoration(
@@ -1940,7 +1943,7 @@ class _CaptionHistoryMenu extends StatelessWidget {
                 ],
               ),
             ),
-            if (entries.isEmpty)
+            if (entries.isEmpty) ...[
               const Padding(
                 padding: EdgeInsets.fromLTRB(9, 8, 9, 12),
                 child: Text(
@@ -1951,40 +1954,209 @@ class _CaptionHistoryMenu extends StatelessWidget {
                     color: FfTokens.nocturneT3,
                   ),
                 ),
-              )
-            else
-              for (var i = 0; i < entries.length; i++)
-                _CaptionHistoryRow(
-                  index: i + 1,
-                  entry: entries[i],
-                  focused: keyboardIndex == i,
-                  viewed: viewedIndex == i,
-                  onHover: () => onHoverIndex(i),
-                  onTap: () => onSelect(entries[i]),
-                  onOpenZoom: (path) => onOpenZoom(path, i),
-                ),
-            Container(
-              margin: const EdgeInsets.only(top: 3),
-              padding: const EdgeInsets.fromLTRB(9, 6, 9, 5),
-              decoration: const BoxDecoration(
-                border: Border(
-                  top: BorderSide(color: Color(0x14E8EEF4)),
-                ),
               ),
-              child: const Text(
-                'Template text (dateline, venue, credit) is added automatically',
-                style: TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontSize: 11,
-                  color: FfTokens.nocturneT3,
-                  height: 1.3,
-                ),
+              _captionHistoryFootnote,
+            ] else
+              _CaptionHistoryLiftColumn(
+                liftIndex: keyboardIndex,
+                children: [
+                  for (var i = 0; i < entries.length; i++)
+                    _CaptionHistoryRow(
+                      index: i + 1,
+                      entry: entries[i],
+                      focused: keyboardIndex == i,
+                      viewed: viewedIndex == i,
+                      onHover: () => onHoverIndex(i),
+                      onTap: () => onSelect(entries[i]),
+                      onOpenZoom: (path) => onOpenZoom(path, i),
+                    ),
+                  _captionHistoryFootnote,
+                ],
               ),
-            ),
           ],
         ),
       ),
     );
+  }
+}
+
+final _captionHistoryFootnote = Container(
+  margin: const EdgeInsets.only(top: 3),
+  padding: const EdgeInsets.fromLTRB(9, 6, 9, 5),
+  decoration: const BoxDecoration(
+    border: Border(
+      top: BorderSide(color: Color(0x14E8EEF4)),
+    ),
+  ),
+  child: const Text(
+    'Template text (dateline, venue, credit) is added automatically',
+    style: TextStyle(
+      fontFamily: FfTokens.fontFamily,
+      fontSize: 11,
+      color: FfTokens.nocturneT3,
+      height: 1.3,
+    ),
+  ),
+);
+
+/// Column that paints [liftIndex] after its siblings so a scaled thumb
+/// covers neighboring caption text. Layout order stays top to bottom.
+class _CaptionHistoryLiftColumn extends MultiChildRenderObjectWidget {
+  const _CaptionHistoryLiftColumn({
+    required this.liftIndex,
+    required super.children,
+  });
+
+  final int liftIndex;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return _RenderCaptionHistoryLiftColumn(liftIndex: liftIndex);
+  }
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderCaptionHistoryLiftColumn renderObject,
+  ) {
+    renderObject.liftIndex = liftIndex;
+  }
+}
+
+class _CaptionHistoryLiftParentData extends ContainerBoxParentData<RenderBox> {}
+
+class _RenderCaptionHistoryLiftColumn extends RenderBox
+    with
+        ContainerRenderObjectMixin<RenderBox, _CaptionHistoryLiftParentData>,
+        RenderBoxContainerDefaultsMixin<RenderBox, _CaptionHistoryLiftParentData> {
+  _RenderCaptionHistoryLiftColumn({required int liftIndex})
+      : _liftIndex = liftIndex;
+
+  int _liftIndex;
+  int get liftIndex => _liftIndex;
+  set liftIndex(int value) {
+    if (_liftIndex == value) return;
+    _liftIndex = value;
+    markNeedsPaint();
+  }
+
+  @override
+  void setupParentData(RenderBox child) {
+    if (child.parentData is! _CaptionHistoryLiftParentData) {
+      child.parentData = _CaptionHistoryLiftParentData();
+    }
+  }
+
+  @override
+  void performLayout() {
+    final maxWidth = constraints.maxWidth;
+    final childConstraints = BoxConstraints(
+      minWidth: maxWidth.isFinite ? maxWidth : 0,
+      maxWidth: maxWidth,
+    );
+    var y = 0.0;
+    var width = 0.0;
+    var child = firstChild;
+    while (child != null) {
+      child.layout(childConstraints, parentUsesSize: true);
+      final parentData = child.parentData! as _CaptionHistoryLiftParentData;
+      parentData.offset = Offset(0, y);
+      y += child.size.height;
+      if (child.size.width > width) width = child.size.width;
+      child = parentData.nextSibling;
+    }
+    size = constraints.constrain(
+      Size(maxWidth.isFinite ? maxWidth : width, y),
+    );
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    var index = 0;
+    RenderBox? lifted;
+    var child = firstChild;
+    while (child != null) {
+      final parentData = child.parentData! as _CaptionHistoryLiftParentData;
+      if (index == _liftIndex) {
+        lifted = child;
+      } else {
+        context.paintChild(child, offset + parentData.offset);
+      }
+      child = parentData.nextSibling;
+      index++;
+    }
+    if (lifted != null) {
+      final parentData = lifted.parentData! as _CaptionHistoryLiftParentData;
+      context.paintChild(lifted, offset + parentData.offset);
+    }
+  }
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
+    final children = <RenderBox>[];
+    var child = firstChild;
+    while (child != null) {
+      children.add(child);
+      child = (child.parentData! as _CaptionHistoryLiftParentData).nextSibling;
+    }
+    final order = <int>[];
+    if (_liftIndex >= 0 && _liftIndex < children.length) {
+      order.add(_liftIndex);
+    }
+    for (var i = children.length - 1; i >= 0; i--) {
+      if (i != _liftIndex) order.add(i);
+    }
+    for (final i in order) {
+      final candidate = children[i];
+      final parentData =
+          candidate.parentData! as _CaptionHistoryLiftParentData;
+      final hit = result.addWithPaintOffset(
+        offset: parentData.offset,
+        position: position,
+        hitTest: (BoxHitTestResult result, Offset transformed) {
+          return candidate.hitTest(result, position: transformed);
+        },
+      );
+      if (hit) return true;
+    }
+    return false;
+  }
+
+  @override
+  double computeMinIntrinsicWidth(double height) =>
+      _widest((child, width) => child.getMinIntrinsicWidth(width));
+
+  @override
+  double computeMaxIntrinsicWidth(double height) =>
+      _widest((child, width) => child.getMaxIntrinsicWidth(width));
+
+  @override
+  double computeMinIntrinsicHeight(double width) =>
+      _totalHeight((child) => child.getMinIntrinsicHeight(width));
+
+  @override
+  double computeMaxIntrinsicHeight(double width) =>
+      _totalHeight((child) => child.getMaxIntrinsicHeight(width));
+
+  double _widest(double Function(RenderBox child, double width) measure) {
+    var width = 0.0;
+    var child = firstChild;
+    while (child != null) {
+      final childWidth = measure(child, double.infinity);
+      if (childWidth > width) width = childWidth;
+      child = (child.parentData! as _CaptionHistoryLiftParentData).nextSibling;
+    }
+    return width;
+  }
+
+  double _totalHeight(double Function(RenderBox child) measure) {
+    var height = 0.0;
+    var child = firstChild;
+    while (child != null) {
+      height += measure(child);
+      child = (child.parentData! as _CaptionHistoryLiftParentData).nextSibling;
+    }
+    return height;
   }
 }
 
@@ -2017,6 +2189,7 @@ class _CaptionHistoryRow extends StatelessWidget {
         builder: (hovered, pressed) {
           final active = focused || viewed || hovered || pressed;
           return Container(
+            clipBehavior: Clip.none,
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
             decoration: BoxDecoration(
@@ -2030,66 +2203,86 @@ class _CaptionHistoryRow extends StatelessWidget {
                   ? Border.all(color: const Color(0x664A7A96))
                   : null,
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+            child: Stack(
+              clipBehavior: Clip.none,
               children: [
-                Container(
-                  width: 18,
-                  height: 18,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(
-                      color: viewed
-                          ? FfTokens.nocturneAc
-                          : const Color(0x1EE8EEF4),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 18,
+                      height: 18,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: viewed
+                              ? FfTokens.nocturneAc
+                              : const Color(0x1EE8EEF4),
+                        ),
+                        color: viewed ? const Color(0x334A7A96) : null,
+                      ),
+                      child: Text(
+                        '$index',
+                        style: TextStyle(
+                          fontFamily: FfTokens.fontFamily,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          color:
+                              viewed ? FfTokens.nocturneTx : FfTokens.nocturneT3,
+                          height: 1,
+                        ),
+                      ),
                     ),
-                    color: viewed ? const Color(0x334A7A96) : null,
-                  ),
-                  child: Text(
-                    '$index',
-                    style: TextStyle(
-                      fontFamily: FfTokens.fontFamily,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w600,
-                      color: viewed ? FfTokens.nocturneTx : FfTokens.nocturneT3,
-                      height: 1,
+                    const SizedBox(width: 8),
+                    const SizedBox(
+                      width: _CaptionHistoryThumb._w,
+                      height: _CaptionHistoryThumb._h,
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text.rich(
+                        TextSpan(children: _bodySpans(entry)),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${formatCaptionHistoryAgo(entry.savedAt)} ago',
+                      style: const TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 11,
+                        color: FfTokens.nocturneT3,
+                        height: 19 / 11,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                // Absorb so the loupe / thumb hit area does not apply the
-                // caption via the parent row tap.
-                GestureDetector(
-                  onTap: () {},
-                  behavior: HitTestBehavior.opaque,
-                  child: _CaptionHistoryThumb(
-                    path: entry.imagePath,
-                    highlighted: viewed,
-                    onOpenZoom: () {
-                      final path = entry.imagePath?.trim() ?? '';
-                      if (path.isEmpty) return;
-                      onOpenZoom(path);
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text.rich(
-                    TextSpan(children: _bodySpans(entry)),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '${formatCaptionHistoryAgo(entry.savedAt)} ago',
-                  style: const TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 11,
-                    color: FfTokens.nocturneT3,
-                    height: 19 / 11,
-                    fontFeatures: [FontFeature.tabularFigures()],
+                // Paint the same thumb last so its hover scale covers the
+                // caption words. Layout gap above keeps the row size.
+                // left = index (18) + gap (8).
+                Positioned(
+                  left: 26,
+                  top: 0,
+                  bottom: 0,
+                  width: _CaptionHistoryThumb._w,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: GestureDetector(
+                      onTap: () {},
+                      behavior: HitTestBehavior.opaque,
+                      child: _CaptionHistoryThumb(
+                        path: entry.imagePath,
+                        highlighted: viewed,
+                        onOpenZoom: () {
+                          final path = entry.imagePath?.trim() ?? '';
+                          if (path.isEmpty) return;
+                          onOpenZoom(path);
+                        },
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -2166,112 +2359,15 @@ class _CaptionHistoryThumb extends StatefulWidget {
   static const double _w = 100;
   static const double _h = 70;
 
-  /// Same tile, scaled up from its center on hover.
-  static const double _previewScale = 2.4;
+  /// In-place scale of this same thumb. No second preview.
+  static const double _previewScale = 2.65;
 
   @override
   State<_CaptionHistoryThumb> createState() => _CaptionHistoryThumbState();
 }
 
 class _CaptionHistoryThumbState extends State<_CaptionHistoryThumb> {
-  final LayerLink _link = LayerLink();
-  OverlayEntry? _entry;
-  Timer? _hoverTimer;
-  int _hoverGen = 0;
-  bool _wantHover = false;
   bool _hover = false;
-
-  void _removePreview() {
-    _entry?.remove();
-    _entry = null;
-  }
-
-  void _showPreview(String filePath) {
-    _removePreview();
-    const scale = _CaptionHistoryThumb._previewScale;
-    final pw = _CaptionHistoryThumb._w * scale;
-    final ph = _CaptionHistoryThumb._h * scale;
-
-    _entry = OverlayEntry(
-      builder: (context) {
-        // Pin to the thumb via LayerLink — same center, same crop, just bigger.
-        return CompositedTransformFollower(
-          link: _link,
-          showWhenUnlinked: false,
-          targetAnchor: Alignment.center,
-          followerAnchor: Alignment.center,
-          child: IgnorePointer(
-            child: Material(
-              color: Colors.transparent,
-              elevation: 0,
-              child: SizedBox(
-                width: pw,
-                height: ph,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF262D35),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: const Color(0x66E8EEF4),
-                      width: 1.5,
-                    ),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x99000000),
-                        blurRadius: 18,
-                        offset: Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(5),
-                    child: OrientedFilePreview(
-                      path: filePath,
-                      fit: BoxFit.cover,
-                      cacheWidth: 320,
-                      filterQuality: FilterQuality.medium,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-    Overlay.of(context, rootOverlay: true).insert(_entry!);
-  }
-
-  void _applyHover(bool hover, String filePath) {
-    if (!mounted) return;
-    if (_hover != hover) setState(() => _hover = hover);
-    if (hover) {
-      _showPreview(filePath);
-    } else {
-      _removePreview();
-    }
-  }
-
-  void _setHover(bool hover, String filePath) {
-    if (_wantHover == hover) return;
-    _wantHover = hover;
-    _hoverTimer?.cancel();
-    final gen = ++_hoverGen;
-    final delay = hover
-        ? const Duration(milliseconds: 60)
-        : const Duration(milliseconds: 40);
-    _hoverTimer = Timer(delay, () {
-      if (!mounted || gen != _hoverGen) return;
-      _applyHover(hover, filePath);
-    });
-  }
-
-  @override
-  void dispose() {
-    _hoverTimer?.cancel();
-    _removePreview();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -2284,94 +2380,101 @@ class _CaptionHistoryThumbState extends State<_CaptionHistoryThumb> {
             ? const Color(0x66E8EEF4)
             : const Color(0x1EE8EEF4);
 
-    return CompositedTransformTarget(
-      link: _link,
-      child: MouseRegion(
-        cursor: canZoom ? SystemMouseCursors.click : SystemMouseCursors.basic,
-        onEnter: exists ? (_) => _setHover(true, filePath) : null,
-        onExit: (_) => _setHover(false, filePath),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: canZoom ? widget.onOpenZoom : null,
-          child: SizedBox(
-            width: _CaptionHistoryThumb._w,
-            height: _CaptionHistoryThumb._h,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned.fill(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(5),
-                      border: Border.all(
-                        color: ring,
-                        width: widget.highlighted || _hover ? 1.5 : 1,
-                      ),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: ColoredBox(
-                        color: const Color(0xFF262D35),
-                        child: exists
-                            ? OrientedFilePreview(
-                                path: filePath,
-                                fit: BoxFit.cover,
-                                cacheWidth: 160,
-                                filterQuality: FilterQuality.medium,
-                              )
-                            : filePath.isEmpty
-                                ? null
-                                : const Center(
-                                    child: PhosphorIcon(
-                                      PhosphorIconsRegular.imageBroken,
-                                      size: 14,
-                                      color: FfTokens.nocturneT3,
-                                    ),
-                                  ),
-                      ),
-                    ),
-                  ),
+    final tile = SizedBox(
+      width: _CaptionHistoryThumb._w,
+      height: _CaptionHistoryThumb._h,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(
+                  color: ring,
+                  width: widget.highlighted || _hover ? 1.5 : 1,
                 ),
-                if (canZoom)
-                  Positioned(
-                    right: -2,
-                    bottom: -2,
-                    child: IgnorePointer(
-                      child: Container(
-                        width: 18,
-                        height: 18,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: _hover || widget.highlighted
-                              ? FfTokens.nocturneAc
-                              : const Color(0xE0181D22),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: _hover || widget.highlighted
-                                ? FfTokens.nocturneAc
-                                : const Color(0x40E8EEF4),
-                          ),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x66000000),
-                              blurRadius: 4,
-                              offset: Offset(0, 1),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: ColoredBox(
+                  color: const Color(0xFF262D35),
+                  child: exists
+                      ? OrientedFilePreview(
+                          path: filePath,
+                          fit: BoxFit.cover,
+                          cacheWidth: 320,
+                          filterQuality: FilterQuality.medium,
+                        )
+                      : filePath.isEmpty
+                          ? null
+                          : const Center(
+                              child: PhosphorIcon(
+                                PhosphorIconsRegular.imageBroken,
+                                size: 14,
+                                color: FfTokens.nocturneT3,
+                              ),
                             ),
-                          ],
-                        ),
-                        child: PhosphorIcon(
-                          PhosphorIconsRegular.magnifyingGlass,
-                          size: 11,
-                          color: _hover || widget.highlighted
-                              ? Colors.white
-                              : FfTokens.nocturneTx,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
+                ),
+              ),
             ),
           ),
+          if (canZoom)
+            Positioned(
+              right: -2,
+              bottom: -2,
+              child: IgnorePointer(
+                child: Container(
+                  width: 18,
+                  height: 18,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _hover || widget.highlighted
+                        ? FfTokens.nocturneAc
+                        : const Color(0xE0181D22),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: _hover || widget.highlighted
+                          ? FfTokens.nocturneAc
+                          : const Color(0x40E8EEF4),
+                    ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x66000000),
+                        blurRadius: 4,
+                        offset: Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: PhosphorIcon(
+                    PhosphorIconsRegular.magnifyingGlass,
+                    size: 11,
+                    color: _hover || widget.highlighted
+                        ? Colors.white
+                        : FfTokens.nocturneTx,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    return MouseRegion(
+      cursor: canZoom ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      onEnter: exists ? (_) => setState(() => _hover = true) : null,
+      onExit: (_) {
+        if (_hover) setState(() => _hover = false);
+      },
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: canZoom ? widget.onOpenZoom : null,
+        child: Transform.scale(
+          scale: _hover ? _CaptionHistoryThumb._previewScale : 1,
+          alignment: Alignment.center,
+          filterQuality:
+              _hover ? FilterQuality.medium : FilterQuality.none,
+          child: tile,
         ),
       ),
     );

@@ -10,19 +10,23 @@ Prepared as a functional business website for **1001746423 Ontario Inc.** (Toron
 |------|---------|
 | `index.html` | Home, features, company attribution |
 | `about.html` | Company / product story |
+| `pricing.html` | Plans, licence limits, Paddle MoR copy (`/pricing`) |
 | `download.html` | Google sign-in unlocks Mac beta zip download |
-| `privacy.html` | Privacy policy draft (PIPEDA, Firebase Google Sign-In, local photos) |
-| `terms.html` | Terms of use draft |
-| `contact.html` | Legal name, Toronto, mailto |
+| `privacy.html` | Privacy Notice (`/privacy`) — from `legal/privacy.md` |
+| `terms.html` | Terms of Service (`/terms`) — from `legal/terms.md` |
+| `refunds.html` | Refund Policy (`/refunds`) — from `legal/refunds.md` |
+| `contact.html` | Support contact + company details |
+| `legal/` | Source markdown for legal pages (render with `tool/render_legal_pages.py`) |
 | `admin/` | Google Sign-In + admin roster editor / jersey issues |
-| `css/styles.css` | Dark-first theme + light mode |
+| `css/styles.css` | Site theme (matches app Cool Slate / Nocturne) |
 | `css/admin.css` | Admin console layout |
-| `js/main.js` | Mobile nav |
+| `js/main.js` | Mobile nav + footer year |
 | `js/firebase-config.js` | Firebase web app config + admin emails + Mac download URL |
 | `js/download-auth.js` | Download page Google sign-in gate |
 | `js/admin-rosters.js` | Auth, roster CRUD, issues scan + Google search |
 | `updates/latest.json` | App update manifest stub |
-| `.htaccess` | Force HTTPS |
+| `sitemap.xml` / `robots.txt` | Indexing |
+| `.htaccess` | Force HTTPS + clean legal/pricing URLs |
 
 ## Admin console (`/admin/`)
 

@@ -12,7 +12,7 @@ const String kAppUpdateNotesTitle = 'What’s new';
 const String kAppUpdateNotesBody = '''
 Here is what changed in this version.
 
-Caption history hover preview now enlarges the original thumb in place (same crop, grown from center) instead of floating a separate preview.
+Caption history hover grows the original thumbnail in place, over the caption text.
 
 This message shows one time after you update. Tap OK or outside the box to close it.
 ''';
